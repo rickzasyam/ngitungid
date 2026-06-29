@@ -1,0 +1,295 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-geist-sans), 'Geist Fallback';
+  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* === NGITUNGID DESIGN TOKENS — FINAL VALUES === */
+  --color-bg-main: #222124;           /* Soft Black */
+  --color-bg-card: #ffffff;
+  --color-bg-sidebar: #222124;        /* Soft Black */
+  --color-sidebar-border-color: #333333;
+  --color-accent-primary: #daf163;    /* Lime */
+  --color-accent-primary-fg: #1a1a1a; /* Text di atas Lime, tetap hitam */
+  --color-accent-secondary: #bbb3f3;  /* Lilac */
+  --color-text-primary: #2d2d2d;
+  --color-text-muted: #6b7280;
+  --color-border-subtle: #e5e5e5;
+  --color-muted-bg: #f0f0f0;
+  --color-muted-dark: #d4d4d4;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+}
+
+:root {
+  color-scheme: light;
+  --background: #222124;
+  --foreground: #2d2d2d;
+  --card: #FFFFFF;
+  --card-foreground: #2d2d2d;
+  --popover: #FFFFFF;
+  --popover-foreground: #2d2d2d;
+  --primary: #daf163;
+  --primary-foreground: #1a1a1a;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #1a1a1a;
+  --muted: #d4d4d4;
+  --muted-foreground: #6b7280;
+  --accent: #daf163;
+  --accent-foreground: #1a1a1a;
+  --destructive: #EF4444;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #daf163;
+  --chart-1: #daf163;
+  --chart-2: #bbb3f3;
+  --chart-3: #3B82F6;
+  --chart-4: #8B5CF6;
+  --chart-5: #EC4899;
+  --radius: 0.625rem;
+  --sidebar: #222124;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #daf163;
+  --sidebar-primary-foreground: #1a1a1a;
+  --sidebar-accent: #daf163;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: #333333;
+  --sidebar-ring: #daf163;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #222124;
+  --foreground: #e5e5e5;
+  --card: #2d2d2d;
+  --card-foreground: #e5e5e5;
+  --popover: #2d2d2d;
+  --popover-foreground: #e5e5e5;
+  --primary: #daf163;
+  --primary-foreground: #1a1a1a;
+  --secondary: #3d3d3d;
+  --secondary-foreground: #e5e5e5;
+  --muted: #5d5d5d;
+  --muted-foreground: #a0a0a0;
+  --accent: #daf163;
+  --accent-foreground: #1a1a1a;
+  --destructive: #F87171;
+  --border: #3d3d3d;
+  --input: #3d3d3d;
+  --ring: #daf163;
+  --chart-1: #daf163;
+  --chart-2: #bbb3f3;
+  --chart-3: #3B82F6;
+  --chart-4: #8B5CF6;
+  --chart-5: #06B6D4;
+  --sidebar: #222124;
+  --sidebar-foreground: #e5e5e5;
+  --sidebar-primary: #daf163;
+  --sidebar-primary-foreground: #1a1a1a;
+  --sidebar-accent: #daf163;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: #333333;
+  --sidebar-ring: #daf163;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --background: #222124;
+    --foreground: #e5e5e5;
+    --card: #2d2d2d;
+    --card-foreground: #e5e5e5;
+    --popover: #2d2d2d;
+    --popover-foreground: #e5e5e5;
+    --primary: #daf163;
+    --primary-foreground: #1a1a1a;
+    --secondary: #3d3d3d;
+    --secondary-foreground: #e5e5e5;
+    --muted: #5d5d5d;
+    --muted-foreground: #a0a0a0;
+    --accent: #daf163;
+    --accent-foreground: #1a1a1a;
+    --destructive: #F87171;
+    --border: #3d3d3d;
+    --input: #3d3d3d;
+    --ring: #daf163;
+    --chart-1: #daf163;
+    --chart-2: #bbb3f3;
+    --chart-3: #3B82F6;
+    --chart-4: #8B5CF6;
+    --chart-5: #06B6D4;
+    --sidebar: #222124;
+    --sidebar-foreground: #e5e5e5;
+    --sidebar-primary: #daf163;
+    --sidebar-primary-foreground: #1a1a1a;
+    --sidebar-accent: #daf163;
+    --sidebar-accent-foreground: #1a1a1a;
+    --sidebar-border: #333333;
+    --sidebar-ring: #daf163;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* Shimmer animation for progress bar */
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+    background: linear-gradient(
+      90deg,
+      #daf163 0%,
+      rgba(218, 241, 99, 0.4) 25%,
+      #daf163 50%,
+      rgba(218, 241, 99, 0.4) 75%,
+      #daf163 100%
+    );
+    background-size: 1000px 100%;
+  }
+
+  /* Fade in up animation */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
+  }
+
+  /* Sidebar hover utility */
+  .hover\:bg-white\/8:hover {
+    background-color: rgb(255 255 255 / 0.08);
+  }
+
+  /* Accent primary opacity variants using color-mix */
+  .bg-\(--color-accent-primary\)\/3 {
+    background-color: color-mix(in srgb, var(--color-accent-primary) 3%, transparent);
+  }
+
+  .bg-\(--color-accent-primary\)\/5 {
+    background-color: color-mix(in srgb, var(--color-accent-primary) 5%, transparent);
+  }
+
+  .bg-\(--color-accent-primary\)\/15 {
+    background-color: color-mix(in srgb, var(--color-accent-primary) 15%, transparent);
+  }
+
+  /* === CUSTOM SCROLLBAR — NgitungID BI === */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(167, 139, 250, 0.35);
+    border-radius: 99px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(167, 139, 250, 0.6);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(167, 139, 250, 0.35) transparent;
+  }
+
+  /* Staggered animation delays */
+  .animation-delay-0 {
+    animation-delay: 0ms;
+  }
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+}

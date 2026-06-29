@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.55); }
+    @keyframes dcSlideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes dcFadeIn { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</helmet>
+
+<div style="display:flex; height:100vh; width:100vw; background:#1a1a1a; overflow:hidden;">
+
+  <!-- SIDEBAR -->
+  <aside style="width:236px; background:#1a1a1a; display:flex; flex-direction:column; flex-shrink:0; border-right:1px solid rgba(255,255,255,0.05);">
+    <div style="padding:22px 16px 14px; display:flex; align-items:center; gap:10px;">
+      <div style="width:34px;height:34px;background:#c0ff33;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <span style="font-weight:800;color:#1a1a1a;font-size:15px;">N</span>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:13px;color:white;line-height:1.2;">NgitungID BI</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.35);line-height:1.2;">Financial Analytics</div>
+      </div>
+    </div>
+    <nav style="flex:1;padding:4px 10px;display:flex;flex-direction:column;gap:1px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;cursor:pointer;color:rgba(255,255,255,0.5);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span style="font-size:13px;">Dashboard</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:#c0ff33;cursor:pointer;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font-size:13px;font-weight:600;color:#1a1a1a;">Analytics</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;cursor:pointer;color:rgba(255,255,255,0.5);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span style="font-size:13px;flex:1;">Upload</span>
+        <span style="width:17px;height:17px;border-radius:50%;background:#c0ff33;color:#1a1a1a;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">1</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;cursor:pointer;color:rgba(255,255,255,0.5);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        <span style="font-size:13px;">COA Mapping</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;color:rgba(255,255,255,0.2);cursor:not-allowed;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <span style="font-size:13px;flex:1;">Operational</span>
+        <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.12);border-radius:3px;padding:1px 5px;">SOON</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;cursor:pointer;color:rgba(255,255,255,0.5);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        <span style="font-size:13px;">Settings</span>
+      </div>
+    </nav>
+    <div style="padding:12px 10px;">
+      <div style="background:rgba(255,255,255,0.05);border-radius:14px;padding:12px;">
+        <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:1px;">Mengelola klien</div>
+        <div style="font-size:13px;font-weight:600;color:white;margin-bottom:9px;">{{ clientName }}</div>
+        <div style="width:100%;height:3px;border-radius:99px;background:rgba(255,255,255,0.08);">
+          <div style="height:100%;border-radius:99px;background:#c0ff33;width:67%;"></div>
+        </div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:4px;">67% storage used</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex:1;padding:10px;min-width:0;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="flex:1;border-radius:22px;overflow:hidden;display:flex;flex-direction:column;background:white;box-shadow:0 8px 40px rgba(0,0,0,0.45);">
+
+      <!-- Header -->
+      <div style="flex-shrink:0;padding:15px 22px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <div>
+          <h1 style="font-size:18px;font-weight:700;color:#1f2430;margin:0;line-height:1.2;">Analytics</h1>
+          <p style="font-size:11px;color:#6b7280;margin:3px 0 0;">{{ clientName }} · Analisis keuangan mendalam · {{ periodLabel }}</p>
+        </div>
+        {{ periodTabs }}
+      </div>
+
+      <!-- Scrollable body -->
+      <main data-scroll-main="1" style="flex:1;overflow-y:auto;background:#f3f4f6;position:relative;">
+        <div style="padding:18px;display:flex;flex-direction:column;gap:16px;max-width:1520px;margin:0 auto;">
+
+          <div id="sec-exec">{{ execBand }}</div>
+
+          <div id="sec-performa" style="border-radius:18px;padding:18px 20px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.04);border:1px solid #ececec;">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:13px;font-weight:700;color:#1f2430;margin:0;">Performa Keuangan</h3>
+                <p style="font-size:10px;color:#6b7280;margin:3px 0 0;">Pendapatan, laba, dan margin · tren 6 bulan & perubahan MoM</p>
+              </div>
+              <span style="font-size:10px;color:#9ca3af;">Klik kartu untuk detail →</span>
+            </div>
+            {{ perfCards }}
+          </div>
+
+          <div id="sec-skor">{{ scorePanel }}</div>
+
+          <div id="sec-likuiditas" style="border-radius:18px;padding:18px 20px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.04);border:1px solid #ececec;">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:13px;font-weight:700;color:#1f2430;margin:0;">Likuiditas &amp; Solvabilitas</h3>
+                <p style="font-size:10px;color:#6b7280;margin:3px 0 0;">Kemampuan memenuhi kewajiban &amp; struktur permodalan · Neraca Jun 2026</p>
+              </div>
+              <span style="font-size:10px;color:#9ca3af;">Klik kartu untuk detail →</span>
+            </div>
+            {{ liqCards }}
+          </div>
+
+          <div id="sec-profitabilitas" style="border-radius:18px;padding:18px 20px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.04);border:1px solid #ececec;">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:13px;font-weight:700;color:#1f2430;margin:0;">Profitabilitas</h3>
+                <p style="font-size:10px;color:#6b7280;margin:3px 0 0;">Imbal hasil atas modal, aset, dan penjualan · {{ periodLabel }}</p>
+              </div>
+              <span style="font-size:10px;color:#9ca3af;">Klik kartu untuk detail →</span>
+            </div>
+            {{ profitCards }}
+          </div>
+
+          <div id="sec-efisiensi" style="border-radius:18px;padding:18px 20px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.04);border:1px solid #ececec;">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;">
+              <div>
+                <h3 style="font-size:13px;font-weight:700;color:#1f2430;margin:0;">Efisiensi Operasional</h3>
+                <p style="font-size:10px;color:#6b7280;margin:3px 0 0;">Siklus kas, perputaran piutang, persediaan &amp; aset · {{ periodLabel }}</p>
+              </div>
+              <span style="font-size:10px;color:#9ca3af;">Klik kartu untuk detail →</span>
+            </div>
+            {{ effCards }}
+          </div>
+
+          <div id="sec-detail" style="border-radius:18px;padding:18px 20px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.04);border:1px solid #ececec;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap;">
+              <div>
+                <h3 style="font-size:13px;font-weight:700;color:#1f2430;margin:0;">Detail Laba Rugi</h3>
+                <p style="font-size:10px;color:#6b7280;margin:3px 0 0;">{{ periodLabel }} · klik baris untuk rincian komponen</p>
+              </div>
+              {{ stmtToggles }}
+            </div>
+            {{ pnlTable }}
+          </div>
+
+          <div style="height:4px;"></div>
+        </div>
+      </main>
+
+    </div>
+  </div>
+
+  {{ drawer }}
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1440, &quot;height&quot;: 900 },
+  &quot;clientName&quot;: { &quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Rasyuka&quot;, &quot;tsType&quot;: &quot;string&quot; }
+}">
+class Component extends DCLogic {
+  state = { period: 'H1', cStart: 0, cEnd: 5, showCustom: false, drawer: null, stmtView: 'bulanan', stmtMode: 'nominal', expanded: {} }
+
+  open(key){ this.setState({ drawer: key }) }
+  close(){ this.setState({ drawer: null }) }
+  scrollTo(id){
+    const el = document.getElementById(id);
+    const main = document.querySelector('[data-scroll-main]');
+    if(el && main){ main.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' }); }
+  }
+
+  renderVals() {
+    const R = React.createElement;
+    const clientName = this.props.clientName ?? 'Rasyuka';
+    const S = this.state;
+
+    // ───────────────────── DATA ─────────────────────
+    const ALL = [
+      { m:'Jan', rev:485086931, np:127635672, gp:284632728, exp:153404036 },
+      { m:'Feb', rev:512340000, np:141200000, gp:298500000, exp:157300000 },
+      { m:'Mar', rev:498750000, np:118900000, gp:275600000, exp:156700000 },
+      { m:'Apr', rev:567890000, np:165400000, gp:320100000, exp:154700000 },
+      { m:'Mei', rev:601230000, np:178300000, gp:342800000, exp:164500000 },
+      { m:'Jun', rev:589450000, np:169800000, gp:335200000, exp:165400000 },
+    ];
+    const BS = {
+      aktivaLancar:1397767344, hutangLancar:42142100, persediaan:1214633693,
+      kas:75254490, piutang:66794049, totalModal:1419315950, totalAset:1466658050,
+    };
+    const totalHutang = BS.totalAset - BS.totalModal;
+    const workingCapital = BS.aktivaLancar - BS.hutangLancar;
+
+    // ───────────────────── PERIOD ─────────────────────
+    const periodMap = {
+      H1: { idx:[0,1,2,3,4,5], label:'H1 2026', days:181, tot:'H1' },
+      Q1: { idx:[0,1,2], label:'Q1 2026', days:90, tot:'Q1' },
+      Q2: { idx:[3,4,5], label:'Q2 2026', days:91, tot:'Q2' },
+    };
+    let pc;
+    if(S.period === 'custom'){
+      const a = Math.min(S.cStart, S.cEnd), b = Math.max(S.cStart, S.cEnd);
+      const idx = []; for(let i=a;i<=b;i++) idx.push(i);
+      pc = { idx, label:`${ALL[a].m}–${ALL[b].m} 2026`, days: idx.length*30.4, tot:'Total' };
+    } else pc = periodMap[S.period];
+    const sel = pc.idx.map(i => ALL[i]);
+    const sum = f => sel.reduce((s,d)=>s+d[f],0);
+    const totRev = sum('rev'), totNP = sum('np'), totGP = sum('gp'), totExp = sum('exp');
+    const totHPP = totRev - totGP, totOI = totGP - totExp;
+
+    // ───────────────────── FORMATTERS (ID) ─────────────────────
+    const idc = s => String(s).split('.').join(',');
+    const fmtRp = v => {
+      const a = Math.abs(v);
+      if(a>=1e9) return 'Rp '+idc((v/1e9).toFixed(2))+'M';
+      if(a>=1e6) return 'Rp '+Math.round(v/1e6)+'jt';
+      if(a>=1e3) return 'Rp '+Math.round(v/1e3)+'rb';
+      return 'Rp '+Math.round(v);
+    };
+    const fmtFull = v => 'Rp '+Math.round(v).toLocaleString('id-ID');
+    const fmtPct = (v,d=1) => idc(v.toFixed(d))+'%';
+    const fmtRatio = v => idc(v.toFixed(2));
+    const fmtDays = v => Math.round(v)+' hari';
+    const fmtX = v => idc(v.toFixed(2))+'×';
+
+    // ───────────────────── COLORS ─────────────────────
+    const C = {
+      sehat:     { fg:'#15803d', bg:'#dcfce7', dot:'#16a34a', bar:'#16a34a', line:'#16a34a' },
+      perhatian: { fg:'#b45309', bg:'#fef3c7', dot:'#d97706', bar:'#f59e0b', line:'#f59e0b' },
+      risiko:    { fg:'#b91c1c', bg:'#fee2e2', dot:'#dc2626', bar:'#ef4444', line:'#ef4444' },
+      netral:    { fg:'#475569', bg:'#eef2f7', dot:'#64748b', bar:'#64748b', line:'#64748b' },
+      info:      { fg:'#1d4ed8', bg:'#dbeafe', dot:'#2563eb', bar:'#3b82f6', line:'#3b82f6' },
+    };
+
+    // ───────────────────── MONTHLY DERIVED ─────────────────────
+    const A = ALL;
+    const gpmArr = A.map(d=>d.gp/d.rev*100);
+    const npmArr = A.map(d=>d.np/d.rev*100);
+    const opmArr = A.map(d=>(d.gp-d.exp)/d.rev*100);
+    const revArr = A.map(d=>d.rev), gpArr = A.map(d=>d.gp), npArr = A.map(d=>d.np);
+    const roeArr = A.map(d=>d.np*12/BS.totalModal*100);
+    const roaArr = A.map(d=>d.np*12/BS.totalAset*100);
+    const dsoArr = A.map(d=>BS.piutang/(d.rev*12)*365);
+    const dioArr = A.map(d=>BS.persediaan/(d.rev*12)*365);
+    const dpoArr = A.map(d=>BS.hutangLancar/((d.rev-d.gp)*12)*365);
+    const invArr = A.map(d=>d.rev*12/BS.persediaan);
+    const atArr  = A.map(d=>d.rev*12/BS.totalAset);
+    const cccArr = A.map((d,i)=>dioArr[i]+dsoArr[i]-dpoArr[i]);
+    const synth = (end,lift=0.84) => A.map((_,i)=>{ const t=i/5; return end*(lift+(1-lift)*t)*(1+0.012*Math.sin(i*1.7)); });
+    const synthDown = (end,start) => A.map((_,i)=>{ const t=i/5; return (start+(end-start)*t)*(1+0.01*Math.sin(i*1.3)); });
+
+    // headline ratio values (period)
+    const cr = BS.aktivaLancar/BS.hutangLancar;
+    const qr = (BS.aktivaLancar-BS.persediaan)/BS.hutangLancar;
+    const cashR = BS.kas/BS.hutangLancar;
+    const der = totalHutang/BS.totalModal;
+    const roe = totNP/BS.totalModal*100, roa = totNP/BS.totalAset*100;
+    const gpm = totGP/totRev*100, npm = totNP/totRev*100, opm = totOI/totRev*100;
+    const dso = BS.piutang/totRev*pc.days;
+    const dio = BS.persediaan*pc.days/totRev;
+    const dpo = BS.hutangLancar*pc.days/totHPP;
+    const invTurn = (totRev/BS.persediaan)*(365/pc.days);
+    const assetTurn = (totRev/BS.totalAset)*(365/pc.days);
+    const ccc = dio+dso-dpo;
+
+    // ───────────────────── SPARKLINE ─────────────────────
+    const spark = (vals,color,{w=78,h=26,fill=true}={}) => {
+      const min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
+      const pts=vals.map((v,i)=>[ (i/(vals.length-1))*w, h-2-((v-min)/rng)*(h-4) ]);
+      const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+      const area=`${line} L ${w} ${h} L 0 ${h} Z`;
+      const last=pts[pts.length-1];
+      return R('svg',{width:w,height:h,viewBox:`0 0 ${w} ${h}`,style:{display:'block',overflow:'visible'}},
+        fill && R('path',{d:area,fill:color,opacity:0.10}),
+        R('path',{d:line,fill:'none',stroke:color,strokeWidth:1.7,strokeLinecap:'round',strokeLinejoin:'round'}),
+        R('circle',{cx:last[0],cy:last[1],r:2.3,fill:color})
+      );
+    };
+    const arrow = (up) => R('svg',{width:11,height:11,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:3,strokeLinecap:'round',strokeLinejoin:'round',style:{transform: up?'none':'rotate(180deg)'}}, R('polyline',{points:'18 15 12 9 6 15'}));
+    const delta = (cur,prev,goodUp=true) => {
+      const p = prev? (cur-prev)/Math.abs(prev)*100 : 0;
+      const good = (p>=0)===goodUp;
+      const col = good? C.sehat : C.risiko;
+      return R('span',{style:{display:'inline-flex',alignItems:'center',gap:2,fontSize:11,fontWeight:700,color:col.fg}}, arrow(p>=0), `${idc(Math.abs(p).toFixed(1))}%`);
+    };
+    const pill = (label,tone) => R('span',{style:{fontSize:10,fontWeight:700,color:C[tone].fg,background:C[tone].bg,padding:'2px 9px',borderRadius:99,whiteSpace:'nowrap'}}, label);
+
+    // last-vs-prev within selected period
+    const dcMo = (arr) => { const n=sel.length; if(n<2) return [arr[pc.idx[0]],arr[pc.idx[0]]]; return [arr[pc.idx[n-1]], arr[pc.idx[n-2]]]; };
+
+    // ───────────────────── METRIC REGISTRY ─────────────────────
+    const M = {
+      rev:{ grp:'Performa', label:'Pendapatan', value:fmtRp(totRev), tone:'info', status:'Tumbuh', benchmark:'Tren positif', formula:'Σ Penjualan periode',
+        comp:[['Total pendapatan',fmtFull(totRev)],['Rata-rata / bulan',fmtFull(totRev/sel.length)],['Bulan tertinggi','Mei · '+fmtFull(601230000)]],
+        trend:revArr, tUnit:'money', interp:'Pendapatan menunjukkan tren naik sepanjang periode dengan puncak di Mei. Pertumbuhan ditopang oleh kenaikan volume, bukan sekadar harga.',
+        recos:['Pertahankan momentum kanal dengan kontribusi terbesar','Antisipasi musiman pada bulan dengan dip (Mar)','Kunci kontrak berulang untuk stabilkan baseline'] },
+      gp:{ grp:'Performa', label:'Laba Kotor', value:fmtRp(totGP), tone:'sehat', status:'Sehat', benchmark:'GPM > 50%', formula:'Pendapatan − HPP',
+        comp:[['Laba kotor',fmtFull(totGP)],['HPP',fmtFull(totHPP)],['Gross margin',fmtPct(gpm)]],
+        trend:gpArr, tUnit:'money', interp:'Laba kotor bergerak searah dengan pendapatan dengan margin yang stabil — struktur biaya pokok terkendali.',
+        recos:['Jaga rasio HPP terhadap pendapatan','Negosiasi ulang harga pemasok utama','Tinjau produk margin rendah'] },
+      np:{ grp:'Performa', label:'Laba Bersih', value:fmtRp(totNP), tone:'sehat', status:'Sehat', benchmark:'NPM > 10%', formula:'Laba Kotor − Opex − Pajak',
+        comp:[['Laba bersih',fmtFull(totNP)],['Beban operasional',fmtFull(totExp)],['Net margin',fmtPct(npm)]],
+        trend:npArr, tUnit:'money', interp:'Laba bersih konsisten dengan net margin 27,7% — sangat sehat untuk UMKM. Beban operasional relatif stabil terhadap pendapatan.',
+        recos:['Lindungi margin saat scaling biaya','Alokasikan surplus kas ke aset produktif','Pantau beban tetap vs variabel'] },
+      gpm:{ grp:'Performa', label:'Gross Margin', value:fmtPct(gpm), tone:'sehat', status:'Sehat', benchmark:'> 50%', formula:'Laba Kotor ÷ Pendapatan',
+        comp:[['Gross margin',fmtPct(gpm,1)],['Laba kotor',fmtFull(totGP)],['Pendapatan',fmtFull(totRev)]],
+        trend:gpmArr, tUnit:'pct', interp:'Margin kotor di atas 56% dan stabil — daya saing harga dan efisiensi produksi baik.',
+        recos:['Pertahankan disiplin pricing','Pantau kenaikan biaya bahan'] },
+      npm:{ grp:'Performa', label:'Net Margin', value:fmtPct(npm), tone:'sehat', status:'Sangat Baik', benchmark:'> 10%', formula:'Laba Bersih ÷ Pendapatan',
+        comp:[['Net margin',fmtPct(npm,1)],['Laba bersih',fmtFull(totNP)],['Operating margin',fmtPct(opm,1)]],
+        trend:npmArr, tUnit:'pct', interp:'Net margin 27,7% jauh di atas benchmark — setiap Rp 100 penjualan menghasilkan Rp 27,7 laba bersih.',
+        recos:['Pertahankan struktur biaya ramping','Reinvestasi sebagian laba ke pertumbuhan'] },
+      cr:{ grp:'Likuiditas', label:'Current Ratio', value:fmtRatio(cr), tone:'info', status:'Terlalu Tinggi', benchmark:'1,5 – 3,0', formula:'Aktiva Lancar ÷ Hutang Lancar',
+        comp:[['Aktiva lancar',fmtFull(BS.aktivaLancar)],['Hutang lancar',fmtFull(BS.hutangLancar)],['— di antaranya persediaan',fmtFull(BS.persediaan)]],
+        trend:synth(cr), tUnit:'ratio', interp:'Current Ratio 33,16 jauh di atas rentang sehat. Ini BUKAN sekadar “sangat aman”: likuiditas berlebih menandakan aset lancar — terutama persediaan (86,8% dari aktiva lancar) dan kas — belum dimanfaatkan optimal untuk menghasilkan imbal hasil.',
+        recos:['Konversi sebagian persediaan menumpuk menjadi kas','Pertimbangkan investasi/ekspansi dari kas menganggur','Distribusikan surplus bila tidak ada rencana belanja modal','Tetapkan target rasio likuiditas yang lebih efisien'] },
+      qr:{ grp:'Likuiditas', label:'Quick Ratio', value:fmtRatio(qr), tone:'sehat', status:'Sehat', benchmark:'> 1,0', formula:'(Aktiva Lancar − Persediaan) ÷ Hutang Lancar',
+        comp:[['Aktiva lancar − persediaan',fmtFull(BS.aktivaLancar-BS.persediaan)],['Hutang lancar',fmtFull(BS.hutangLancar)]],
+        trend:synth(qr), tUnit:'ratio', interp:'Tanpa mengandalkan persediaan, perusahaan tetap mampu menutup kewajiban jangka pendek 4,3×. Likuiditas inti aman.',
+        recos:['Pertahankan buffer kas wajar','Hindari idle cash berlebih'] },
+      cash:{ grp:'Likuiditas', label:'Cash Ratio', value:fmtRatio(cashR), tone:'sehat', status:'Sehat', benchmark:'> 0,5', formula:'Kas & Setara Kas ÷ Hutang Lancar',
+        comp:[['Kas & setara kas',fmtFull(BS.kas)],['Hutang lancar',fmtFull(BS.hutangLancar)]],
+        trend:synth(cashR), tUnit:'ratio', interp:'Kas saja menutup 1,79× kewajiban lancar — posisi kas sangat kuat.',
+        recos:['Optimalkan penempatan kas berbunga','Tetapkan kebijakan minimum cash'] },
+      der:{ grp:'Likuiditas', label:'Debt-to-Equity', value:fmtRatio(der), tone:'netral', status:'Konservatif', benchmark:'< 1,0', formula:'Total Hutang ÷ Total Modal',
+        comp:[['Total hutang',fmtFull(totalHutang)],['Total modal',fmtFull(BS.totalModal)],['Hutang / total aset',fmtPct(totalHutang/BS.totalAset*100)]],
+        trend:synthDown(der,0.05), tUnit:'ratio', interp:'Struktur pendanaan sangat konservatif (hutang hanya 2,9% total aset). Aman, namun ada ruang memakai leverage murah untuk akselerasi pertumbuhan bila ROIC > biaya utang.',
+        recos:['Evaluasi pembiayaan untuk ekspansi terukur','Manfaatkan pengungkit selama imbal hasil > bunga'] },
+      wc:{ grp:'Likuiditas', label:'Modal Kerja', value:fmtRp(workingCapital), tone:'info', status:'Surplus Besar', benchmark:'Positif', formula:'Aktiva Lancar − Hutang Lancar',
+        comp:[['Aktiva lancar',fmtFull(BS.aktivaLancar)],['Hutang lancar',fmtFull(BS.hutangLancar)],['Modal kerja',fmtFull(workingCapital)]],
+        trend:synth(workingCapital), tUnit:'money', interp:'Modal kerja surplus sangat besar; sebagian besar tertanam di persediaan. Likuid namun kurang produktif.',
+        recos:['Alihkan modal kerja idle ke aset produktif','Optimalkan siklus persediaan'] },
+      roe:{ grp:'Profitabilitas', label:'Return on Equity', value:fmtPct(roe), tone:'sehat', status:'Sangat Baik', benchmark:'> 15%', formula:'Laba Bersih ÷ Total Modal',
+        comp:[['Laba bersih',fmtFull(totNP)],['Total modal',fmtFull(BS.totalModal)]],
+        trend:roeArr, tUnit:'pct', interp:'ROE jauh di atas benchmark — modal pemilik bekerja sangat efektif menghasilkan laba.',
+        recos:['Pertahankan profitabilitas','Pertimbangkan reinvestasi vs distribusi'] },
+      roa:{ grp:'Profitabilitas', label:'Return on Assets', value:fmtPct(roa), tone:'sehat', status:'Baik', benchmark:'> 5%', formula:'Laba Bersih ÷ Total Aset',
+        comp:[['Laba bersih',fmtFull(totNP)],['Total aset',fmtFull(BS.totalAset)]],
+        trend:roaArr, tUnit:'pct', interp:'ROA sehat namun tertekan oleh aset persediaan besar. Mengurangi persediaan menganggur akan menaikkan ROA.',
+        recos:['Kurangi aset tak produktif','Tingkatkan perputaran aset'] },
+      opm:{ grp:'Profitabilitas', label:'Operating Margin', value:fmtPct(opm), tone:'sehat', status:'Sehat', benchmark:'> 15%', formula:'Laba Operasi ÷ Pendapatan',
+        comp:[['Laba operasi',fmtFull(totOI)],['Beban operasional',fmtFull(totExp)],['Pendapatan',fmtFull(totRev)]],
+        trend:opmArr, tUnit:'pct', interp:'Margin operasi solid — inti bisnis menghasilkan laba sebelum item non-operasional.',
+        recos:['Kendalikan beban tetap','Skala pendapatan tanpa proporsional menaikkan opex'] },
+      dso:{ grp:'Efisiensi', label:'DSO', value:fmtDays(dso), tone:'sehat', status:'Sangat Baik', benchmark:'< 30 hari', formula:'Piutang ÷ Pendapatan × Jumlah Hari',
+        comp:[['Piutang usaha',fmtFull(BS.piutang)],['Pendapatan ('+pc.tot+')',fmtFull(totRev)],['Jumlah hari',Math.round(pc.days)+' hari']],
+        trend:dsoArr, tUnit:'days', interp:'Penagihan sangat cepat — kas masuk hampir seketika setelah penjualan. Risiko piutang macet minim.',
+        recos:['Pertahankan kebijakan kredit ketat','Jaga hubungan pelanggan pembayar cepat'] },
+      dio:{ grp:'Efisiensi', label:'DIO', value:fmtDays(dio), tone:'perhatian', status:'Perlu Perhatian', benchmark:'< 60 hari', formula:'Rata-rata Persediaan ÷ Pendapatan × Jumlah Hari',
+        comp:[['Persediaan',fmtFull(BS.persediaan)],['Pendapatan ('+pc.tot+')',fmtFull(totRev)],['Jumlah hari',Math.round(pc.days)+' hari']],
+        trend:dioArr, tUnit:'days', interp:'DIO 68 hari menunjukkan persediaan bergerak lebih lambat dari benchmark 60 hari. Ini mengikat kas dalam jumlah besar (persediaan = 86,8% aktiva lancar) dan meningkatkan risiko barang slow-moving / usang.',
+        recos:['Review kategori stok slow-moving','Evaluasi strategi & frekuensi pembelian','Buat clearance atau bundling untuk produk lambat','Sesuaikan reorder point & safety stock'] },
+      dpo:{ grp:'Efisiensi', label:'DPO', value:fmtDays(dpo), tone:'netral', status:'Pendek', benchmark:'30 – 60 hari', formula:'Hutang Usaha ÷ HPP × Jumlah Hari',
+        comp:[['Hutang lancar',fmtFull(BS.hutangLancar)],['HPP ('+pc.tot+')',fmtFull(totHPP)]],
+        trend:dpoArr, tUnit:'days', interp:'Pembayaran ke pemasok sangat cepat. Ada peluang menahan kas lebih lama dengan menegosiasi termin pembayaran tanpa merusak relasi.',
+        recos:['Negosiasi termin pemasok 30–45 hari','Manfaatkan diskon pembayaran awal bila menguntungkan'] },
+      invturn:{ grp:'Efisiensi', label:'Inventory Turnover', value:fmtX(invTurn), tone:'perhatian', status:'Rendah', benchmark:'> 6×', formula:'Pendapatan ÷ Rata-rata Persediaan (disetahunkan)',
+        comp:[['Pendapatan disetahunkan',fmtFull(totRev*(365/pc.days))],['Persediaan',fmtFull(BS.persediaan)]],
+        trend:invArr, tUnit:'x', interp:'Persediaan hanya berputar ~5,4× setahun, di bawah ideal. Sejalan dengan DIO tinggi — stok terlalu banyak relatif terhadap penjualan.',
+        recos:['Turunkan level persediaan rata-rata','Tingkatkan akurasi forecast permintaan'] },
+      assetturn:{ grp:'Efisiensi', label:'Asset Turnover', value:fmtX(assetTurn), tone:'sehat', status:'Baik', benchmark:'> 1,0', formula:'Pendapatan ÷ Total Aset (disetahunkan)',
+        comp:[['Pendapatan disetahunkan',fmtFull(totRev*(365/pc.days))],['Total aset',fmtFull(BS.totalAset)]],
+        trend:atArr, tUnit:'x', interp:'Aset menghasilkan pendapatan secara efektif, meski tertahan oleh persediaan besar. Optimasi persediaan akan menaikkan rasio ini.',
+        recos:['Optimalkan aset menganggur','Naikkan utilisasi kapasitas'] },
+      ccc:{ grp:'Efisiensi', label:'Cash Conversion Cycle', value:fmtDays(ccc), tone:'perhatian', status:'Perlu Perhatian', benchmark:'Semakin pendek', formula:'DIO + DSO − DPO',
+        comp:[['DIO',fmtDays(dio)],['DSO',fmtDays(dso)],['DPO',fmtDays(dpo)]],
+        trend:cccArr, tUnit:'days', interp:'Siklus konversi kas didominasi oleh DIO. Kas tertahan ~67 hari sebelum kembali. Memperpendek DIO dan memperpanjang DPO akan langsung membebaskan kas.',
+        recos:['Fokus utama: pangkas DIO','Perpanjang DPO via negosiasi termin','Target CCC < 45 hari'] },
+    };
+
+    const fmtTrend = (u,v) => u==='money'?fmtRp(v):u==='pct'?fmtPct(v):u==='days'?Math.round(v)+'h':u==='x'?fmtX(v):fmtRatio(v);
+
+    // ───────────────────── DIMENSIONS ─────────────────────
+    const dims = {
+      likuiditas:   { label:'Likuiditas',    score:95, tone:'info',      status:'Sangat Tinggi',  reason:'CR 33,16 · QR 4,34 · Cash 1,79 — likuiditas berlebih, cek optimalisasi aset', metrics:['cr','qr','cash','wc'] },
+      profitabilitas:{ label:'Profitabilitas',score:88, tone:'sehat',     status:'Sangat Baik',    reason:'NPM 27,7% · ROE 63,5% — profitabilitas kuat dan konsisten', metrics:['roe','roa','gpm','npm','opm'] },
+      leverage:     { label:'Leverage',      score:98, tone:'sehat',      status:'Konservatif',    reason:'DER 0,03 — hutang hanya 2,9% total aset, struktur sangat aman', metrics:['der','wc'] },
+      efisiensi:    { label:'Efisiensi',     score:60, tone:'perhatian',  status:'Perlu Perhatian',reason:'DIO 68 hari · Inv. turnover 5,4× — persediaan lambat mengikat kas', metrics:['dio','dso','dpo','invturn','assetturn','ccc'] },
+    };
+    const overall = 82;
+
+    // ───────────────────── ALERTS ─────────────────────
+    const sevMap = {
+      critical:{ label:'Kritis', bg:'#fee2e2', fg:'#b91c1c', dot:'#dc2626' },
+      warning: { label:'Peringatan', bg:'#fef3c7', fg:'#b45309', dot:'#d97706' },
+      info:    { label:'Info', bg:'#dbeafe', fg:'#1d4ed8', dot:'#2563eb' },
+      review:  { label:'Tinjau', bg:'#eef2f7', fg:'#475569', dot:'#64748b' },
+    };
+    const alerts = [
+      { sev:'warning', title:'DIO 68 hari di atas benchmark', desc:'Persediaan tertahan rata-rata 68 hari (benchmark < 60). Berpotensi mengikat kas & risiko slow-moving.', metric:'dio' },
+      { sev:'info', title:'Profitabilitas sangat baik', desc:'ROE 63,5% jauh di atas benchmark 15% dan net margin 27,7% — kinerja laba kuat.', metric:'roe' },
+      { sev:'review', title:'Current Ratio 33,16 terlalu tinggi', desc:'Likuiditas berlebih — aset lancar & persediaan kemungkinan belum dioptimalkan untuk imbal hasil.', metric:'cr' },
+    ];
+
+    // ───────────────────── EXEC BAND ─────────────────────
+    const execKpi = (label,val,sub,tone,id) => R('div',{onClick:id?()=>this.open(id):undefined,style:{flex:'1 1 0',minWidth:130,padding:'13px 15px',borderRadius:13,background:'white',border:'1px solid #ececec',borderTop:`3px solid ${C[tone].bar}`,cursor:id?'pointer':'default',boxShadow:'0 1px 2px rgba(0,0,0,0.03)'}},
+      R('p',{style:{fontSize:10.5,color:'#6b7280',margin:'0 0 4px',fontWeight:600}}, label),
+      R('p',{style:{fontSize:24,fontWeight:800,color:'#1f2430',margin:0,letterSpacing:'-0.5px'}}, val),
+      R('p',{style:{fontSize:10,color:'#9ca3af',margin:'4px 0 0'}}, sub)
+    );
+    const execBand = R('div',{style:{display:'grid',gridTemplateColumns:'minmax(280px,1.15fr) minmax(300px,1fr)',gap:14}},
+      // left: score + insight + kpis
+      R('div',{style:{borderRadius:18,padding:18,background:'linear-gradient(135deg,#202024,#2a2a30)',display:'flex',flexDirection:'column',gap:14}},
+        R('div',{style:{display:'flex',alignItems:'center',gap:16}},
+          R('div',{onClick:()=>this.open('dim:overview'),style:{cursor:'pointer',flexShrink:0,width:104,height:104,borderRadius:'50%',background:`conic-gradient(#c0ff33 ${overall*3.6}deg, rgba(255,255,255,0.1) 0deg)`,display:'flex',alignItems:'center',justifyContent:'center'}},
+            R('div',{style:{width:84,height:84,borderRadius:'50%',background:'#202024',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}},
+              R('span',{style:{fontSize:30,fontWeight:800,color:'white',lineHeight:1}}, overall),
+              R('span',{style:{fontSize:10,color:'rgba(255,255,255,0.4)'}}, '/ 100'))),
+          R('div',null,
+            R('p',{style:{fontSize:11,color:'rgba(255,255,255,0.45)',margin:'0 0 3px',fontWeight:600,letterSpacing:'0.3px'}}, 'SKOR KESEHATAN KEUANGAN'),
+            R('p',{style:{fontSize:15,fontWeight:700,color:'#c0ff33',margin:'0 0 6px'}}, '● Keuangan Sehat'),
+            R('p',{style:{fontSize:11,lineHeight:1.5,color:'rgba(255,255,255,0.7)',margin:0}}, 'Profitabilitas kuat & likuiditas sangat tinggi, namun efisiensi persediaan perlu perhatian karena DIO 68 hari.'))
+        ),
+        R('div',{style:{display:'flex',gap:10}},
+          R('div',{onClick:()=>this.open('np'),style:{flex:1,cursor:'pointer',background:'rgba(255,255,255,0.05)',borderRadius:11,padding:'10px 12px'}},
+            R('p',{style:{fontSize:10,color:'rgba(255,255,255,0.4)',margin:'0 0 3px'}}, 'Laba Bersih '+pc.tot),
+            R('p',{style:{fontSize:18,fontWeight:800,color:'white',margin:0}}, fmtRp(totNP))),
+          R('div',{onClick:()=>this.open('npm'),style:{flex:1,cursor:'pointer',background:'rgba(255,255,255,0.05)',borderRadius:11,padding:'10px 12px'}},
+            R('p',{style:{fontSize:10,color:'rgba(255,255,255,0.4)',margin:'0 0 3px'}}, 'Net Margin'),
+            R('p',{style:{fontSize:18,fontWeight:800,color:'white',margin:0}}, fmtPct(npm))),
+          R('div',{onClick:()=>this.open('cash'),style:{flex:1,cursor:'pointer',background:'rgba(255,255,255,0.05)',borderRadius:11,padding:'10px 12px'}},
+            R('p',{style:{fontSize:10,color:'rgba(255,255,255,0.4)',margin:'0 0 3px'}}, 'Posisi Kas'),
+            R('p',{style:{fontSize:18,fontWeight:800,color:'white',margin:0}}, fmtRp(BS.kas)))
+        )
+      ),
+      // right: top alerts + revenue kpi
+      R('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+        R('div',{style:{display:'flex',gap:10}},
+          execKpi('Pendapatan '+pc.tot, fmtRp(totRev), 'Σ '+sel.length+' bulan', 'info','rev'),
+          execKpi('Laba Kotor '+pc.tot, fmtRp(totGP), 'GPM '+fmtPct(gpm), 'sehat','gp')
+        ),
+        R('div',{style:{flex:1,borderRadius:14,background:'white',border:'1px solid #ececec',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}},
+          R('p',{style:{fontSize:11,fontWeight:700,color:'#1f2430',margin:0}}, 'Top 3 Alerts'),
+          ...alerts.map((al,i)=> R('div',{key:i,onClick:()=>this.open(al.metric),style:{cursor:'pointer',display:'flex',gap:9,alignItems:'flex-start',padding:'6px 8px',borderRadius:9,background:sevMap[al.sev].bg}},
+            R('span',{style:{flexShrink:0,marginTop:1,width:7,height:7,borderRadius:'50%',background:sevMap[al.sev].dot}}),
+            R('div',{style:{flex:1,minWidth:0}},
+              R('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                R('span',{style:{fontSize:9,fontWeight:800,color:sevMap[al.sev].fg,textTransform:'uppercase',letterSpacing:'0.4px'}}, sevMap[al.sev].label),
+                R('span',{style:{fontSize:11,fontWeight:700,color:'#1f2430'}}, al.title)),
+              R('p',{style:{fontSize:10.5,color:'#6b7280',margin:'2px 0 0',lineHeight:1.4}}, al.desc)),
+            R('span',{style:{color:sevMap[al.sev].fg,fontSize:14,flexShrink:0}}, '›')
+          ))
+        )
+      )
+    );
+
+    // ───────────────────── PERFORMANCE CARDS ─────────────────────
+    const perfDefs = [
+      { id:'rev', label:'Pendapatan', val:fmtRp(totRev), arr:revArr, tone:'info', goodUp:true },
+      { id:'gp', label:'Laba Kotor', val:fmtRp(totGP), arr:gpArr, tone:'sehat', goodUp:true },
+      { id:'np', label:'Laba Bersih', val:fmtRp(totNP), arr:npArr, tone:'sehat', goodUp:true },
+      { id:'gpm', label:'Gross Margin', val:fmtPct(gpm), arr:gpmArr, tone:'sehat', goodUp:true },
+      { id:'npm', label:'Net Margin', val:fmtPct(npm), arr:npmArr, tone:'sehat', goodUp:true },
+    ];
+    const perfCards = R('div',{style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12}},
+      ...perfDefs.map(d=>{ const [cur,prev]=dcMo(d.arr); return R('div',{key:d.id,onClick:()=>this.open(d.id),style:{cursor:'pointer',padding:14,borderRadius:13,background:'#fafafa',border:'1px solid #efefef',display:'flex',flexDirection:'column',gap:8,transition:'all .12s'},
+        onMouseEnter:e=>{e.currentTarget.style.background='#fff';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.07)';e.currentTarget.style.transform='translateY(-1px)';},
+        onMouseLeave:e=>{e.currentTarget.style.background='#fafafa';e.currentTarget.style.boxShadow='none';e.currentTarget.style.transform='none';}},
+        R('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+          R('span',{style:{fontSize:10.5,fontWeight:600,color:'#6b7280'}}, d.label),
+          R('span',{style:{width:6,height:6,borderRadius:'50%',background:C[d.tone].dot}})),
+        R('p',{style:{fontSize:22,fontWeight:800,color:'#1f2430',margin:0,letterSpacing:'-0.5px'}}, d.val),
+        R('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}},
+          R('div',{style:{display:'flex',flexDirection:'column',gap:1}}, delta(cur,prev,d.goodUp), R('span',{style:{fontSize:9,color:'#9ca3af'}}, 'MoM')),
+          spark(d.arr, C[d.tone].line)));
+      })
+    );
+
+    // ───────────────────── SCORE PANEL ─────────────────────
+    const scorePanel = R('div',{style:{borderRadius:18,padding:18,background:'#202024'}},
+      R('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
+        R('div',null,
+          R('h3',{style:{fontSize:13,fontWeight:700,color:'white',margin:0}}, 'Financial Health Summary'),
+          R('p',{style:{fontSize:10,color:'rgba(255,255,255,0.4)',margin:'3px 0 0'}}, 'Empat dimensi kesehatan keuangan · klik bar untuk detail')),
+        R('span',{style:{fontSize:11,color:'rgba(255,255,255,0.5)'}}, 'Skor '+overall+'/100')),
+      R('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'14px 22px'}},
+        ...Object.keys(dims).map(k=>{ const d=dims[k]; const col=C[d.tone]; return R('div',{key:k,onClick:()=>this.open('dim:'+k),style:{cursor:'pointer'}},
+          R('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:5}},
+            R('div',{style:{display:'flex',alignItems:'center',gap:8}},
+              R('span',{style:{fontSize:12.5,fontWeight:700,color:'white'}}, d.label),
+              R('span',{style:{fontSize:9.5,fontWeight:700,color:col.fg,background:col.bg,padding:'1px 7px',borderRadius:99}}, d.status)),
+            R('span',{style:{fontSize:13,fontWeight:800,color:col.bar}}, d.score)),
+          R('div',{style:{height:6,borderRadius:99,background:'rgba(255,255,255,0.1)',overflow:'hidden'}},
+            R('div',{style:{height:'100%',borderRadius:99,width:d.score+'%',background:col.bar}})),
+          R('p',{style:{fontSize:10,color:'rgba(255,255,255,0.4)',margin:'5px 0 0',lineHeight:1.4}}, d.reason));
+        })
+      )
+    );
+
+    // ───────────────────── RATIO CARDS ─────────────────────
+    const ratioCard = (id) => { const m=M[id]; const col=C[m.tone];
+      return R('div',{key:id,onClick:()=>this.open(id),style:{cursor:'pointer',padding:15,borderRadius:13,background:'#fafafa',border:'1px solid #efefef',borderLeft:`3px solid ${col.bar}`,display:'flex',flexDirection:'column',gap:7,transition:'all .12s'},
+        onMouseEnter:e=>{e.currentTarget.style.background='#fff';e.currentTarget.style.boxShadow='0 4px 14px rgba(0,0,0,0.07)';},
+        onMouseLeave:e=>{e.currentTarget.style.background='#fafafa';e.currentTarget.style.boxShadow='none';}},
+        R('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}},
+          R('span',{style:{fontSize:11,fontWeight:600,color:'#6b7280'}}, m.label),
+          pill(m.status,m.tone)),
+        R('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}},
+          R('p',{style:{fontSize:26,fontWeight:800,color:'#1f2430',margin:0,letterSpacing:'-0.5px'}}, m.value),
+          spark(m.trend, col.line, {w:64,h:22})),
+        R('div',{style:{height:1,background:'#eee',margin:'1px 0'}}),
+        R('p',{style:{fontSize:9.5,color:'#9ca3af',margin:0,fontFamily:'ui-monospace,Menlo,monospace'}}, m.formula),
+        R('p',{style:{fontSize:10,color:'#6b7280',margin:0,lineHeight:1.45}},
+          R('span',{style:{fontWeight:700,color:col.fg}}, 'Benchmark '+m.benchmark+'. '),
+          m.interp.length>92? m.interp.slice(0,90)+'…' : m.interp)
+      );
+    };
+    const liqCards = R('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}, ['cr','qr','cash','der','wc','ccc'].map(ratioCard));
+    const profitCards = R('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}, ['roe','roa','gpm','npm','opm'].map(ratioCard));
+
+    // efficiency: cards + DIO warning banner
+    const effCards = R('div',null,
+      R('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:12}}, ['dso','dio','dpo','invturn','assetturn','ccc'].map(ratioCard)),
+      R('div',{onClick:()=>this.open('dio'),style:{cursor:'pointer',display:'flex',gap:11,alignItems:'flex-start',padding:'12px 14px',borderRadius:12,background:C.perhatian.bg,border:`1px solid ${C.perhatian.dot}33`}},
+        R('span',{style:{flexShrink:0,fontSize:15}}, '⚠'),
+        R('p',{style:{fontSize:11.5,color:C.perhatian.fg,margin:0,lineHeight:1.5}},
+          R('strong',null,'Persediaan perlu perhatian. '),
+          'Rata-rata inventory outstanding (DIO) 68 hari melebihi benchmark 60 hari, dan persediaan mencapai 86,8% dari aktiva lancar (Rp 1,21M). Perputaran stok lambat mengikat kas dan menaikkan risiko barang slow-moving. ',
+          R('span',{style:{fontWeight:700,textDecoration:'underline'}}, 'Lihat rekomendasi →'))
+      )
+    );
+
+    // ───────────────────── STATEMENT TOGGLES ─────────────────────
+    const seg = (opts,cur,onPick) => R('div',{style:{display:'flex',gap:3,background:'#f3f4f6',padding:3,borderRadius:9}},
+      opts.map(o=>R('button',{key:o.v,onClick:()=>onPick(o.v),style:{padding:'5px 11px',borderRadius:7,border:'none',cursor:'pointer',fontSize:11,fontWeight:cur===o.v?700:500,background:cur===o.v?'white':'transparent',color:cur===o.v?'#1f2430':'#6b7280',boxShadow:cur===o.v?'0 1px 3px rgba(0,0,0,0.1)':'none',transition:'all .12s'}}, o.l)));
+    const stmtToggles = R('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
+      seg([{v:'bulanan',l:'Bulanan'},{v:'kuartalan',l:'Kuartalan'},{v:'ytd',l:'YTD'}], S.stmtView, v=>this.setState({stmtView:v})),
+      seg([{v:'nominal',l:'Nominal'},{v:'pct',l:'% Pendapatan'}], S.stmtMode, v=>this.setState({stmtMode:v}))
+    );
+
+    // ───────────────────── PNL TABLE ─────────────────────
+    // build columns based on view
+    let cols, colData; // colData: array of {rev,hpp,gp,opex,np}
+    const baseRow = d => ({ rev:d.rev, hpp:d.rev-d.gp, gp:d.gp, opex:d.exp, np:d.np });
+    if(S.stmtView==='kuartalan'){
+      const q = (a,b)=>{ const ms=ALL.slice(a,b); return { rev:ms.reduce((s,d)=>s+d.rev,0), hpp:ms.reduce((s,d)=>s+(d.rev-d.gp),0), gp:ms.reduce((s,d)=>s+d.gp,0), opex:ms.reduce((s,d)=>s+d.exp,0), np:ms.reduce((s,d)=>s+d.np,0) }; };
+      if(S.period==='Q1'){ cols=['Q1']; colData=[q(0,3)]; }
+      else if(S.period==='Q2'){ cols=['Q2']; colData=[q(3,6)]; }
+      else { cols=['Q1','Q2']; colData=[q(0,3),q(3,6)]; }
+    } else if(S.stmtView==='ytd'){
+      cols=sel.map(d=>d.m); let acc={rev:0,hpp:0,gp:0,opex:0,np:0};
+      colData=sel.map(d=>{ const b=baseRow(d); acc={rev:acc.rev+b.rev,hpp:acc.hpp+b.hpp,gp:acc.gp+b.gp,opex:acc.opex+b.opex,np:acc.np+b.np}; return {...acc}; });
+    } else {
+      cols=sel.map(d=>d.m); colData=sel.map(baseRow);
+    }
+    const totCol = { rev:totRev, hpp:totHPP, gp:totGP, opex:totExp, np:totNP };
+    const showVal = (v,rowRev) => S.stmtMode==='pct' ? fmtPct(rowRev? v/rowRev*100 : 0,1) : fmtRp(v);
+
+    const rowDefs = [
+      { key:'rev', label:'Pendapatan', accent:'#3b82f6', bold:true, get:c=>c.rev, trend:revArr, sub:[['Produk',0.62],['Channel Online',0.26],['Customer B2B',0.12]] },
+      { key:'hpp', label:'HPP', muted:true, get:c=>c.hpp, neg:true, sub:[['Bahan Baku',0.58],['Tenaga Kerja Langsung',0.27],['Overhead Produksi',0.15]] },
+      { key:'gp', label:'Laba Kotor', bold:true, get:c=>c.gp, divider:true },
+      { key:'gpmr', label:'Gross Margin', pct:true, get:c=>c.gp, ofRev:true },
+      { key:'opex', label:'Beban Operasional', muted:true, get:c=>c.opex, neg:true, sub:[['Marketing',0.34],['Gaji & SDM',0.46],['Operasional',0.20]] },
+      { key:'np', label:'Laba Bersih', accent:'#16a34a', bold:true, get:c=>c.np, trend:npArr },
+      { key:'npmr', label:'Net Margin', pct:true, get:c=>c.np, ofRev:true },
+    ];
+
+    const th = (extra) => ({ padding:'9px 12px', textAlign:'right', fontSize:10.5, fontWeight:600, color:'#6b7280', background:'#fafafa', borderBottom:'2px solid #efefef', whiteSpace:'nowrap', ...extra });
+    const lastIdx = colData.length-1;
+    const deltaCell = (row) => {
+      if(colData.length<2) return R('span',{style:{color:'#cbd5e1'}}, '—');
+      const cur=row.ofRev? row.get(colData[lastIdx])/colData[lastIdx].rev*100 : row.get(colData[lastIdx]);
+      const prev=row.ofRev? row.get(colData[lastIdx-1])/colData[lastIdx-1].rev*100 : row.get(colData[lastIdx-1]);
+      const p = prev? (cur-prev)/Math.abs(prev)*100 : 0;
+      const goodUp = !row.neg;
+      const good=(p>=0)===goodUp; const col=good?C.sehat:C.risiko;
+      return R('span',{style:{display:'inline-flex',alignItems:'center',gap:2,fontSize:11,fontWeight:700,color:col.fg,justifyContent:'flex-end'}}, arrow(p>=0), idc(Math.abs(p).toFixed(1))+'%');
+    };
+
+    const tableRows = [];
+    rowDefs.forEach(row=>{
+      const expandable = !!row.sub;
+      const isOpen = !!S.expanded[row.key];
+      tableRows.push(R('tr',{key:row.key,onClick:expandable?()=>this.setState(st=>({expanded:{...st.expanded,[row.key]:!st.expanded[row.key]}})):undefined,
+        style:{borderBottom:row.divider?'2px solid #eee':'1px solid #f3f4f6',cursor:expandable?'pointer':'default',background:row.bold&&!row.pct?'#fcfcfd':'white'}},
+        R('td',{style:{padding:'9px 12px',textAlign:'left',fontSize:12,whiteSpace:'nowrap',borderLeft:row.accent?`3px solid ${row.accent}`:'3px solid transparent',fontWeight:row.bold?700:row.pct?500:400,fontStyle:row.pct?'italic':'normal',color:row.muted?'#9ca3af':row.pct?'#6b7280':'#1f2430'}},
+          R('span',{style:{display:'inline-flex',alignItems:'center',gap:6}}, expandable&&R('span',{style:{fontSize:9,color:'#9ca3af',transition:'transform .15s',display:'inline-block',transform:isOpen?'rotate(90deg)':'none'}},'▶'), row.label)),
+        ...colData.map((c,ci)=>R('td',{key:ci,style:{padding:'9px 12px',textAlign:'right',fontSize:12,whiteSpace:'nowrap',fontWeight:row.bold?700:row.pct?500:400,fontStyle:row.pct?'italic':'normal',color:row.muted?'#9ca3af':row.pct?'#6b7280':'#374151'}},
+          row.pct? fmtPct(row.get(c)/c.rev*100,1) : (row.neg?'−':'')+(S.stmtMode==='pct'&&!row.pct? fmtPct(row.get(c)/c.rev*100,1) : fmtRp(row.get(c))).replace(/^−/,'') )),
+        R('td',{style:{padding:'9px 12px',textAlign:'right',whiteSpace:'nowrap',borderLeft:'1px solid #f0f0f0'}}, deltaCell(row)),
+        R('td',{style:{padding:'9px 10px',textAlign:'right',width:70}}, row.trend? spark(row.trend, row.accent||'#64748b',{w:56,h:18,fill:false}) : R('span',{style:{color:'#e5e7eb',fontSize:11}},'·')),
+        R('td',{style:{padding:'9px 14px',textAlign:'right',fontSize:12,fontWeight:row.bold?800:row.pct?600:500,whiteSpace:'nowrap',background:'#fafafa',borderLeft:'2px solid #efefef',fontStyle:row.pct?'italic':'normal',color:row.muted?'#9ca3af':'#1f2430'}},
+          row.pct? fmtPct(row.get(totCol)/totCol.rev*100,1) : (row.neg?'−':'')+fmtRp(row.get(totCol)))
+      ));
+      if(expandable && isOpen){
+        const base = row.get(totCol);
+        row.sub.forEach((s,si)=>{
+          tableRows.push(R('tr',{key:row.key+'-s'+si,style:{background:'#f7f8fa',borderBottom:'1px solid #f0f1f3'}},
+            R('td',{style:{padding:'7px 12px 7px 30px',textAlign:'left',fontSize:11,color:'#6b7280',borderLeft:'3px solid transparent'}}, '└ '+s[0]+'  ', R('span',{style:{color:'#cbd5e1'}}, idc((s[1]*100).toFixed(0))+'%')),
+            ...colData.map((c,ci)=>R('td',{key:ci,style:{padding:'7px 12px',textAlign:'right',fontSize:11,color:'#9ca3af',whiteSpace:'nowrap'}}, (row.neg?'−':'')+fmtRp(row.get(c)*s[1]))),
+            R('td',{style:{borderLeft:'1px solid #f0f0f0'}}),
+            R('td',null),
+            R('td',{style:{padding:'7px 14px',textAlign:'right',fontSize:11,color:'#6b7280',whiteSpace:'nowrap',background:'#f1f2f4',borderLeft:'2px solid #efefef'}}, (row.neg?'−':'')+fmtRp(base*s[1]))
+          ));
+        });
+      }
+    });
+
+    const pnlTable = R('div',{style:{overflowX:'auto',border:'1px solid #f0f0f0',borderRadius:12}},
+      R('table',{style:{width:'100%',borderCollapse:'collapse'}},
+        R('thead',null, R('tr',null,
+          R('th',{style:th({textAlign:'left',minWidth:160})}, 'Akun'),
+          ...cols.map((c,i)=>R('th',{key:i,style:th()}, c)),
+          R('th',{style:th({borderLeft:'1px solid #f0f0f0'})}, 'Δ'),
+          R('th',{style:th({width:70})}, 'Tren'),
+          R('th',{style:th({background:'#f3f4f6',borderLeft:'2px solid #efefef'})}, 'Total '+pc.tot)
+        )),
+        R('tbody',null, tableRows)
+      )
+    );
+
+    // ───────────────────── DRAWER ─────────────────────
+    let drawer = null;
+    if(S.drawer){
+      let body;
+      if(S.drawer==='dim:overview'){
+        body = R('div',null,
+          R('div',{style:{display:'flex',alignItems:'center',gap:16,marginBottom:18}},
+            R('div',{style:{width:74,height:74,borderRadius:'50%',background:`conic-gradient(#16a34a ${overall*3.6}deg, #e5e7eb 0deg)`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}},
+              R('div',{style:{width:58,height:58,borderRadius:'50%',background:'white',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}},
+                R('span',{style:{fontSize:22,fontWeight:800,color:'#1f2430'}}, overall), R('span',{style:{fontSize:9,color:'#9ca3af'}}, '/100'))),
+            R('div',null, R('p',{style:{fontSize:13,fontWeight:700,color:'#16a34a',margin:'0 0 3px'}},'Keuangan Sehat'), R('p',{style:{fontSize:11,color:'#6b7280',margin:0,lineHeight:1.5}},'Rata-rata tertimbang dari 4 dimensi kesehatan keuangan.'))),
+          ...Object.keys(dims).map(k=>{ const d=dims[k]; const col=C[d.tone]; return R('div',{key:k,onClick:()=>this.open('dim:'+k),style:{cursor:'pointer',padding:'11px 13px',borderRadius:11,background:'#fafafa',border:'1px solid #eee',marginBottom:8}},
+            R('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:5}}, R('span',{style:{fontSize:12,fontWeight:700,color:'#1f2430'}}, d.label), R('span',{style:{fontSize:12,fontWeight:800,color:col.bar}}, d.score+'/100')),
+            R('div',{style:{height:5,borderRadius:99,background:'#e5e7eb'}}, R('div',{style:{height:'100%',borderRadius:99,width:d.score+'%',background:col.bar}})),
+            R('p',{style:{fontSize:10.5,color:'#6b7280',margin:'6px 0 0',lineHeight:1.4}}, d.reason)); })
+        );
+      } else if(S.drawer.startsWith('dim:')){
+        const d=dims[S.drawer.slice(4)]; const col=C[d.tone];
+        body = R('div',null,
+          R('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:6}}, R('h2',{style:{fontSize:20,fontWeight:800,color:'#1f2430',margin:0}}, d.label), pill(d.status,d.tone)),
+          R('p',{style:{fontSize:13,color:'#6b7280',margin:'0 0 14px',lineHeight:1.5}}, d.reason),
+          R('div',{style:{padding:'12px 14px',borderRadius:12,background:'#fafafa',border:'1px solid #eee',marginBottom:16,display:'flex',alignItems:'center',gap:14}},
+            R('span',{style:{fontSize:30,fontWeight:800,color:col.bar}}, d.score), R('div',{style:{flex:1}}, R('div',{style:{height:8,borderRadius:99,background:'#e5e7eb'}}, R('div',{style:{height:'100%',borderRadius:99,width:d.score+'%',background:col.bar}})), R('p',{style:{fontSize:10,color:'#9ca3af',margin:'5px 0 0'}}, 'Skor dimensi dari 100'))),
+          R('p',{style:{fontSize:11,fontWeight:700,color:'#6b7280',margin:'0 0 9px',textTransform:'uppercase',letterSpacing:'0.4px'}}, 'Metrik pendukung'),
+          ...d.metrics.map(id=>{ const m=M[id]; const mc=C[m.tone]; return R('div',{key:id,onClick:()=>this.open(id),style:{cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',borderRadius:10,background:'#fafafa',border:'1px solid #eee',marginBottom:7}},
+            R('div',null, R('p',{style:{fontSize:12,fontWeight:600,color:'#1f2430',margin:0}}, m.label), R('p',{style:{fontSize:10,color:'#9ca3af',margin:'2px 0 0'}}, 'Benchmark '+m.benchmark)),
+            R('div',{style:{display:'flex',alignItems:'center',gap:10}}, R('span',{style:{fontSize:15,fontWeight:800,color:'#1f2430'}}, m.value), pill(m.status,m.tone), R('span',{style:{color:'#cbd5e1'}},'›'))); })
+        );
+      } else {
+        const m=M[S.drawer]; const col=C[m.tone];
+        const tmin=Math.min(...m.trend), tmax=Math.max(...m.trend);
+        body = R('div',null,
+          R('p',{style:{fontSize:10.5,fontWeight:700,color:col.fg,textTransform:'uppercase',letterSpacing:'0.5px',margin:'0 0 4px'}}, m.grp),
+          R('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:14}}, R('h2',{style:{fontSize:21,fontWeight:800,color:'#1f2430',margin:0}}, m.label), pill(m.status,m.tone)),
+          R('div',{style:{display:'flex',alignItems:'flex-end',gap:16,marginBottom:16}},
+            R('div',null, R('p',{style:{fontSize:38,fontWeight:800,color:'#1f2430',margin:0,letterSpacing:'-1px',lineHeight:1}}, m.value), R('p',{style:{fontSize:11,color:'#9ca3af',margin:'5px 0 0'}}, 'Benchmark '+m.benchmark)),
+            R('div',{style:{marginBottom:4}}, spark(m.trend,col.line,{w:130,h:42}))),
+          R('div',{style:{padding:'11px 14px',borderRadius:11,background:'#f3f6fb',border:'1px solid #e3eaf3',marginBottom:14}},
+            R('p',{style:{fontSize:10,fontWeight:700,color:'#64748b',margin:'0 0 4px',textTransform:'uppercase',letterSpacing:'0.4px'}}, 'Formula'),
+            R('p',{style:{fontSize:13,color:'#1f2430',margin:0,fontFamily:'ui-monospace,Menlo,monospace'}}, m.formula)),
+          R('p',{style:{fontSize:11,fontWeight:700,color:'#6b7280',margin:'0 0 8px',textTransform:'uppercase',letterSpacing:'0.4px'}}, 'Komponen Perhitungan'),
+          R('div',{style:{marginBottom:16}}, m.comp.map((c,i)=>R('div',{key:i,style:{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:i<m.comp.length-1?'1px solid #f0f0f0':'none'}}, R('span',{style:{fontSize:12,color:'#6b7280'}}, c[0]), R('span',{style:{fontSize:12,fontWeight:700,color:'#1f2430'}}, c[1])))),
+          R('p',{style:{fontSize:11,fontWeight:700,color:'#6b7280',margin:'0 0 8px',textTransform:'uppercase',letterSpacing:'0.4px'}}, 'Tren 6 Bulan'),
+          R('div',{style:{display:'flex',justifyContent:'space-between',gap:4,marginBottom:16,padding:'12px',background:'#fafafa',borderRadius:11,border:'1px solid #eee'}},
+            m.trend.map((v,i)=>R('div',{key:i,style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5}},
+              R('div',{style:{width:'100%',display:'flex',alignItems:'flex-end',justifyContent:'center',height:46}}, R('div',{style:{width:'62%',borderRadius:'4px 4px 0 0',background:i===5?col.bar:col.bar+'66',height:(8+((v-tmin)/((tmax-tmin)||1))*38)+'px'}})),
+              R('span',{style:{fontSize:9,fontWeight:700,color:'#475569'}}, fmtTrend(m.tUnit,v)),
+              R('span',{style:{fontSize:8.5,color:'#9ca3af'}}, ALL[i].m)))),
+          R('div',{style:{padding:'12px 14px',borderRadius:11,background:col.bg,marginBottom:16}},
+            R('p',{style:{fontSize:10.5,fontWeight:700,color:col.fg,margin:'0 0 5px',textTransform:'uppercase',letterSpacing:'0.4px'}}, 'Interpretasi'),
+            R('p',{style:{fontSize:12.5,color:'#374151',margin:0,lineHeight:1.6}}, m.interp)),
+          R('p',{style:{fontSize:11,fontWeight:700,color:'#6b7280',margin:'0 0 9px',textTransform:'uppercase',letterSpacing:'0.4px'}}, 'Rekomendasi Aksi'),
+          R('div',{style:{display:'flex',flexDirection:'column',gap:7}}, m.recos.map((r,i)=>R('div',{key:i,style:{display:'flex',gap:9,alignItems:'flex-start'}},
+            R('span',{style:{flexShrink:0,width:18,height:18,borderRadius:6,background:col.bg,color:col.fg,fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',marginTop:1}}, i+1),
+            R('span',{style:{fontSize:12.5,color:'#374151',lineHeight:1.5}}, r))))
+        );
+      }
+      drawer = R('div',{onClick:()=>this.close(),style:{position:'fixed',inset:0,background:'rgba(15,18,25,0.45)',zIndex:1000,display:'flex',justifyContent:'flex-end',animation:'dcFadeIn .15s ease'}},
+        R('div',{onClick:e=>e.stopPropagation(),style:{width:'min(460px,92vw)',height:'100%',background:'white',overflowY:'auto',padding:'22px 24px 40px',animation:'dcSlideIn .22s cubic-bezier(.2,.8,.2,1)',boxShadow:'-12px 0 40px rgba(0,0,0,0.2)'}},
+          R('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:6}},
+            R('button',{onClick:()=>this.close(),style:{width:30,height:30,borderRadius:9,border:'1px solid #eee',background:'#fafafa',cursor:'pointer',fontSize:15,color:'#6b7280',lineHeight:1}}, '✕')),
+          body)
+      );
+    }
+
+    // ───────────────────── PERIOD TABS ─────────────────────
+    const tabBtn = (p,label) => R('button',{key:p,onClick:()=>this.setState({period:p,showCustom:false}),style:{padding:'6px 14px',borderRadius:8,border:'none',cursor:'pointer',fontSize:11.5,fontWeight:S.period===p?700:500,background:S.period===p?'white':'transparent',color:S.period===p?'#1f2430':'#6b7280',boxShadow:S.period===p?'0 1px 3px rgba(0,0,0,0.1)':'none',transition:'all .12s'}}, label);
+    const periodTabs = R('div',{style:{position:'relative',display:'flex',alignItems:'center',gap:8}},
+      R('div',{style:{display:'flex',gap:3,background:'#f3f4f6',padding:3,borderRadius:11}},
+        tabBtn('H1','H1 2026'), tabBtn('Q1','Q1'), tabBtn('Q2','Q2'),
+        R('button',{onClick:()=>this.setState(st=>({period:'custom',showCustom:!st.showCustom})),style:{padding:'6px 12px',borderRadius:8,border:'none',cursor:'pointer',fontSize:11.5,fontWeight:S.period==='custom'?700:500,background:S.period==='custom'?'white':'transparent',color:S.period==='custom'?'#1f2430':'#6b7280',boxShadow:S.period==='custom'?'0 1px 3px rgba(0,0,0,0.1)':'none',display:'flex',alignItems:'center',gap:5}},
+          R('svg',{width:12,height:12,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},R('rect',{x:3,y:4,width:18,height:18,rx:2}),R('line',{x1:16,y1:2,x2:16,y2:6}),R('line',{x1:8,y1:2,x2:8,y2:6}),R('line',{x1:3,y1:10,x2:21,y2:10})), 'Custom')),
+      S.showCustom && R('div',{style:{position:'absolute',top:'calc(100% + 8px)',right:0,zIndex:50,background:'white',borderRadius:13,boxShadow:'0 12px 40px rgba(0,0,0,0.18)',border:'1px solid #eee',padding:14,width:240}},
+        R('p',{style:{fontSize:11,fontWeight:700,color:'#1f2430',margin:'0 0 10px'}}, 'Rentang Kustom'),
+        R('div',{style:{display:'flex',gap:8,marginBottom:10}},
+          R('div',{style:{flex:1}}, R('label',{style:{fontSize:10,color:'#9ca3af',display:'block',marginBottom:3}}, 'Dari'),
+            R('select',{value:S.cStart,onChange:e=>this.setState({cStart:+e.target.value,period:'custom'}),style:{width:'100%',padding:'6px 8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:12,color:'#1f2430'}}, ALL.map((d,i)=>R('option',{key:i,value:i}, d.m+' 2026')))),
+          R('div',{style:{flex:1}}, R('label',{style:{fontSize:10,color:'#9ca3af',display:'block',marginBottom:3}}, 'Sampai'),
+            R('select',{value:S.cEnd,onChange:e=>this.setState({cEnd:+e.target.value,period:'custom'}),style:{width:'100%',padding:'6px 8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:12,color:'#1f2430'}}, ALL.map((d,i)=>R('option',{key:i,value:i}, d.m+' 2026'))))),
+        R('button',{onClick:()=>this.setState({showCustom:false}),style:{width:'100%',padding:'8px',borderRadius:8,border:'none',background:'#1f2430',color:'white',fontSize:12,fontWeight:600,cursor:'pointer'}}, 'Terapkan'))
+    );
+
+    return { clientName, periodLabel: pc.label, periodTabs, execBand, perfCards, scorePanel, liqCards, profitCards, effCards, stmtToggles, pnlTable, drawer };
+  }
+}
+</script>
+</body>
+</html>

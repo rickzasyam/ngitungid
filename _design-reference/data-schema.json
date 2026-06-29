@@ -1,0 +1,304 @@
+{
+  "_comment": "Schema data dan contoh nilai untuk halaman Analytics NgitungID BI",
+
+  "monthlyData": {
+    "_type": "MonthlyData[]",
+    "_description": "Data keuangan per bulan — ganti dengan response API nyata",
+    "example": [
+      { "m": "Jan", "rev": 485086931, "np": 127635672, "gp": 284632728, "exp": 153404036 },
+      { "m": "Feb", "rev": 512340000, "np": 141200000, "gp": 298500000, "exp": 157300000 },
+      { "m": "Mar", "rev": 498750000, "np": 118900000, "gp": 275600000, "exp": 156700000 },
+      { "m": "Apr", "rev": 567890000, "np": 165400000, "gp": 320100000, "exp": 154700000 },
+      { "m": "Mei", "rev": 601230000, "np": 178300000, "gp": 342800000, "exp": 164500000 },
+      { "m": "Jun", "rev": 589450000, "np": 169800000, "gp": 335200000, "exp": 165400000 }
+    ],
+    "fields": {
+      "m":   "string — label bulan (Jan, Feb, ... Des)",
+      "rev": "number — total pendapatan bulan tersebut (Rupiah)",
+      "np":  "number — laba bersih (net profit) bulan tersebut",
+      "gp":  "number — laba kotor (gross profit) bulan tersebut",
+      "exp": "number — total beban operasional (opex) bulan tersebut"
+    }
+  },
+
+  "balanceSheet": {
+    "_type": "BalanceSheet",
+    "_description": "Data neraca per tanggal akhir periode",
+    "example": {
+      "aktivaLancar": 1397767344,
+      "hutangLancar":   42142100,
+      "persediaan":   1214633693,
+      "kas":            75254490,
+      "piutang":        66794049,
+      "totalModal":  1419315950,
+      "totalAset":   1466658050
+    },
+    "derived": {
+      "totalHutang":    "totalAset - totalModal  →  47.342.100",
+      "workingCapital": "aktivaLancar - hutangLancar  →  1.355.625.244"
+    }
+  },
+
+  "metricRegistry": {
+    "_description": "Semua 19 metrik dengan nilai contoh untuk H1 2026",
+    "metrics": {
+      "rev": {
+        "grp": "Performa", "label": "Pendapatan", "tone": "info", "status": "Tumbuh",
+        "benchmark": "Tren positif", "formula": "Σ Penjualan periode",
+        "value_H1": "Rp 3,25M",
+        "comp": [
+          ["Total pendapatan", "Rp 3.254.746.931"],
+          ["Rata-rata / bulan", "Rp 542.457.822"],
+          ["Bulan tertinggi", "Mei · Rp 601.230.000"]
+        ],
+        "interp": "Pendapatan menunjukkan tren naik sepanjang periode dengan puncak di Mei.",
+        "recos": [
+          "Pertahankan momentum kanal dengan kontribusi terbesar",
+          "Antisipasi musiman pada bulan dengan dip (Mar)",
+          "Kunci kontrak berulang untuk stabilkan baseline"
+        ]
+      },
+      "gp": {
+        "grp": "Performa", "label": "Laba Kotor", "tone": "sehat", "status": "Sehat",
+        "benchmark": "GPM > 50%", "formula": "Pendapatan − HPP",
+        "value_H1": "Rp 1,86M",
+        "interp": "Laba kotor bergerak searah dengan pendapatan — struktur biaya pokok terkendali.",
+        "recos": ["Jaga rasio HPP terhadap pendapatan", "Negosiasi ulang harga pemasok utama", "Tinjau produk margin rendah"]
+      },
+      "np": {
+        "grp": "Performa", "label": "Laba Bersih", "tone": "sehat", "status": "Sehat",
+        "benchmark": "NPM > 10%", "formula": "Laba Kotor − Opex − Pajak",
+        "value_H1": "Rp 901jt",
+        "interp": "Laba bersih konsisten dengan net margin 27,7% — sangat sehat untuk UMKM.",
+        "recos": ["Lindungi margin saat scaling biaya", "Alokasikan surplus kas ke aset produktif", "Pantau beban tetap vs variabel"]
+      },
+      "gpm": {
+        "grp": "Performa", "label": "Gross Margin", "tone": "sehat", "status": "Sehat",
+        "benchmark": "> 50%", "formula": "Laba Kotor ÷ Pendapatan",
+        "value_H1": "56,9%",
+        "interp": "Margin kotor di atas 56% dan stabil — daya saing harga dan efisiensi produksi baik.",
+        "recos": ["Pertahankan disiplin pricing", "Pantau kenaikan biaya bahan"]
+      },
+      "npm": {
+        "grp": "Performa", "label": "Net Margin", "tone": "sehat", "status": "Sangat Baik",
+        "benchmark": "> 10%", "formula": "Laba Bersih ÷ Pendapatan",
+        "value_H1": "27,7%",
+        "interp": "Net margin 27,7% jauh di atas benchmark — setiap Rp 100 penjualan menghasilkan Rp 27,7 laba bersih.",
+        "recos": ["Pertahankan struktur biaya ramping", "Reinvestasi sebagian laba ke pertumbuhan"]
+      },
+      "cr": {
+        "grp": "Likuiditas", "label": "Current Ratio", "tone": "info", "status": "Terlalu Tinggi",
+        "benchmark": "1,5 – 3,0", "formula": "Aktiva Lancar ÷ Hutang Lancar",
+        "value": "33,16",
+        "interp": "CR 33,16 jauh di atas rentang sehat. Likuiditas berlebih — aset lancar belum dimanfaatkan optimal.",
+        "recos": ["Konversi sebagian persediaan menjadi kas", "Pertimbangkan investasi dari kas menganggur", "Distribusikan surplus bila tidak ada rencana belanja modal", "Tetapkan target rasio likuiditas yang lebih efisien"]
+      },
+      "qr": {
+        "grp": "Likuiditas", "label": "Quick Ratio", "tone": "sehat", "status": "Sehat",
+        "benchmark": "> 1,0", "formula": "(Aktiva Lancar − Persediaan) ÷ Hutang Lancar",
+        "value": "4,34",
+        "interp": "Tanpa persediaan, perusahaan mampu menutup kewajiban jangka pendek 4,3×. Likuiditas inti aman.",
+        "recos": ["Pertahankan buffer kas wajar", "Hindari idle cash berlebih"]
+      },
+      "cash": {
+        "grp": "Likuiditas", "label": "Cash Ratio", "tone": "sehat", "status": "Sehat",
+        "benchmark": "> 0,5", "formula": "Kas & Setara Kas ÷ Hutang Lancar",
+        "value": "1,79",
+        "interp": "Kas saja menutup 1,79× kewajiban lancar — posisi kas sangat kuat.",
+        "recos": ["Optimalkan penempatan kas berbunga", "Tetapkan kebijakan minimum cash"]
+      },
+      "der": {
+        "grp": "Likuiditas", "label": "Debt-to-Equity", "tone": "netral", "status": "Konservatif",
+        "benchmark": "< 1,0", "formula": "Total Hutang ÷ Total Modal",
+        "value": "0,03",
+        "interp": "Hutang hanya 2,9% total aset. Ada ruang memakai leverage untuk akselerasi pertumbuhan.",
+        "recos": ["Evaluasi pembiayaan untuk ekspansi terukur", "Manfaatkan pengungkit selama imbal hasil > bunga"]
+      },
+      "wc": {
+        "grp": "Likuiditas", "label": "Modal Kerja", "tone": "info", "status": "Surplus Besar",
+        "benchmark": "Positif", "formula": "Aktiva Lancar − Hutang Lancar",
+        "value": "Rp 1,36M",
+        "interp": "Modal kerja surplus sangat besar; sebagian besar tertanam di persediaan. Likuid namun kurang produktif.",
+        "recos": ["Alihkan modal kerja idle ke aset produktif", "Optimalkan siklus persediaan"]
+      },
+      "roe": {
+        "grp": "Profitabilitas", "label": "Return on Equity", "tone": "sehat", "status": "Sangat Baik",
+        "benchmark": "> 15%", "formula": "Laba Bersih ÷ Total Modal",
+        "value_H1": "63,5%",
+        "interp": "ROE jauh di atas benchmark — modal pemilik bekerja sangat efektif menghasilkan laba.",
+        "recos": ["Pertahankan profitabilitas", "Pertimbangkan reinvestasi vs distribusi"]
+      },
+      "roa": {
+        "grp": "Profitabilitas", "label": "Return on Assets", "tone": "sehat", "status": "Baik",
+        "benchmark": "> 5%", "formula": "Laba Bersih ÷ Total Aset",
+        "value_H1": "61,4%",
+        "interp": "ROA sehat namun tertekan oleh aset persediaan besar. Optimasi persediaan akan menaikkan ROA.",
+        "recos": ["Kurangi aset tak produktif", "Tingkatkan perputaran aset"]
+      },
+      "opm": {
+        "grp": "Profitabilitas", "label": "Operating Margin", "tone": "sehat", "status": "Sehat",
+        "benchmark": "> 15%", "formula": "Laba Operasi ÷ Pendapatan",
+        "value_H1": "28,3%",
+        "interp": "Margin operasi solid — inti bisnis menghasilkan laba sebelum item non-operasional.",
+        "recos": ["Kendalikan beban tetap", "Skala pendapatan tanpa proporsional menaikkan opex"]
+      },
+      "dso": {
+        "grp": "Efisiensi", "label": "DSO", "tone": "sehat", "status": "Sangat Baik",
+        "benchmark": "< 30 hari", "formula": "Piutang ÷ Pendapatan × Jumlah Hari",
+        "value_H1": "4 hari",
+        "interp": "Penagihan sangat cepat — kas masuk hampir seketika setelah penjualan. Risiko piutang macet minim.",
+        "recos": ["Pertahankan kebijakan kredit ketat", "Jaga hubungan pelanggan pembayar cepat"]
+      },
+      "dio": {
+        "grp": "Efisiensi", "label": "DIO", "tone": "perhatian", "status": "Perlu Perhatian",
+        "benchmark": "< 60 hari",
+        "formula": "Rata-rata Persediaan ÷ Pendapatan × Jumlah Hari",
+        "_note": "Basis: Pendapatan (bukan HPP) — sesuai dengan narasi 68 hari",
+        "value_H1": "68 hari",
+        "interp": "DIO 68 hari melebihi benchmark 60 hari. Persediaan = 86,8% aktiva lancar (Rp 1,21M) — mengikat kas.",
+        "recos": ["Review kategori stok slow-moving", "Evaluasi strategi & frekuensi pembelian", "Buat clearance atau bundling untuk produk lambat", "Sesuaikan reorder point & safety stock"]
+      },
+      "dpo": {
+        "grp": "Efisiensi", "label": "DPO", "tone": "netral", "status": "Pendek",
+        "benchmark": "30 – 60 hari", "formula": "Hutang Usaha ÷ HPP × Jumlah Hari",
+        "value_H1": "5 hari",
+        "interp": "Pembayaran ke pemasok sangat cepat. Ada peluang menahan kas lebih lama.",
+        "recos": ["Negosiasi termin pemasok 30–45 hari", "Manfaatkan diskon pembayaran awal bila menguntungkan"]
+      },
+      "invturn": {
+        "grp": "Efisiensi", "label": "Inventory Turnover", "tone": "perhatian", "status": "Rendah",
+        "benchmark": "> 6×",
+        "formula": "Pendapatan ÷ Rata-rata Persediaan (disetahunkan)",
+        "_note": "Basis: Pendapatan (bukan HPP)",
+        "value_H1": "5,40×",
+        "interp": "Persediaan hanya berputar ~5,4× setahun, di bawah ideal. Stok terlalu banyak relatif terhadap penjualan.",
+        "recos": ["Turunkan level persediaan rata-rata", "Tingkatkan akurasi forecast permintaan"]
+      },
+      "assetturn": {
+        "grp": "Efisiensi", "label": "Asset Turnover", "tone": "sehat", "status": "Baik",
+        "benchmark": "> 1,0", "formula": "Pendapatan ÷ Total Aset (disetahunkan)",
+        "value_H1": "4,45×",
+        "interp": "Aset menghasilkan pendapatan secara efektif, meski tertahan oleh persediaan besar.",
+        "recos": ["Optimalkan aset menganggur", "Naikkan utilisasi kapasitas"]
+      },
+      "ccc": {
+        "grp": "Efisiensi", "label": "Cash Conversion Cycle", "tone": "perhatian", "status": "Perlu Perhatian",
+        "benchmark": "Semakin pendek", "formula": "DIO + DSO − DPO",
+        "value_H1": "67 hari",
+        "comp_breakdown": { "DIO": "68 hari", "DSO": "4 hari", "DPO": "5 hari" },
+        "interp": "Siklus konversi kas didominasi DIO. Kas tertahan ~67 hari sebelum kembali.",
+        "recos": ["Fokus utama: pangkas DIO", "Perpanjang DPO via negosiasi termin", "Target CCC < 45 hari"]
+      }
+    }
+  },
+
+  "dimensions": {
+    "_description": "4 dimensi Financial Health Summary",
+    "likuiditas": {
+      "label": "Likuiditas", "score": 95, "tone": "info", "status": "Sangat Tinggi",
+      "reason": "CR 33,16 · QR 4,34 · Cash 1,79 — likuiditas berlebih, cek optimalisasi aset",
+      "metrics": ["cr", "qr", "cash", "wc"]
+    },
+    "profitabilitas": {
+      "label": "Profitabilitas", "score": 88, "tone": "sehat", "status": "Sangat Baik",
+      "reason": "NPM 27,7% · ROE 63,5% — profitabilitas kuat dan konsisten",
+      "metrics": ["roe", "roa", "gpm", "npm", "opm"]
+    },
+    "leverage": {
+      "label": "Leverage", "score": 98, "tone": "sehat", "status": "Konservatif",
+      "reason": "DER 0,03 — hutang hanya 2,9% total aset, struktur sangat aman",
+      "metrics": ["der", "wc"]
+    },
+    "efisiensi": {
+      "label": "Efisiensi", "score": 60, "tone": "perhatian", "status": "Perlu Perhatian",
+      "reason": "DIO 68 hari · Inv. turnover 5,4× — persediaan lambat mengikat kas",
+      "metrics": ["dio", "dso", "dpo", "invturn", "assetturn", "ccc"]
+    }
+  },
+
+  "alerts": {
+    "_description": "Top 3 alerts yang tampil di Executive Band",
+    "default": [
+      {
+        "severity": "warning",
+        "title": "DIO 68 hari di atas benchmark",
+        "desc": "Persediaan tertahan rata-rata 68 hari (benchmark < 60). Berpotensi mengikat kas & risiko slow-moving.",
+        "metric": "dio"
+      },
+      {
+        "severity": "info",
+        "title": "Profitabilitas sangat baik",
+        "desc": "ROE 63,5% jauh di atas benchmark 15% dan net margin 27,7% — kinerja laba kuat.",
+        "metric": "roe"
+      },
+      {
+        "severity": "review",
+        "title": "Current Ratio 33,16 terlalu tinggi",
+        "desc": "Likuiditas berlebih — aset lancar & persediaan kemungkinan belum dioptimalkan untuk imbal hasil.",
+        "metric": "cr"
+      }
+    ]
+  },
+
+  "pnlRows": {
+    "_description": "Definisi baris tabel P&L dan sub-komponen COA (saat ini mock)",
+    "rows": [
+      {
+        "key": "rev", "label": "Pendapatan", "accent": "#3b82f6",
+        "bold": true, "expandable": true,
+        "sub": [
+          { "label": "Produk",          "portion": 0.62 },
+          { "label": "Channel Online",  "portion": 0.26 },
+          { "label": "Customer B2B",    "portion": 0.12 }
+        ],
+        "_note": "Ganti sub dengan COA nyata dari API /coa-breakdown"
+      },
+      {
+        "key": "hpp", "label": "HPP", "muted": true, "neg": true, "expandable": true,
+        "sub": [
+          { "label": "Bahan Baku",                "portion": 0.58 },
+          { "label": "Tenaga Kerja Langsung",     "portion": 0.27 },
+          { "label": "Overhead Produksi",         "portion": 0.15 }
+        ]
+      },
+      { "key": "gp",   "label": "Laba Kotor",        "bold": true, "divider": true },
+      { "key": "gpmr", "label": "Gross Margin",       "pct": true, "ofRev": true },
+      {
+        "key": "opex", "label": "Beban Operasional", "muted": true, "neg": true, "expandable": true,
+        "sub": [
+          { "label": "Marketing",    "portion": 0.34 },
+          { "label": "Gaji & SDM",  "portion": 0.46 },
+          { "label": "Operasional", "portion": 0.20 }
+        ]
+      },
+      { "key": "np",   "label": "Laba Bersih", "accent": "#16a34a", "bold": true },
+      { "key": "npmr", "label": "Net Margin",  "pct": true, "ofRev": true }
+    ]
+  },
+
+  "colorSystem": {
+    "brand": {
+      "accent": "#c0ff33",
+      "sidebarBg": "#1a1a1a",
+      "darkPanel": "#202024"
+    },
+    "tones": {
+      "sehat":     { "fg": "#15803d", "bg": "#dcfce7", "dot": "#16a34a", "bar": "#16a34a" },
+      "perhatian": { "fg": "#b45309", "bg": "#fef3c7", "dot": "#d97706", "bar": "#f59e0b" },
+      "risiko":    { "fg": "#b91c1c", "bg": "#fee2e2", "dot": "#dc2626", "bar": "#ef4444" },
+      "netral":    { "fg": "#475569", "bg": "#eef2f7", "dot": "#64748b", "bar": "#64748b" },
+      "info":      { "fg": "#1d4ed8", "bg": "#dbeafe", "dot": "#2563eb", "bar": "#3b82f6" }
+    },
+    "severity": {
+      "critical": { "label": "Kritis",     "bg": "#fee2e2", "fg": "#b91c1c", "dot": "#dc2626" },
+      "warning":  { "label": "Peringatan", "bg": "#fef3c7", "fg": "#b45309", "dot": "#d97706" },
+      "info":     { "label": "Info",       "bg": "#dbeafe", "fg": "#1d4ed8", "dot": "#2563eb" },
+      "review":   { "label": "Tinjau",     "bg": "#eef2f7", "fg": "#475569", "dot": "#64748b" }
+    },
+    "ui": {
+      "text": { "primary": "#1f2430", "secondary": "#6b7280", "muted": "#9ca3af", "faint": "#cbd5e1" },
+      "bg":   { "page": "#f3f4f6", "card": "white", "row": "#fafafa", "subrow": "#f7f8fa" },
+      "border": { "default": "#ececec", "light": "#f0f0f0", "strong": "#efefef" }
+    }
+  }
+}
