@@ -95,6 +95,8 @@
 - ✅ Fix: DateRangePicker menggunakan komponen existing (`components/date-range-picker.tsx`)
 - ✅ Fix: Warna tab period selaras dengan accent color dashboard (`var(--color-accent-primary)`)
 - ✅ Fix: Global color consistency — lime #daf163, lilac #bbb3f3, bg #222124 via CSS variables
+- ✅ UI Polish: Semua emoji diganti Lucide icons, extended color palette (sky #7dd3fc, peach #fdba74, mint #6ee7b7) ditambahkan untuk states tambahan
+- ✅ UI Polish: Premium card design — gradient strips, section header icons, stagger animations, hover lifts, cubic-bezier transitions across all pages
 
 ---
 
@@ -192,6 +194,8 @@
 | 2026-06-29 | Lime accent diupdate dari #c0ff33 ke #daf163, lilac dari #a78bfa ke #bbb3f3, bg dari #1a1a1a ke #222124 | Selaraskan dengan dashboard design system yang sudah locked |
 | 2026-06-29 | Semua hardcode warna dipindahkan ke CSS variables di globals.css (kecuali Recharts fill/stroke props & string-concat alpha yang butuh literal hex) | Single source of truth untuk design tokens; var() tidak bekerja di SVG presentation attribute |
 | 2026-06-29 | DateRangePicker analytics menggunakan components/date-range-picker.tsx | DRY principle, konsistensi dark theme |
+| 2026-06-29 | Semua emoji UI diganti Lucide icons — konsisten cross-platform, scalable, colorable | Emoji rendering berbeda di tiap OS/browser |
+| 2026-06-29 | Extended palette ditambahkan: sky #7dd3fc (info), peach #fdba74 (warning), mint #6ee7b7 (success soft) | Harmonis secara color theory dengan lime/lilac/pink utama |
 
 ---
 

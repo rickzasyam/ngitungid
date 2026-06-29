@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import { formatRupiahShort } from './dashboard-utils'
+import { ArrowLeftRight } from 'lucide-react'
 
 interface CashflowItem {
   month: string
@@ -62,11 +63,19 @@ export function CashflowWaterfallChart({ data }: CashflowWaterfallChartProps) {
       style={{ background: '#222124' }}
     >
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-base font-bold" style={{ color: 'white' }}>Arus Kas per Aktivitas</h3>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Operating · Investing · Funding
-          </p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: '#7dd3fc' }}
+          >
+            <ArrowLeftRight className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold" style={{ color: 'white' }}>Arus Kas per Aktivitas</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              Operating · Investing · Funding
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {[

@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { DarkTooltip, formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { BarChart3 } from 'lucide-react'
 
 interface PnlOverviewItem {
   month: string
@@ -23,11 +24,19 @@ export function PnlOverviewChart({ data }: PnlOverviewChartProps) {
       style={{ background: '#222124' }}
     >
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-base font-bold" style={{ color: 'white' }}>Overview Laba Rugi</h3>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Pendapatan vs Total Biaya per bulan
-          </p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
+          >
+            <BarChart3 className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold" style={{ color: 'white' }}>Overview Laba Rugi</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              Pendapatan vs Total Biaya per bulan
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">

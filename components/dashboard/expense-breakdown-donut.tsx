@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { CustomTooltip, formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { PieChart as PieChartIcon } from 'lucide-react'
 
 interface ExpenseItem {
   name: string
@@ -23,8 +24,18 @@ export function ExpenseBreakdownDonut({ data, totalExpenses }: ExpenseBreakdownD
       className="rounded-3xl p-6"
       style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
     >
-      <h3 className="text-base font-bold mb-0.5" style={{ color: '#2d2d2d' }}>Komposisi Biaya</h3>
-      <p className="text-xs mb-4" style={{ color: '#6b7280' }}>Bulan Januari 2026</p>
+      <div className="flex items-center gap-3 mb-4">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #bbb3f3 0%, #a5b4fc 100%)' }}
+        >
+          <PieChartIcon className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+        </div>
+        <div>
+          <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Komposisi Biaya</h3>
+          <p className="text-xs" style={{ color: '#6b7280' }}>Bulan Januari 2026</p>
+        </div>
+      </div>
       <div className="flex items-center gap-6">
         <div style={{ width: '140px', height: '140px', flexShrink: 0, position: 'relative' }}>
           <ResponsiveContainer width="100%" height="100%">

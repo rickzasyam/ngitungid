@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState } from 'react'
-import { Calendar, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react'
+import { Calendar, ChevronUp, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { Sidebar } from '@/components/sidebar'
 import { useRequireClient } from '@/lib/use-require-client'
 import { DateRangePicker } from '@/components/date-range-picker'
@@ -109,6 +109,12 @@ const ALERTS: { severity: SeverityKey; title: string; desc: string; metric: stri
   { severity: 'review',  title: 'Current Ratio 33,16 terlalu tinggi', desc: 'Likuiditas berlebih — aset lancar & persediaan kemungkinan belum dioptimalkan untuk imbal hasil.',       metric: 'cr'  },
 ]
 
+const getDimBarColor = (score: number): string => {
+  if (score >= 80) return '#daf163'   // Lime — sangat baik
+  if (score >= 60) return '#bbb3f3'   // Lilac — perlu perhatian
+  return '#f472b6'                     // Bubblegum Pink — kritis
+}
+
 // ── Financial Health dimensions (dark panel) ─────────────────
 const DIMS_PANEL = [
   { key: 'likuiditas',     label: 'Likuiditas',     score: 95, tone: 'info'      as ToneKey, status: 'Sangat Tinggi',   reason: 'CR 33,16 · QR 4,34 · Cash 1,79 — likuiditas berlebih, cek optimalisasi aset' },
@@ -141,8 +147,33 @@ const ROW_DEFS: RowDef[] = [
 // ── Small shared components ───────────────────────────────────
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ background: 'white', borderRadius: 18, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', border: '1px solid #ececec' }}>
+    <div
+      className="animate-slide-up"
+      style={{
+        background: 'white',
+        borderRadius: 18,
+        padding: '18px 20px',
+        border: '1px solid #ececec',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+        transition: 'box-shadow 0.2s ease',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)' }}
+    >
       {children}
+    </div>
+  )
+}
+
+// Section header — accent bar + title + inline subtitle
+function SectionHeader({ title, subtitle, accent }: { title: string; subtitle: string; accent: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+      <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: accent }} />
+      <div>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>{title}</span>
+        <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{subtitle}</span>
+      </div>
     </div>
   )
 }
@@ -474,8 +505,7 @@ export default function AnalyticsPage() {
               {/* ═══ 2. PERFORMANCE KPI CARDS ══════════════════════ */}
               <div id="sec-performa">
                 <SectionCard>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>Performa Keuangan</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 14 }}>{pc.label} · 5 indikator utama · Klik untuk detail</div>
+                  <SectionHeader title="Performa Keuangan" subtitle={`${pc.label} · 5 indikator utama · Klik untuk detail`} accent="linear-gradient(180deg, #daf163, #bef264)" />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12 }}>
                     {[
                       { label: 'Pendapatan',   value: fmtRp(totRev), tone: 'info'  as ToneKey, arr: pRevArr,  key: 'rev' },
@@ -532,7 +562,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 22px' }}>
                   {DIMS_PANEL.map(dim => {
-                    const t = TONES[dim.tone]
+                    const barColor = getDimBarColor(dim.score)
                     return (
                       <div
                         key={dim.key}
@@ -546,10 +576,10 @@ export default function AnalyticsPage() {
                             <span style={{ fontSize: 12.5, fontWeight: 700, color: 'white' }}>{dim.label}</span>
                             <Pill tone={dim.tone} label={dim.status} />
                           </div>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: t.bar }}>{dim.score}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: barColor }}>{dim.score}</span>
                         </div>
                         <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 99, marginBottom: 5, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: dim.score + '%', background: t.bar, borderRadius: 99 }} />
+                          <div style={{ height: '100%', width: dim.score + '%', background: barColor, borderRadius: 99 }} />
                         </div>
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', lineHeight: 1.4 }}>{dim.reason}</div>
                       </div>
@@ -561,8 +591,7 @@ export default function AnalyticsPage() {
               {/* ═══ 4. LIKUIDITAS ═════════════════════════════════ */}
               <div id="sec-likuiditas">
                 <SectionCard>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>Rasio Likuiditas</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 14 }}>Kemampuan menutup kewajiban jangka pendek · Klik kartu untuk detail →</div>
+                  <SectionHeader title="Rasio Likuiditas" subtitle="Kemampuan menutup kewajiban jangka pendek · Klik kartu untuk detail" accent="linear-gradient(180deg, #daf163, #bef264)" />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                     <RatioCard label="Current Ratio"          value={fmtRatio(cr)}    tone="info"      status="Terlalu Tinggi"   formula="Aktiva Lancar ÷ Hutang Lancar"                        benchmark="1,5 – 3,0"        trend={DRAWER_TRENDS.cr}        onClick={() => setDrawer('cr')} />
                     <RatioCard label="Quick Ratio"            value={fmtRatio(qr)}    tone="sehat"     status="Sehat"            formula="(Aktiva Lancar − Persediaan) ÷ Hutang Lancar"         benchmark="> 1,0"            trend={DRAWER_TRENDS.qr}        onClick={() => setDrawer('qr')} />
@@ -577,8 +606,7 @@ export default function AnalyticsPage() {
               {/* ═══ 5. PROFITABILITAS ═════════════════════════════ */}
               <div id="sec-profitabilitas">
                 <SectionCard>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>Rasio Profitabilitas</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 14 }}>Kemampuan menghasilkan laba dari investasi dan pendapatan · Klik kartu untuk detail →</div>
+                  <SectionHeader title="Rasio Profitabilitas" subtitle="Kemampuan menghasilkan laba dari investasi dan pendapatan · Klik kartu untuk detail" accent="linear-gradient(180deg, #bbb3f3, #a5b4fc)" />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                     <RatioCard label="Return on Equity"   value={fmtPct(roe)} tone="sehat" status="Sangat Baik" formula="Laba Bersih ÷ Total Modal"       benchmark="> 15%"  trend={DRAWER_TRENDS.roe} onClick={() => setDrawer('roe')} />
                     <RatioCard label="Return on Assets"   value={fmtPct(roa)} tone="sehat" status="Baik"        formula="Laba Bersih ÷ Total Aset"        benchmark="> 5%"   trend={DRAWER_TRENDS.roa} onClick={() => setDrawer('roa')} />
@@ -592,8 +620,7 @@ export default function AnalyticsPage() {
               {/* ═══ 6. EFISIENSI ══════════════════════════════════ */}
               <div id="sec-efisiensi">
                 <SectionCard>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>Rasio Efisiensi</div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 14 }}>Efektivitas aset dan operasional · Klik kartu untuk detail →</div>
+                  <SectionHeader title="Rasio Efisiensi" subtitle="Efektivitas aset dan operasional · Klik kartu untuk detail" accent="linear-gradient(180deg, #fdba74, #f59e0b)" />
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
                     <RatioCard label="DSO"                    value={fmtDays(dso)}      tone="sehat"     status="Sangat Baik"    formula="Piutang ÷ Pendapatan × Hari"              benchmark="< 30 hari"      trend={DRAWER_TRENDS.dso}       onClick={() => setDrawer('dso')} />
                     <RatioCard label="DIO"                    value={fmtDays(dio)}      tone="perhatian" status="Perlu Perhatian" formula="Persediaan ÷ Pendapatan × Hari"           benchmark="< 60 hari"      trend={DRAWER_TRENDS.dio}       onClick={() => setDrawer('dio')} />
@@ -607,7 +634,7 @@ export default function AnalyticsPage() {
                     onClick={() => setDrawer('dio')}
                     style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}
                   >
-                    <span style={{ fontSize: 16, flexShrink: 0 }}>⚠</span>
+                    <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
                     <div>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>Persediaan perlu perhatian.</span>
                       {' '}
@@ -627,9 +654,12 @@ export default function AnalyticsPage() {
               <div id="sec-detail">
                 <SectionCard>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 16, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>Detail Laba Rugi</div>
-                      <div style={{ fontSize: 11, color: '#6b7280' }}>{pc.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #daf163, #bef264)' }} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Laba Rugi</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af' }}>{pc.label}</div>
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <SegCtrl

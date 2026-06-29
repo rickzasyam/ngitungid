@@ -427,23 +427,25 @@ function MappingCard({
   const confBg = getConfidenceBg(item.confidence)
 
   const cardBorder = isMapped
-    ? '2px solid var(--color-accent-primary)'
+    ? '2px solid #daf163'
     : hasSuggestion
-      ? '2px dashed var(--color-accent-secondary)'
-      : '2px dashed #f59e0b'
+      ? '2px dashed #bbb3f3'
+      : '2px dashed #fde68a'
 
   const cardBg = isMapped
-    ? 'rgba(218,241,99,0.03)'
+    ? 'linear-gradient(135deg, #f9fff0 0%, #f0fde4 100%)'
     : hasSuggestion
-      ? 'rgba(167,139,250,0.03)'
-      : 'rgba(245,158,11,0.03)'
+      ? 'linear-gradient(135deg, #faf9ff 0%, #f5f3ff 100%)'
+      : 'linear-gradient(135deg, #fffdf0 0%, #fefce8 100%)'
+
+  const cardShadow = isMapped ? '0 0 0 4px rgba(218,241,99,0.10)' : 'none'
 
   const arrowColor = isMapped ? '#daf163' : hasSuggestion ? '#bbb3f3' : '#f59e0b'
 
   return (
     <div
-      className="rounded-3xl p-5 transition-all duration-300"
-      style={{ border: cardBorder, background: cardBg }}
+      className="rounded-3xl p-5"
+      style={{ border: cardBorder, background: cardBg, boxShadow: cardShadow, transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
     >
       <div className="flex items-start gap-4">
 
@@ -777,8 +779,13 @@ export default function COAMappingPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {UNMAPPED_ITEMS.map(item => (
-                    <div key={item.id} data-dropdown>
+                  {UNMAPPED_ITEMS.map((item, index) => (
+                    <div
+                      key={item.id}
+                      data-dropdown
+                      className="animate-slide-up"
+                      style={{ animationDelay: `${index * 80}ms`, opacity: 0, animationFillMode: 'forwards' }}
+                    >
                       <MappingCard
                         item={item}
                         mappedValue={mappings[item.id] ?? null}
@@ -817,7 +824,7 @@ export default function COAMappingPage() {
                     <Check className="w-3.5 h-3.5" style={{ color: '#15803d' }} />
                   </div>
                   <span className="text-sm font-medium" style={{ color: '#15803d' }}>
-                    Semua akun telah dipetakan ✓
+                    Semua akun telah dipetakan
                   </span>
                 </>
               ) : (

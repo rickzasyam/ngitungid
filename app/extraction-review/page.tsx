@@ -16,6 +16,9 @@ import {
   X,
   Edit3,
   RotateCcw,
+  TrendingUp,
+  Scale,
+  Waves,
 } from 'lucide-react'
 
 // Mock extracted data — will be replaced with real Gemini API data in Phase 3
@@ -138,9 +141,9 @@ export default function ExtractionReviewPage() {
   }
 
   const tabs = [
-    { id: 'pnl', label: 'Laba Rugi', icon: '📈', count: 24 },
-    { id: 'neraca', label: 'Neraca', icon: '⚖️', count: 0 },
-    { id: 'cashflow', label: 'Arus Kas', icon: '💸', count: 0 },
+    { id: 'pnl',      label: 'Laba Rugi', Icon: TrendingUp, count: 24 },
+    { id: 'neraca',   label: 'Neraca',    Icon: Scale,      count: 0  },
+    { id: 'cashflow', label: 'Arus Kas',  Icon: Waves,      count: 0  },
   ]
 
   if (!isLoaded || !activeClient) return null
@@ -194,7 +197,7 @@ export default function ExtractionReviewPage() {
                       color: activeTab === tab.id ? 'var(--color-bg-main)' : '#6b7280',
                     }}
                   >
-                    <span>{tab.icon}</span>
+                    <tab.Icon className="w-3.5 h-3.5" />
                     <span>{tab.label}</span>
                     {tab.count > 0 && (
                       <span
@@ -533,12 +536,13 @@ export default function ExtractionReviewPage() {
                       {/* Col 4: Confidence */}
                       <div className="flex items-center">
                         {!line.isSubtotal && (
-                          <span
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                          <div
+                            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                             style={{ background: conf.bg, color: conf.color }}
                           >
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: conf.color }} />
                             {line.confidence}%
-                          </span>
+                          </div>
                         )}
                       </div>
 

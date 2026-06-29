@@ -1,6 +1,6 @@
 'use client'
 
-import { Wallet, Users, Clock, Package } from 'lucide-react'
+import { Wallet, Users, Clock, Package, Layers } from 'lucide-react'
 import { formatRupiahShort } from './dashboard-utils'
 
 interface BalanceSheetData {
@@ -29,8 +29,18 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
       className="rounded-3xl p-6"
       style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
     >
-      <h3 className="text-base font-bold mb-0.5" style={{ color: '#2d2d2d' }}>Kesehatan Neraca</h3>
-      <p className="text-xs mb-5" style={{ color: '#6b7280' }}>Komposisi Aset, Hutang & Modal</p>
+      <div className="flex items-center gap-3 mb-5">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #bbb3f3 0%, #a5b4fc 100%)' }}
+        >
+          <Layers className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+        </div>
+        <div>
+          <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Kesehatan Neraca</h3>
+          <p className="text-xs" style={{ color: '#6b7280' }}>Komposisi Aset, Hutang & Modal</p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 

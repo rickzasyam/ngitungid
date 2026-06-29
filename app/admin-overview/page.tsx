@@ -43,8 +43,12 @@ export default function AdminOverviewPage() {
               {/* Overdue warning */}
               {overdueCount > 0 && (
                 <div
-                  className="rounded-2xl p-4 flex items-center gap-3"
-                  style={{ background: '#fffbeb', border: '1px solid #fde68a' }}
+                  className="rounded-2xl p-4 flex items-center gap-3 animate-slide-up"
+                  style={{
+                    background: 'linear-gradient(135deg, #fffbeb 0%, #fef9ec 100%)',
+                    border: '1px solid #fde68a',
+                    borderLeft: '4px solid #f59e0b',
+                  }}
                 >
                   <AlertCircle className="w-5 h-5 flex-shrink-0" style={{ color: '#b45309' }} />
                   <p className="text-sm" style={{ color: '#92400e' }}>
@@ -59,7 +63,7 @@ export default function AdminOverviewPage() {
                   Pilih klien untuk mulai
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {MOCK_CLIENTS.map(client => {
+                  {MOCK_CLIENTS.map((client, index) => {
                     const status = CLIENT_STATUS.find(s => s.clientId === client.id)
                     const isOverdue = status?.status === 'overdue'
 
@@ -68,15 +72,27 @@ export default function AdminOverviewPage() {
                         key={client.id}
                         type="button"
                         onClick={() => setActiveClient(client)}
-                        className="text-left rounded-3xl p-5 transition-all duration-200"
+                        className="text-left rounded-3xl overflow-hidden animate-slide-up"
                         style={{
                           background: 'white',
                           border: isOverdue ? '1.5px solid #fde68a' : '1px solid #f0f0f0',
                           boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                          animationDelay: `${index * 75}ms`,
+                          opacity: 0,
+                          animationFillMode: 'forwards',
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)' }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.10)' }}
                         onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)' }}
                       >
+                        {/* Left accent strip — lime jika up-to-date, peach/amber jika overdue */}
+                        <div style={{
+                          height: 4,
+                          background: isOverdue
+                            ? 'linear-gradient(90deg, #fdba74, #f59e0b)'
+                            : 'linear-gradient(90deg, #daf163, #b8e000)',
+                        }} />
+                        <div className="p-5">
                         <div className="flex items-start justify-between mb-3">
                           <div
                             className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold"
@@ -107,6 +123,7 @@ export default function AdminOverviewPage() {
                             Upload terakhir: {status?.lastUpload}
                           </p>
                           <ArrowRight className="w-3.5 h-3.5" style={{ color: 'var(--color-accent-primary)' }} />
+                        </div>
                         </div>
                       </button>
                     )

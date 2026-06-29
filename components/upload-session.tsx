@@ -9,6 +9,9 @@ import {
   CheckCircle2,
   ArrowRight,
   Building2,
+  BarChart3,
+  BookOpen,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { useClient } from '@/lib/client-context'
@@ -24,30 +27,30 @@ const REPORT_TYPES = [
     label: 'Laba Rugi',
     sublabel: 'Profit & Loss Statement',
     description: 'Pendapatan, HPP, biaya operasional, dan laba bersih',
-    icon: '📈',
-    accentColor: '#10b981',
-    accentBg: '#f0fdf4',
-    accentBorder: '#bbf7d0',
+    Icon: BarChart3,
+    accentColor: '#daf163',
+    accentBg: '#f7fde8',
+    accentBorder: '#d9f99d',
   },
   {
     id: 'neraca',
     label: 'Neraca',
     sublabel: 'Balance Sheet',
     description: 'Aktiva, hutang, dan modal perusahaan',
-    icon: '⚖️',
-    accentColor: '#3b82f6',
-    accentBg: '#eff6ff',
-    accentBorder: '#bfdbfe',
+    Icon: BookOpen,
+    accentColor: '#bbb3f3',
+    accentBg: '#f3f2ff',
+    accentBorder: '#ddd6fe',
   },
   {
     id: 'cashflow',
     label: 'Arus Kas',
     sublabel: 'Cash Flow Statement',
     description: 'Aktivitas operasi, investasi, dan pendanaan',
-    icon: '💸',
-    accentColor: '#8b5cf6',
-    accentBg: '#f5f3ff',
-    accentBorder: '#ddd6fe',
+    Icon: ArrowLeftRight,
+    accentColor: '#7dd3fc',
+    accentBg: '#f0f9ff',
+    accentBorder: '#bae6fd',
   },
 ]
 
@@ -216,14 +219,18 @@ export function UploadSession() {
 
       {/* Row 2: Three upload cards — responsive: 1 → 3 columns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {REPORT_TYPES.map((report) => {
+        {REPORT_TYPES.map((report, index) => {
           const reportId = report.id as keyof UploadState
           const uploadState = uploads[reportId]
           const isDragOver = dragActive === report.id
           const ref = fileRefs[reportId]
 
           return (
-            <div key={report.id}>
+            <div
+              key={report.id}
+              className="animate-slide-up"
+              style={{ animationDelay: `${index * 75}ms`, opacity: 0, animationFillMode: 'forwards' }}
+            >
               <input
                 ref={ref}
                 type="file"
@@ -240,7 +247,7 @@ export function UploadSession() {
                 onDragLeave={e => handleDrag(e, report.id, 'leave')}
                 onDragOver={e => handleDrag(e, report.id, 'over')}
                 onDrop={e => handleDrop(e, reportId)}
-                className="rounded-3xl p-5 transition-all duration-300 cursor-pointer select-none"
+                className="rounded-3xl overflow-hidden cursor-pointer select-none"
                 style={{
                   border: uploadState
                     ? '2px solid var(--color-accent-primary)'
@@ -248,20 +255,39 @@ export function UploadSession() {
                       ? `2px dashed ${report.accentColor}`
                       : '2px dashed var(--color-border-subtle)',
                   background: uploadState
-                    ? '#f9fff3'
+                    ? 'linear-gradient(135deg, #f9fff0 0%, #f3fde0 100%)'
                     : isDragOver
                       ? report.accentBg
                       : '#fafafa',
                   transform: isDragOver ? 'scale(1.02)' : 'scale(1)',
-                  boxShadow: uploadState ? '0 0 0 3px rgba(218,241,99,0.15)' : 'none',
+                  boxShadow: uploadState ? '0 0 0 4px rgba(218,241,99,0.12)' : 'none',
+                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 }}
                 onClick={() => !uploadState && ref.current?.click()}
               >
+                {/* Colored top accent strip */}
+                <div
+                  style={{
+                    height: 3,
+                    background: uploadState
+                      ? 'linear-gradient(90deg, #daf163, #b8e000)'
+                      : isDragOver
+                        ? report.accentColor
+                        : '#e5e5e5',
+                    transition: 'background 0.2s',
+                  }}
+                />
+                <div className="p-5">
                 {/* Card header */}
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-base">{report.icon}</span>
+                      <div
+                        className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: `${report.accentColor}1a` }}
+                      >
+                        <report.Icon className="w-4 h-4" style={{ color: report.accentColor }} />
+                      </div>
                       <span className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>
                         {report.label}
                       </span>
@@ -332,6 +358,7 @@ export function UploadSession() {
                     </p>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           )

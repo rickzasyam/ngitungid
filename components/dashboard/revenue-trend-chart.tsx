@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { TrendingUp } from 'lucide-react'
 
 interface MonthlyDataItem {
   month: string
@@ -62,11 +63,19 @@ export function RevenueTrendChart({ data, totalRevenue, monthsCount }: RevenueTr
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Tren Pendapatan &amp; Profitabilitas</h3>
-          <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
-            Jan–Jun 2026 · Skala kiri: Rupiah · Skala kanan: Margin %
-          </p>
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
+          >
+            <TrendingUp className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Tren Pendapatan &amp; Profitabilitas</h3>
+            <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
+              Jan–Jun 2026 · Skala kiri: Rupiah · Skala kanan: Margin %
+            </p>
+          </div>
         </div>
         {/* Legend */}
         <div className="flex items-center gap-4 flex-shrink-0">
