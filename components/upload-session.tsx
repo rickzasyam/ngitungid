@@ -101,21 +101,12 @@ export function UploadSession() {
       file.name.endsWith('.xlsx') ||
       file.name.endsWith('.xls')
 
-    if (!isAllowed) {
-      console.warn('[Upload] Invalid file type:', file.type)
-      return
-    }
-    if (file.size > 25 * 1024 * 1024) {
-      console.warn('[Upload] File too large:', file.size)
-      return
-    }
+    if (!isAllowed || file.size > 25 * 1024 * 1024) return
 
     setUploads((prev) => ({
       ...prev,
       [reportId]: { file, status: 'ready' },
     }))
-
-    console.log(`[${reportId.toUpperCase()}] File selected:`, file.name)
   }
 
   const handleDrag = (e: React.DragEvent, reportId: string, type: string) => {
@@ -142,15 +133,6 @@ export function UploadSession() {
   const isReadyToProcess = activeClient && dateRange?.from && uploadedCount > 0
 
   const handleProcessSession = () => {
-    console.log('[Session] Processing:', {
-      client: activeClient,
-      dateRange,
-      files: {
-        pnl: uploads.pnl?.file.name,
-        neraca: uploads.neraca?.file.name,
-        cashflow: uploads.cashflow?.file.name,
-      },
-    })
     // TODO: POST to /api/upload/session
   }
 
@@ -229,7 +211,7 @@ export function UploadSession() {
             <div
               key={report.id}
               className="animate-slide-up"
-              style={{ animationDelay: `${index * 75}ms`, opacity: 0, animationFillMode: 'forwards' }}
+              style={{ animationDelay: `${index * 75}ms` }}
             >
               <input
                 ref={ref}
@@ -243,37 +225,47 @@ export function UploadSession() {
               />
 
               <div
+                role="button"
+                tabIndex={0}
+                aria-label={uploadState
+                  ? `${report.label} diunggah: ${uploadState.file.name}. Tekan Enter untuk mengganti.`
+                  : `Unggah ${report.label} — ${report.sublabel}. Drag & drop atau tekan Enter untuk browse.`
+                }
                 onDragEnter={e => handleDrag(e, report.id, 'enter')}
                 onDragLeave={e => handleDrag(e, report.id, 'leave')}
                 onDragOver={e => handleDrag(e, report.id, 'over')}
                 onDrop={e => handleDrop(e, reportId)}
-                className="rounded-3xl overflow-hidden cursor-pointer select-none"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    ref.current?.click()
+                  }
+                }}
+                className="upload-card-hover overflow-hidden cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                 style={{
+                  '--hover-accent': report.accentColor,
+                  borderRadius: 20,
                   border: uploadState
-                    ? '2px solid var(--color-accent-primary)'
+                    ? `2px solid ${report.accentColor}`
                     : isDragOver
                       ? `2px dashed ${report.accentColor}`
                       : '2px dashed var(--color-border-subtle)',
-                  background: uploadState
-                    ? 'linear-gradient(135deg, #f9fff0 0%, #f3fde0 100%)'
-                    : isDragOver
-                      ? report.accentBg
-                      : '#fafafa',
+                  background: 'white',
                   transform: isDragOver ? 'scale(1.02)' : 'scale(1)',
-                  boxShadow: uploadState ? '0 0 0 4px rgba(218,241,99,0.12)' : 'none',
-                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                }}
-                onClick={() => !uploadState && ref.current?.click()}
+                  boxShadow: uploadState
+                    ? `0 0 0 4px ${report.accentColor}22, 0 4px 20px rgba(0,0,0,0.08)`
+                    : '0 2px 8px rgba(0,0,0,0.05)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                } as React.CSSProperties}
+                onClick={() => ref.current?.click()}
               >
-                {/* Colored top accent strip */}
+                {/* Colored top accent strip — gives depth, keys each card to its report color */}
                 <div
                   style={{
-                    height: 3,
-                    background: uploadState
-                      ? 'linear-gradient(90deg, #daf163, #b8e000)'
-                      : isDragOver
-                        ? report.accentColor
-                        : '#e5e5e5',
+                    height: 4,
+                    background: isDragOver || uploadState
+                      ? report.accentColor
+                      : `linear-gradient(90deg, ${report.accentColor}60, ${report.accentColor}20)`,
                     transition: 'background 0.2s',
                   }}
                 />
@@ -283,23 +275,23 @@ export function UploadSession() {
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
                       <div
-                        className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ background: `${report.accentColor}1a` }}
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{ width: 36, height: 36, borderRadius: 10, background: `${report.accentColor}20` }}
                       >
-                        <report.Icon className="w-4 h-4" style={{ color: report.accentColor }} />
+                        <report.Icon style={{ width: 16, height: 16, color: report.accentColor }} />
                       </div>
                       <span className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>
                         {report.label}
                       </span>
                     </div>
-                    <p className="text-xs" style={{ color: report.accentColor, fontWeight: 500 }}>
+                    <p className="text-xs" style={{ color: report.accentColor, fontWeight: 600 }}>
                       {report.sublabel}
                     </p>
                   </div>
                   {uploadState ? (
                     <div
                       className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'var(--color-accent-primary)' }}
+                      style={{ background: report.accentColor }}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--color-bg-main)' }} />
                     </div>
@@ -315,9 +307,9 @@ export function UploadSession() {
                 {uploadState ? (
                   <div
                     className="rounded-2xl p-3 flex items-center gap-2.5"
-                    style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid #d4f57a' }}
+                    style={{ background: 'var(--color-muted-bg)', border: `1px solid ${report.accentColor}55` }}
                   >
-                    <FileText className="w-4 h-4 flex-shrink-0" style={{ color: '#5a7a00' }} />
+                    <FileText className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
                         {uploadState.file.name}
@@ -328,12 +320,11 @@ export function UploadSession() {
                     </div>
                     <button
                       onClick={e => { e.stopPropagation(); removeFile(reportId) }}
-                      className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
+                      aria-label={`Hapus file ${uploadState?.file.name ?? ''}`}
+                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors hover:bg-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-1"
                       style={{ background: 'rgba(0,0,0,0.08)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.15)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.08)'}
                     >
-                      <X className="w-2.5 h-2.5" style={{ color: 'var(--color-text-muted)' }} />
+                      <X className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} />
                     </button>
                   </div>
                 ) : (
@@ -438,24 +429,11 @@ export function UploadSession() {
         <button
           onClick={handleProcessSession}
           disabled={!isReadyToProcess}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold flex-shrink-0 transition-all duration-300"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold flex-shrink-0 transition-all duration-300 enabled:hover:-translate-y-px disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--color-accent-primary)"
           style={{
             background: isReadyToProcess ? 'var(--color-accent-primary)' : '#e5e5e5',
             color: isReadyToProcess ? 'var(--color-bg-main)' : '#9ca3af',
-            cursor: isReadyToProcess ? 'pointer' : 'not-allowed',
             boxShadow: isReadyToProcess ? '0 4px 16px rgba(218,241,99,0.4)' : 'none',
-          }}
-          onMouseEnter={e => {
-            if (isReadyToProcess) {
-              e.currentTarget.style.transform = 'translateY(-1px)'
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(218,241,99,0.5)'
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0)'
-            e.currentTarget.style.boxShadow = isReadyToProcess
-              ? '0 4px 16px rgba(218,241,99,0.4)'
-              : 'none'
           }}
         >
           Proses Laporan

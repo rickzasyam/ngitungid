@@ -30,7 +30,7 @@ export default function Page() {
                     className="rounded-3xl p-4 sm:p-8"
                     style={{
                       background: 'white',
-                      boxShadow: '0 4px 20px rgb(0,0,0,0.06)',
+                      boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)',
                       border: '1px solid #f0f0f0',
                     }}
                   >
