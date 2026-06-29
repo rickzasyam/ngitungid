@@ -13,3 +13,12 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Claude skills — installed locally, bukan bagian source code
+.claude/skills/
+
+# TypeScript build cache — auto-generated
+tsconfig.tsbuildinfo
