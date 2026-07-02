@@ -1,6 +1,5 @@
 'use client'
 
-import { Sidebar } from '@/components/sidebar'
 import { useClient, MOCK_CLIENTS } from '@/lib/client-context'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 
@@ -16,14 +15,11 @@ export default function AdminOverviewPage() {
   const overdueCount = CLIENT_STATUS.filter(c => c.status === 'overdue').length
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
-      <Sidebar activeItem="" />
-
-      <div className="flex-1 p-3 min-w-0 overflow-hidden">
-        <div
-          className="h-full rounded-3xl overflow-hidden flex flex-col"
-          style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
-        >
+    <div className="flex-1 p-3 min-w-0 overflow-hidden">
+      <div
+        className="h-full rounded-3xl overflow-hidden flex flex-col"
+        style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
+      >
 
           {/* Page header */}
           <div
@@ -135,6 +131,5 @@ export default function AdminOverviewPage() {
           </main>
         </div>
       </div>
-    </div>
   )
 }

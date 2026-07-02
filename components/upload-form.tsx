@@ -44,14 +44,7 @@ export function UploadForm() {
       file.name.endsWith('.xls') ||
       file.name.endsWith('.pdf')
 
-    if (!isAllowedType) {
-      console.warn('[Upload] Invalid file type:', file.type)
-      // TODO: replace with toast notification
-      return
-    }
-
-    if (file.size > 25 * 1024 * 1024) {
-      console.warn('[Upload] File too large:', file.size)
+    if (!isAllowedType || file.size > 25 * 1024 * 1024) {
       // TODO: replace with toast notification
       return
     }
@@ -71,24 +64,21 @@ export function UploadForm() {
     }
   }
 
-  const handleCSVUpload = async (file: File) => {
+  const handleCSVUpload = async (_file: File) => {
     // MVP PRIORITY — implement this first
     // TODO: parse CSV using papaparse
     // TODO: validate required columns: tanggal, akun, debit, kredit, keterangan
     // TODO: POST to /api/upload/csv
-    console.log('[CSV] File selected for processing:', file.name)
   }
 
-  const handleExcelUpload = async (file: File) => {
+  const handleExcelUpload = async (_file: File) => {
     // TODO: convert Excel to CSV rows using xlsx library
     // TODO: then call handleCSVUpload logic
-    console.log('[Excel] File selected for processing:', file.name)
   }
 
-  const handlePDFUpload = async (file: File) => {
+  const handlePDFUpload = async (_file: File) => {
     // POST MVP — implement after CSV flow is stable
     // TODO: POST to /api/upload/pdf → triggers Gemini AI extraction pipeline
-    console.log('[PDF] File selected for processing:', file.name)
   }
 
   return (
@@ -117,13 +107,23 @@ export function UploadForm() {
 
       {/* Drag & drop zone */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Klik atau seret file CSV, Excel, atau PDF ke sini untuk mengupload"
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            fileInputRef.current?.click()
+          }
+        }}
         className={`border-2 border-dashed rounded-3xl p-14 text-center
                     transition-all duration-300 cursor-pointer select-none
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2
                     ${isDragActive
                       ? 'border-(--color-accent-primary) bg-(--color-accent-primary)/5 scale-[1.02]'
                       : 'border-(--color-border-subtle) bg-(--color-muted-bg)/50 hover:border-(--color-accent-primary)/60 hover:scale-[1.005]'
@@ -155,7 +155,8 @@ export function UploadForm() {
           className="bg-(--color-accent-primary) text-(--color-accent-primary-fg)
                      px-7 py-2.5 rounded-full text-sm font-semibold
                      hover:shadow-[0_6px_20px_rgb(218,241,99,0.4)]
-                     transition-all duration-300 hover:-translate-y-0.5"
+                     transition-all duration-300 hover:-translate-y-0.5
+                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
         >
           Browse File
         </button>
@@ -180,8 +181,10 @@ export function UploadForm() {
           </div>
           <button
             onClick={() => setSelectedFile(null)}
-            className="w-7 h-7 rounded-full hover:bg-(--color-muted-dark)
-                       flex items-center justify-center transition-colors flex-shrink-0"
+            aria-label="Hapus file terpilih"
+            className="w-9 h-9 rounded-full hover:bg-(--color-muted-dark)
+                       flex items-center justify-center transition-colors flex-shrink-0
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
           >
             <X className="w-3.5 h-3.5 text-(--color-text-muted)" />
           </button>

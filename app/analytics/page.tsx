@@ -2,7 +2,6 @@
 
 import { Fragment, useState } from 'react'
 import { Calendar, ChevronUp, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
-import { Sidebar } from '@/components/sidebar'
 import { useRequireClient } from '@/lib/use-require-client'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { Sparkline } from '@/components/analytics/sparkline'
@@ -325,9 +324,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
-      <Sidebar activeItem="analytics" />
-
+    <>
       <div className="flex-1 min-w-0 overflow-hidden" style={{ padding: 10 }}>
         <div className="h-full flex flex-col rounded-3xl overflow-hidden" style={{ background: 'white', boxShadow: '0 8px 40px rgba(0,0,0,0.4)' }}>
 
@@ -792,6 +789,6 @@ export default function AnalyticsPage() {
           months={drawerMonths}
         />
       )}
-    </div>
+    </>
   )
 }

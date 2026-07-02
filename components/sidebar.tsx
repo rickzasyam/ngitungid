@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import {
   LayoutDashboard,
   BarChart2,
@@ -18,21 +18,32 @@ import {
   X,
 } from 'lucide-react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useClient, MOCK_CLIENTS, ClientInfo } from '@/lib/client-context'
 
-interface SidebarProps {
-  activeItem: string
+const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
+const CAPSULE_TRANSITION = 'transform .48s cubic-bezier(.34,1.42,.5,1), height .48s cubic-bezier(.34,1.42,.5,1)'
+
+// Routes that don't map 1:1 to a menuItems id (extraction-review is step 2 of
+// the upload flow; admin-overview has no corresponding nav item).
+const ROUTE_ACTIVE_MAP: Record<string, string> = {
+  '/extraction-review': 'upload',
+  '/admin-overview': '',
 }
 
-const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
-
-export function Sidebar({ activeItem }: SidebarProps) {
+export function Sidebar() {
+  const pathname = usePathname()
+  const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
   const { activeClient, setActiveClient, role, storageMap } = useClient()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   const workspaceRef = useRef<HTMLDivElement>(null)
+
+  const capsuleRef = useRef<HTMLDivElement>(null)
+  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const hasPositionedCapsule = useRef(false)
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -52,6 +63,47 @@ export function Sidebar({ activeItem }: SidebarProps) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Slides the nav capsule to the active item. `snap` skips the transition
+  // (first paint, and window resize where an animated chase would lag/jitter).
+  const positionCapsule = useCallback((snap: boolean) => {
+    const capsule = capsuleRef.current
+    const activeEl = itemRefs.current.get(activeItem)
+    if (!capsule) return
+    if (!activeEl) {
+      capsule.style.opacity = '0'
+      return
+    }
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const top = activeEl.offsetTop
+    const height = activeEl.offsetHeight
+
+    capsule.style.opacity = '1'
+
+    if (snap || reduceMotion) {
+      capsule.style.transition = 'none'
+      capsule.style.transform = `translateY(${top}px)`
+      capsule.style.height = `${height}px`
+      void capsule.offsetWidth // flush so the next transition doesn't replay this jump
+      capsule.style.transition = reduceMotion ? 'none' : CAPSULE_TRANSITION
+    } else {
+      capsule.style.transition = CAPSULE_TRANSITION
+      capsule.style.transform = `translateY(${top}px)`
+      capsule.style.height = `${height}px`
+    }
+  }, [activeItem])
+
+  useLayoutEffect(() => {
+    positionCapsule(!hasPositionedCapsule.current)
+    hasPositionedCapsule.current = true
+  }, [activeItem, isCollapsed, positionCapsule])
+
+  useEffect(() => {
+    const onResize = () => positionCapsule(true)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [positionCapsule])
 
   const toggleCollapsed = () => {
     const next = !isCollapsed
@@ -156,7 +208,22 @@ export function Sidebar({ activeItem }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 space-y-0.5">
+        <nav className="flex-1 px-3 space-y-0.5 relative">
+          {/* Sliding active-item capsule — measured/positioned imperatively, see positionCapsule */}
+          <div
+            ref={capsuleRef}
+            aria-hidden="true"
+            className="absolute left-0 right-0 top-0 z-0 pointer-events-none ng-nav-capsule"
+            style={{
+              borderRadius: 18,
+              background: 'var(--color-accent-primary)',
+              boxShadow: '0 4px 14px rgba(218,241,99,0.3)',
+              height: 0,
+              opacity: 0,
+              transform: 'translateY(0px)',
+            }}
+          />
+
           {menuItems.map((item) => {
             const Icon = item.icon
             const isActive = activeItem === item.id
@@ -164,7 +231,15 @@ export function Sidebar({ activeItem }: SidebarProps) {
             const isHovered = hoveredItem === item.id
 
             return (
-              <div key={item.id} className="relative">
+              <div
+                key={item.id}
+                ref={(el) => {
+                  if (el && !isComingSoon) itemRefs.current.set(item.id, el)
+                  else itemRefs.current.delete(item.id)
+                }}
+                className="relative"
+                style={{ zIndex: 1 }}
+              >
                 <Link
                   href={isComingSoon ? '#' : `/${item.id}`}
                   onClick={isComingSoon ? (e) => e.preventDefault() : undefined}
@@ -173,7 +248,6 @@ export function Sidebar({ activeItem }: SidebarProps) {
                   className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-2xl transition-all duration-200 relative"
                   style={{
                     justifyContent: isCollapsed ? 'center' : 'flex-start',
-                    background: isActive ? 'var(--color-accent-primary)' : 'transparent',
                     color: isActive ? 'var(--color-bg-sidebar)' : isComingSoon ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)',
                     fontWeight: isActive ? 600 : 400,
                     cursor: isComingSoon ? 'not-allowed' : 'pointer',

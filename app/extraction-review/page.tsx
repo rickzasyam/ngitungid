@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Sidebar } from '@/components/sidebar'
 import { Header } from '@/components/header'
 import { useRequireClient } from '@/lib/use-require-client'
 import {
@@ -149,14 +148,11 @@ export default function ExtractionReviewPage() {
   if (!isLoaded || !activeClient) return null
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
-      <Sidebar activeItem="upload" />
-
-      <div className="flex-1 p-3 min-w-0 overflow-hidden">
-        <div
-          className="h-full rounded-3xl overflow-hidden flex flex-col"
-          style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
-        >
+    <div className="flex-1 p-3 min-w-0 overflow-hidden">
+      <div
+        className="h-full rounded-3xl overflow-hidden flex flex-col"
+        style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
+      >
           <Header currentStep={2} />
 
           <main className="flex-1 overflow-hidden flex flex-col md:flex-row" style={{ background: '#f8f8f8' }}>
@@ -626,6 +622,5 @@ export default function ExtractionReviewPage() {
           </main>
         </div>
       </div>
-    </div>
   )
 }

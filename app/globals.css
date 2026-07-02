@@ -327,17 +327,58 @@ html {
 .animate-slide-in-right { animation: slideInRight 0.3s ease-out both; }
 .animate-scale-in       { animation: scaleIn 0.25s ease-out both; }
 
+/* === Upload micro-interactions === */
+@keyframes ngPop {
+  0%   { transform: scale(.4); opacity: 0; }
+  60%  { transform: scale(1.18); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes ngChipIn {
+  from { opacity: 0; transform: translateY(7px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes ngFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+@keyframes ngDragPulse {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+
+@keyframes ngRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ng-pop      { animation: ngPop .42s cubic-bezier(.34,1.56,.64,1) both; }
+.ng-chip-in  { animation: ngChipIn .34s cubic-bezier(.34,1.56,.64,1) both; }
+.ng-float    { animation: ngFloat 3.4s ease-in-out infinite; }
+.ng-drag-pulse { animation: ngDragPulse 1.1s ease-in-out infinite; }
+.ng-rise     { animation: ngRise .5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* Upload card depth-on-hover — CSS-driven (replaces removed JS onMouseEnter/Leave).
    --hover-accent is set per-card inline so each report type lifts in its own color. */
 .upload-card-hover:hover {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1) !important;
   border-color: var(--hover-accent) !important;
-  transform: translateY(-1px) !important;
+  transform: translateY(-2px) !important;
+}
+
+.upload-card-hover:active {
+  transform: scale(.985) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .upload-card-hover:hover {
+  .upload-card-hover:hover,
+  .upload-card-hover:active {
     transform: none !important;
+  }
+  .ng-nav-capsule {
+    transition: none !important;
   }
 }
 
@@ -346,7 +387,12 @@ html {
   .animate-slide-up,
   .animate-slide-in-right,
   .animate-scale-in,
-  .animate-fade-in-up {
+  .animate-fade-in-up,
+  .ng-pop,
+  .ng-chip-in,
+  .ng-float,
+  .ng-drag-pulse,
+  .ng-rise {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

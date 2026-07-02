@@ -244,6 +244,7 @@ export function UploadSession() {
                 className="upload-card-hover overflow-hidden cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                 style={{
                   '--hover-accent': report.accentColor,
+                  position: 'relative',
                   borderRadius: 20,
                   border: uploadState
                     ? `2px solid ${report.accentColor}`
@@ -259,6 +260,14 @@ export function UploadSession() {
                 } as React.CSSProperties}
                 onClick={() => ref.current?.click()}
               >
+                {/* Drag-over overlay — pulses independently of the card's own border transition */}
+                {isDragOver && (
+                  <div
+                    aria-hidden="true"
+                    className="ng-drag-pulse pointer-events-none"
+                    style={{ position: 'absolute', inset: 0, borderRadius: 20, border: `2px dashed ${report.accentColor}` }}
+                  />
+                )}
                 {/* Colored top accent strip — gives depth, keys each card to its report color */}
                 <div
                   style={{
@@ -290,13 +299,15 @@ export function UploadSession() {
                   </div>
                   {uploadState ? (
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                      key="done"
+                      className="ng-pop w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
                       style={{ background: report.accentColor }}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" style={{ color: 'var(--color-bg-main)' }} />
                     </div>
                   ) : (
                     <div
+                      key="empty"
                       className="w-6 h-6 rounded-full border-2 flex-shrink-0"
                       style={{ borderColor: 'var(--color-border-subtle)' }}
                     />
@@ -306,7 +317,8 @@ export function UploadSession() {
                 {/* Upload state */}
                 {uploadState ? (
                   <div
-                    className="rounded-2xl p-3 flex items-center gap-2.5"
+                    key="file"
+                    className="ng-chip-in rounded-2xl p-3 flex items-center gap-2.5"
                     style={{ background: 'var(--color-muted-bg)', border: `1px solid ${report.accentColor}55` }}
                   >
                     <FileText className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
@@ -328,9 +340,9 @@ export function UploadSession() {
                     </button>
                   </div>
                 ) : (
-                  <div className="text-center py-4">
+                  <div key="empty" className="text-center py-4">
                     <div
-                      className="w-10 h-10 rounded-2xl mx-auto mb-2.5 flex items-center justify-center"
+                      className={`w-10 h-10 rounded-2xl mx-auto mb-2.5 flex items-center justify-center ${!isDragOver ? 'ng-float' : ''}`}
                       style={{ background: isDragOver ? report.accentColor : '#f0f0f0' }}
                     >
                       <Upload
@@ -427,9 +439,10 @@ export function UploadSession() {
         </div>
 
         <button
+          key={isReadyToProcess ? 'ready' : 'idle'}
           onClick={handleProcessSession}
           disabled={!isReadyToProcess}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold flex-shrink-0 transition-all duration-300 enabled:hover:-translate-y-px disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--color-accent-primary)"
+          className="ng-chip-in flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold flex-shrink-0 transition-all duration-300 enabled:hover:-translate-y-px enabled:active:scale-[.96] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--color-accent-primary)"
           style={{
             background: isReadyToProcess ? 'var(--color-accent-primary)' : '#e5e5e5',
             color: isReadyToProcess ? 'var(--color-bg-main)' : '#9ca3af',

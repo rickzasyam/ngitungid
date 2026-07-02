@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Sidebar } from '@/components/sidebar'
 import { useRequireClient } from '@/lib/use-require-client'
 import { useClient } from '@/lib/client-context'
 import {
@@ -731,14 +730,11 @@ export default function COAMappingPage() {
   if (!isLoaded || !activeClient) return null
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
-      <Sidebar activeItem="coa-mapping" />
-
-      <div className="flex-1 p-3 min-w-0 overflow-hidden">
-        <div
-          className="h-full rounded-3xl overflow-hidden flex flex-col"
-          style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
-        >
+    <div className="flex-1 p-3 min-w-0 overflow-hidden">
+      <div
+        className="h-full rounded-3xl overflow-hidden flex flex-col"
+        style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
+      >
 
           {/* Page header */}
           <div
@@ -894,6 +890,5 @@ export default function COAMappingPage() {
 
         </div>
       </div>
-    </div>
   )
 }

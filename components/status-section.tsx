@@ -53,8 +53,6 @@ export function StatusSection() {
             style={{
               borderColor: '#f5f5f5',
               animationDelay: `${index * 60}ms`,
-              opacity: 0,
-              animationFillMode: 'forwards',
             }}
           >
             <div

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Sidebar } from '@/components/sidebar'
 import { useRequireClient } from '@/lib/use-require-client'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { RevenueTrendChart } from '@/components/dashboard/revenue-trend-chart'
@@ -181,11 +180,8 @@ export default function DashboardPage() {
   if (!isLoaded || !activeClient) return null
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
-      <Sidebar activeItem="dashboard" />
-
-      <div className="flex-1 p-3 min-w-0 overflow-hidden">
-        <div className="h-full rounded-3xl overflow-hidden flex flex-col" style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}>
+    <div className="flex-1 p-3 min-w-0 overflow-hidden">
+      <div className="h-full rounded-3xl overflow-hidden flex flex-col" style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}>
 
           {/* Header */}
           <div className="flex-shrink-0 px-4 sm:px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: '#f0f0f0' }}>
@@ -231,6 +227,5 @@ export default function DashboardPage() {
           </main>
         </div>
       </div>
-    </div>
   )
 }
