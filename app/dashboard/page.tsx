@@ -8,10 +8,12 @@ import { PnlOverviewChart } from '@/components/dashboard/pnl-overview-chart'
 import { ExpenseBreakdownDonut } from '@/components/dashboard/expense-breakdown-donut'
 import { BalanceSheetHealth } from '@/components/dashboard/balance-sheet-health'
 import { CashflowWaterfallChart } from '@/components/dashboard/cashflow-waterfall-chart'
+import { TopReceiptsBubble } from '@/components/dashboard/top-receipts-bubble'
+import { formatRupiahShort } from '@/components/dashboard/dashboard-utils'
 
 import {
   TrendingUp, DollarSign, Monitor, Activity,
-  ArrowUpRight, ArrowDownRight,
+  ArrowUpRight, ArrowDownRight, Trophy,
 } from 'lucide-react'
 
 // ============================================================
@@ -36,8 +38,8 @@ const MONTHLY_DATA = [
 const EXPENSE_BREAKDOWN = [
   { name: 'HPP', value: 200454203, color: '#daf163' },
   { name: 'Biaya Variabel', value: 124303362, color: '#bbb3f3' },
-  { name: 'Biaya Fixed', value: 29100674, color: '#f20054' },
-  { name: 'Lain-lain', value: 3593020, color: '#c0ffee' },
+  { name: 'Biaya Fixed', value: 29100674, color: '#fdba74' },
+  { name: 'Lain-lain', value: 3593020, color: '#7dd3fc' },
 ]
 
 const PNL_OVERVIEW = MONTHLY_DATA.filter(d => d.revenue !== null).map(d => ({
@@ -71,6 +73,15 @@ const CASHFLOW_DATA = [
   { month: 'Jun', operating: 87300000, investing: -2900000, funding: 0 },
 ]
 
+// Top 5 sumber penerimaan bulan berjalan — per channel penjualan
+const TOP_RECEIPTS = [
+  { name: 'Penjualan Shopee', amount: 245000000 },
+  { name: 'Penjualan Tiktok', amount: 156000000 },
+  { name: 'Penjualan Offline', amount: 98000000 },
+  { name: 'Website Sendiri', amount: 62000000 },
+  { name: 'Marketplace Lain', amount: 28000000 },
+]
+
 // ============================================================
 // DERIVED CALCULATIONS
 // ============================================================
@@ -91,16 +102,6 @@ const revenueChange = ((lastMonth.revenue! - prevMonth.revenue!) / prevMonth.rev
 const profitChange = ((lastMonth.netProfit! - prevMonth.netProfit!) / prevMonth.netProfit!) * 100
 
 const totalExpenses = EXPENSE_BREAKDOWN.reduce((sum, e) => sum + e.value, 0)
-
-// ============================================================
-// HELPERS
-// ============================================================
-
-const formatRupiahShort = (value: number) => {
-  if (value >= 1000000000) return `Rp ${(value / 1000000000).toFixed(1)}M`
-  if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(0)}jt`
-  return `Rp ${value.toLocaleString('id-ID')}`
-}
 
 // ============================================================
 // KPI CARD — Inline (responsive grid)
@@ -135,7 +136,7 @@ function KPICard({
   ]
 
   return (
-    <div className="relative overflow-hidden rounded-3xl p-5" style={{ background: bg }}>
+    <div className="ng-card-lift relative overflow-hidden rounded-3xl p-5" style={{ background: bg }}>
       {circles.map((c, i) => (
         <div key={i} className="absolute rounded-full" style={{ width: `${c.size}px`, height: `${c.size}px`, top: `${c.top}px`, right: `${c.right}px`, background: c.bg, mixBlendMode: c.blend, zIndex: 0 }} />
       ))}
@@ -200,28 +201,60 @@ export default function DashboardPage() {
           <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
             <div className="p-4 sm:p-6 w-full mx-auto space-y-5">
 
-              {/* 1. KPI Cards — responsive: 1 → 2 → 4 columns */}
+              {/* 1. KPI Cards — responsive: 1 → 2 → 4 columns, stagger entrance */}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                <KPICard label="Total Revenue (YTD)" value={formatRupiahShort(totalRevenue)} avgLabel={formatRupiahShort(Math.round(totalRevenue / monthsWithData.length))} changePercent={revenueChange} variant="lime" icon={DollarSign} />
-                <KPICard label="Net Profit (YTD)" value={formatRupiahShort(totalNetProfit)} avgLabel={formatRupiahShort(Math.round(totalNetProfit / monthsWithData.length))} changePercent={profitChange} variant="lilac" icon={TrendingUp} />
-                <KPICard label="Fixed Cost (YTD)" value={formatRupiahShort(fixedCostTotal)} avgLabel={formatRupiahShort(avgFixedCost)} variant="lilac" icon={Monitor} />
-                <KPICard label="Variable Cost (YTD)" value={formatRupiahShort(varCostTotal)} avgLabel={formatRupiahShort(avgVarCost)} variant="lime" icon={Activity} />
+                {[
+                  { label: 'Total Revenue (YTD)', value: formatRupiahShort(totalRevenue), avgLabel: formatRupiahShort(Math.round(totalRevenue / monthsWithData.length)), changePercent: revenueChange, variant: 'lime' as const, icon: DollarSign },
+                  { label: 'Net Profit (YTD)', value: formatRupiahShort(totalNetProfit), avgLabel: formatRupiahShort(Math.round(totalNetProfit / monthsWithData.length)), changePercent: profitChange, variant: 'lilac' as const, icon: TrendingUp },
+                  { label: 'Fixed Cost (YTD)', value: formatRupiahShort(fixedCostTotal), avgLabel: formatRupiahShort(avgFixedCost), variant: 'lilac' as const, icon: Monitor },
+                  { label: 'Variable Cost (YTD)', value: formatRupiahShort(varCostTotal), avgLabel: formatRupiahShort(avgVarCost), variant: 'lime' as const, icon: Activity },
+                ].map((kpi, i) => (
+                  <div key={kpi.label} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
+                    <KPICard {...kpi} />
+                  </div>
+                ))}
               </div>
 
               {/* 2. Revenue Trend */}
-              <RevenueTrendChart data={MONTHLY_DATA} totalRevenue={totalRevenue} monthsCount={monthsWithData.length} />
+              <div className="ng-rise" style={{ animationDelay: '150ms' }}>
+                <RevenueTrendChart data={MONTHLY_DATA} totalRevenue={totalRevenue} monthsCount={monthsWithData.length} />
+              </div>
 
               {/* 3. P&L Overview */}
-              <PnlOverviewChart data={PNL_OVERVIEW} />
+              <div className="ng-rise" style={{ animationDelay: '220ms' }}>
+                <PnlOverviewChart data={PNL_OVERVIEW} />
+              </div>
 
               {/* 4. Expense Breakdown + Balance Sheet — side-by-side */}
-              <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-5">
+              <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-5 ng-rise" style={{ animationDelay: '290ms' }}>
                 <ExpenseBreakdownDonut data={EXPENSE_BREAKDOWN} totalExpenses={totalExpenses} />
                 <BalanceSheetHealth balanceSheet={BALANCE_SHEET} workingCapitalMetrics={WORKING_CAPITAL_METRICS} />
               </div>
 
-              {/* 5. Cash Flow Waterfall */}
-              <CashflowWaterfallChart data={CASHFLOW_DATA} />
+              {/* 5. Top 5 Sumber Penerimaan — komposisi penerimaan, berdekatan dengan Expense Breakdown */}
+              <div
+                className="ng-card-lift rounded-3xl p-6 ng-rise"
+                style={{ animationDelay: '360ms', background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)' }}
+                  >
+                    <Trophy className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Top 5 Sumber Penerimaan</h3>
+                    <p className="text-xs" style={{ color: '#6b7280' }}>Kontribusi terbesar bulan berjalan</p>
+                  </div>
+                </div>
+                <TopReceiptsBubble items={TOP_RECEIPTS} />
+              </div>
+
+              {/* 6. Cash Flow Waterfall */}
+              <div className="ng-rise" style={{ animationDelay: '430ms' }}>
+                <CashflowWaterfallChart data={CASHFLOW_DATA} />
+              </div>
 
             </div>
           </main>
