@@ -360,6 +360,67 @@ html {
 .ng-drag-pulse { animation: ngDragPulse 1.1s ease-in-out infinite; }
 .ng-rise     { animation: ngRise .5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* Chart/section card lift — CSS-driven hover elevation untuk card putih */
+.ng-card-lift {
+  transition: box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ng-card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Tile interaktif terang (analytics) — base #fafafa, hover angkat jadi putih */
+.ng-tile {
+  background: #fafafa;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.ng-tile:hover {
+  background: white;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+  transform: translateY(-1px);
+}
+
+/* Tile interaktif di panel gelap (exec band / health summary) */
+.ng-dark-tile {
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+
+.ng-dark-tile:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ng-dim-row {
+  transition: background 0.15s ease;
+}
+
+.ng-dim-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Hover pudar ringan untuk item berlatar warna status */
+.ng-fade-hover {
+  transition: opacity 0.15s ease;
+}
+
+.ng-fade-hover:hover {
+  opacity: 0.82;
+}
+
+/* Recharts bar cell hover — pengganti onMouseEnter/Leave inline JS di SVG Cell */
+.ng-bar-cell {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.ng-bar-cell:hover {
+  opacity: 0.9;
+  stroke: white;
+  stroke-width: 2;
+}
+
 /* Upload card depth-on-hover — CSS-driven (replaces removed JS onMouseEnter/Leave).
    --hover-accent is set per-card inline so each report type lifts in its own color. */
 .upload-card-hover:hover {
@@ -374,7 +435,9 @@ html {
 
 @media (prefers-reduced-motion: reduce) {
   .upload-card-hover:hover,
-  .upload-card-hover:active {
+  .upload-card-hover:active,
+  .ng-card-lift:hover,
+  .ng-tile:hover {
     transform: none !important;
   }
   .ng-nav-capsule {

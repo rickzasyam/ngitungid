@@ -57,44 +57,12 @@ export function PnlOverviewChart({ data }: PnlOverviewChartProps) {
             <Tooltip cursor={false} trigger="hover" content={<DarkTooltip formatter={formatRupiahFull} />} />
             <Bar dataKey="pendapatan" name="Pendapatan" fill="#daf163" radius={[20, 20, 20, 20]} barSize={20}>
               {data.map((_, index) => (
-                <Cell
-                  key={`pendapatan-${index}`}
-                  className="transition-all duration-200 cursor-pointer"
-                  style={{ opacity: 1 }}
-                  onMouseEnter={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '0.9'
-                    el.style.stroke = 'white'
-                    el.style.strokeWidth = '2'
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '1'
-                    el.style.stroke = 'none'
-                    el.style.strokeWidth = '0'
-                  }}
-                />
+                <Cell key={`pendapatan-${index}`} className="ng-bar-cell" />
               ))}
             </Bar>
             <Bar dataKey="biaya" name="Biaya" fill="#bbb3f3" radius={[20, 20, 20, 20]} barSize={20}>
               {data.map((_, index) => (
-                <Cell
-                  key={`biaya-${index}`}
-                  className="transition-all duration-200 cursor-pointer"
-                  style={{ opacity: 1 }}
-                  onMouseEnter={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '0.9'
-                    el.style.stroke = 'white'
-                    el.style.strokeWidth = '2'
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '1'
-                    el.style.stroke = 'none'
-                    el.style.strokeWidth = '0'
-                  }}
-                />
+                <Cell key={`biaya-${index}`} className="ng-bar-cell" />
               ))}
             </Bar>
           </BarChart>

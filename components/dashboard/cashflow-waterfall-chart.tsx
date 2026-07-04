@@ -81,7 +81,7 @@ export function CashflowWaterfallChart({ data }: CashflowWaterfallChartProps) {
           {[
             { label: 'Operating', color: '#daf163' },
             { label: 'Investing', color: '#bbb3f3' },
-            { label: 'Funding', color: '#f20054' },
+            { label: 'Funding', color: '#7dd3fc' },
           ].map(l => (
             <div key={l.label} className="flex items-center gap-1.5">
               <span className="rounded-full" style={{ width: '8px', height: '8px', background: l.color, display: 'inline-block' }} />
@@ -99,59 +99,17 @@ export function CashflowWaterfallChart({ data }: CashflowWaterfallChartProps) {
             <Tooltip cursor={false} trigger="hover" content={<CashflowTooltip />} />
             <Bar dataKey="operating" name="Operating" fill="#daf163" radius={[8, 8, 8, 8]}>
               {data.map((_, index) => (
-                <Cell
-                  key={`operating-${index}`}
-                  onMouseEnter={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '0.9'
-                    el.style.stroke = 'white'
-                    el.style.strokeWidth = '2'
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '1'
-                    el.style.stroke = 'none'
-                    el.style.strokeWidth = '0'
-                  }}
-                />
+                <Cell key={`operating-${index}`} className="ng-bar-cell" />
               ))}
             </Bar>
             <Bar dataKey="investing" name="Investing" fill="#bbb3f3" radius={[8, 8, 8, 8]}>
               {data.map((_, index) => (
-                <Cell
-                  key={`investing-${index}`}
-                  onMouseEnter={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '0.9'
-                    el.style.stroke = 'white'
-                    el.style.strokeWidth = '2'
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '1'
-                    el.style.stroke = 'none'
-                    el.style.strokeWidth = '0'
-                  }}
-                />
+                <Cell key={`investing-${index}`} className="ng-bar-cell" />
               ))}
             </Bar>
-            <Bar dataKey="funding" name="Funding" fill="#f20054" radius={[8, 8, 8, 8]}>
+            <Bar dataKey="funding" name="Funding" fill="#7dd3fc" radius={[8, 8, 8, 8]}>
               {data.map((_, index) => (
-                <Cell
-                  key={`funding-${index}`}
-                  onMouseEnter={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '0.9'
-                    el.style.stroke = 'white'
-                    el.style.strokeWidth = '2'
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.target as SVGElement
-                    el.style.opacity = '1'
-                    el.style.stroke = 'none'
-                    el.style.strokeWidth = '0'
-                  }}
-                />
+                <Cell key={`funding-${index}`} className="ng-bar-cell" />
               ))}
             </Bar>
           </BarChart>

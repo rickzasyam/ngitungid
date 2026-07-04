@@ -58,7 +58,7 @@ export function RevenueTrendChart({ data, totalRevenue, monthsCount }: RevenueTr
 
   return (
     <div
-      className="rounded-3xl p-6"
+      className="ng-card-lift rounded-3xl p-6"
       style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
     >
       {/* Header */}

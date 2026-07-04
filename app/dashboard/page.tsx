@@ -225,30 +225,32 @@ export default function DashboardPage() {
                 <PnlOverviewChart data={PNL_OVERVIEW} />
               </div>
 
-              {/* 4. Expense Breakdown + Balance Sheet — side-by-side */}
-              <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-5 ng-rise" style={{ animationDelay: '290ms' }}>
+              {/* 4. Expense Breakdown + Top Receipts — dua kartu komposisi/ranking berbobot visual serupa, berdampingan */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 ng-rise" style={{ animationDelay: '290ms' }}>
                 <ExpenseBreakdownDonut data={EXPENSE_BREAKDOWN} totalExpenses={totalExpenses} />
-                <BalanceSheetHealth balanceSheet={BALANCE_SHEET} workingCapitalMetrics={WORKING_CAPITAL_METRICS} />
+                <div
+                  className="ng-card-lift rounded-3xl p-6"
+                  style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)' }}
+                    >
+                      <Trophy className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Top 5 Sumber Penerimaan</h3>
+                      <p className="text-xs" style={{ color: '#6b7280' }}>Kontribusi terbesar bulan berjalan</p>
+                    </div>
+                  </div>
+                  <TopReceiptsBubble items={TOP_RECEIPTS} compact />
+                </div>
               </div>
 
-              {/* 5. Top 5 Sumber Penerimaan — komposisi penerimaan, berdekatan dengan Expense Breakdown */}
-              <div
-                className="ng-card-lift rounded-3xl p-6 ng-rise"
-                style={{ animationDelay: '360ms', background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)' }}
-                  >
-                    <Trophy className="w-4 h-4" style={{ color: '#1a1a1a' }} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Top 5 Sumber Penerimaan</h3>
-                    <p className="text-xs" style={{ color: '#6b7280' }}>Kontribusi terbesar bulan berjalan</p>
-                  </div>
-                </div>
-                <TopReceiptsBubble items={TOP_RECEIPTS} />
+              {/* 5. Balance Sheet Health — kontennya padat (2 progress bar + 4 metric), diberi baris penuh sendiri */}
+              <div className="ng-rise" style={{ animationDelay: '360ms' }}>
+                <BalanceSheetHealth balanceSheet={BALANCE_SHEET} workingCapitalMetrics={WORKING_CAPITAL_METRICS} />
               </div>
 
               {/* 6. Cash Flow Waterfall */}

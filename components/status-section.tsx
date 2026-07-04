@@ -58,8 +58,8 @@ export function StatusSection() {
             <div
               className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300"
               style={{
-                background: task.completed ? '#daf163' : 'transparent',
-                border: task.completed ? 'none' : '2px solid #e5e5e5',
+                background: task.completed ? 'var(--color-accent-primary)' : 'transparent',
+                border: task.completed ? 'none' : '2px solid var(--color-border-subtle)',
               }}
             >
               {task.completed

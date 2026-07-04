@@ -1,6 +1,6 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-06-29
+**Last Updated:** 2026-07-02
 **Current Phase:** Phase 1 — Frontend Foundation  
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL · Gemini API
 
@@ -59,6 +59,7 @@
 - ✅ Confirm all button — bulk accept all lines
 - ✅ Session summary bar — matched count, unmatched count, rejected count
 - ✅ Bottom navigation — back to upload, proceed to COA mapping
+- ✅ UI Polish 2026-07-02 — hover CSS class (ganti inline JS), touch target 32px+ untuk action buttons, aria-label per baris, entrance animation kedua panel, console.log dev-only dihapus
 
 ### 1.4 COA Mapping Page (Page 3)
 - ✅ Session context bar — client, periode, report type, progress bar
@@ -68,16 +69,21 @@
 - ✅ Card state transitions — dashed amber → dashed lilac (AI suggest) → solid lime (mapped)
 - ✅ Auto-matched collapsible table — 21 items, confidence colors, read-only
 - ✅ Sticky action bar — progress message, save button (disabled until all mapped)
-- ✅ Save handler stub — console.log, TODO: POST to /api/reports/[id]/mapping
+- ✅ Save handler stub — TODO comment, POST to /api/reports/[id]/mapping (console.log dev-only dihapus)
+- ✅ UI Polish 2026-07-02 — hover CSS class (ganti inline JS), touch target 32px+, focus-visible ring, section header icon container, entrance animation, fix z-index dropdown COA tertimpa card sibling
 
 ### 1.5 Dashboard Page (Page 4)
-- ✅ KPI cards — Total Revenue, Net Profit, Gross Margin, Net Margin with radial ring visuals (Recharts RadialBarChart, Flux-inspired)
-- ✅ Revenue trend chart — Recharts AreaChart, gradient fill, custom tooltip, handles null future months
-- ✅ Net Profit Margin chart — Recharts LineChart, lilac accent, reference benchmark line
+- ✅ KPI cards — Total Revenue, Net Profit, Fixed Cost, Variable Cost dengan decorative circle overlay (lime/lilac variant)
+- ✅ Revenue trend chart — Recharts ComposedChart, capsule bar Revenue/Net Profit + garis NPM%
+- ✅ P&L Overview chart — Recharts BarChart, dark panel, Pendapatan vs Biaya per bulan
 - ✅ Expense Breakdown donut — Recharts PieChart with center total label, legend with percentages
-- ✅ Period filter dropdown — mock UI (Semua Periode, Q1, Q2, 6 Bulan Terakhir)
-- ✅ Quick insights row — MoM revenue/profit comparison with trend arrows
+- ✅ Balance Sheet Health — komposisi Aset/Pasiva (progress bar) + 4 metric modal kerja
+- ✅ Top 5 Sumber Penerimaan (packed bubble chart) — hover tooltip, legend dengan progress bar, mode compact untuk grid 2-kolom
+- ✅ Cashflow Waterfall chart — Operating/Investing/Funding per bulan
 - ✅ Client context integration — uses activeClient from global context, useRequireClient guard
+- ✅ UI Polish 2026-07-02 — migrasi warna deprecated (#f20054/#c0ffee/#02a9a3/#3b82f6 → sky/peach/mint), hover Recharts Cell via CSS class `.ng-bar-cell`, hover card via `.ng-card-lift`, stagger entrance KPI + chart
+- ✅ Fix 2026-07-02 — TopReceiptsBubble sempat ter-drop tanpa importer saat cleanup, dikembalikan + dirender
+- ✅ Fix 2026-07-02 — rebalance layout: Expense Breakdown + Top Receipts (compact) sejajar 2-kolom setara bobot visual, Balance Sheet Health baris penuh sendiri (kontennya cukup padat untuk full width)
 
 ### 1.6 Analytics Page (Page 5) — **COMPLETED 2026-06-28**
 - ✅ Period tabs — H1 / Q1 / Q2 / Custom date picker with range selector
@@ -97,6 +103,14 @@
 - ✅ Fix: Global color consistency — lime #daf163, lilac #bbb3f3, bg #222124 via CSS variables
 - ✅ UI Polish: Semua emoji diganti Lucide icons, extended color palette (sky #7dd3fc, peach #fdba74, mint #6ee7b7) ditambahkan untuk states tambahan
 - ✅ UI Polish: Premium card design — gradient strips, section header icons, stagger animations, hover lifts, cubic-bezier transitions across all pages
+- ✅ UI Polish 2026-07-02 — sisa inline hover JS (RatioCard, MetricDrawer, SectionCard) dipindah ke CSS class (`.ng-tile`, `.ng-dark-tile`, `.ng-dim-row`, `.ng-fade-hover`); semua elemen klik jadi keyboard-accessible (role="button", tabIndex, onKeyDown, aria-label); tone `info` migrasi dari biru (#3b82f6) ke sky (#7dd3fc); side-stripe border-left dihapus dari RatioCard (diganti leading tone dot)
+
+### 1.7 Settings Page (Page 6) — **COMPLETED 2026-07-02**
+- ✅ Kelola Master COA — scoped ke `activeClient` (bukan list semua klien), status badge, upload/replace Excel (mock), preview struktur tabel (Kode/Nama/Posisi/Kelompok/Sub Kelompok/Class CF), empty state untuk klien tanpa Master COA
+- ✅ Analytics Metrics Visibility — toggle per metrik per kategori (Likuiditas/Profitabilitas/Leverage/Efisiensi), state keyed per client id (independen antar klien), master toggle per kategori, counter metrik aktif
+- ✅ Layout left-nav 230px + content area — General (platform-level, tidak scoped), Master COA, Analytics Display, Account (Soon), Notifications (Soon)
+- ✅ Chip klien aktif di atas tab scoped sebagai pengingat konteks; empty state inline (bukan `useRequireClient`) supaya tab General tetap bisa diakses tanpa klien aktif
+- ✅ Tab General — Language, Currency Format, Timezone (mock, segmented control)
 
 ---
 
@@ -196,17 +210,28 @@
 | 2026-06-29 | DateRangePicker analytics menggunakan components/date-range-picker.tsx | DRY principle, konsistensi dark theme |
 | 2026-06-29 | Semua emoji UI diganti Lucide icons — konsisten cross-platform, scalable, colorable | Emoji rendering berbeda di tiap OS/browser |
 | 2026-06-29 | Extended palette ditambahkan: sky #7dd3fc (info), peach #fdba74 (warning), mint #6ee7b7 (success soft) | Harmonis secara color theory dengan lime/lilac/pink utama |
+| 2026-07-02 | Sidebar sliding nav capsule — satu elemen lime yang bergeser (translateY+height terukur) ke item aktif, bukan background per-item | Terasa premium; butuh Sidebar dipindah ke root layout supaya persist antar navigasi (sebelumnya remount per halaman bikin animasi "loncat" bukan geser) |
+| 2026-07-02 | activeItem Sidebar diturunkan dari `usePathname()` + peta rute (bukan prop manual per halaman) | Prop manual rawan typo/desync; satu sumber kebenaran dari URL |
+| 2026-07-02 | Settings page discoped per `activeClient` (Master COA & Analytics Metrics), bukan list semua klien | Preferensi ini memang per-klien secara bisnis — konsisten dengan pattern Upload/Dashboard/Analytics yang sudah ada |
+| 2026-07-02 | Settings edge case: empty state inline, bukan `useRequireClient` | Tab General bersifat platform-level, harus tetap bisa diakses walau belum ada klien aktif; auto-redirect akan memblokir itu |
+| 2026-07-02 | Hover state di seluruh app dipindah dari `onMouseEnter`/`onMouseLeave` inline JS ke CSS class (`.ng-card-lift`, `.ng-tile`, `.ng-bar-cell`, dll) | Inline JS hover tidak jalan saat keyboard focus; CSS class + `focus-visible` konsisten untuk mouse & keyboard |
+| 2026-07-02 | Warna deprecated (#f20054, #c0ffee, #02a9a3, #3b82f6, #a78bfa) dituntaskan migrasinya ke extended palette (sky/peach/mint) di seluruh dashboard & analytics | Konsistensi penuh dengan design system yang di-lock; beberapa titik lolos di polish sesi sebelumnya |
+| 2026-07-02 | Dead code dihapus: kpi-card.tsx lama, quick-insights.tsx, upload-form.tsx (via git rm, histori tetap ada) | Sudah tidak ada importer setelah beberapa kali refactor; tapi lihat catatan di bawah soal top-receipts-bubble.tsx |
+| 2026-07-02 | top-receipts-bubble.tsx sempat ikut terhapus di cleanup yang sama, lalu di-restore + dirender kembali di Dashboard | Komponennya lengkap dan tidak rusak — cuma kehilangan pemanggil (`<TopReceiptsBubble>`) di salah satu sesi polish sebelumnya; pelajaran: verifikasi "tidak ada importer" harus dicek ulang tepat sebelum hapus, bukan cuma sekali di awal sesi |
+| 2026-07-02 | Dashboard: Top 5 Sumber Penerimaan dipasang `compact` sejajar Expense Breakdown Donut (2 kolom setara), bukan full-width sendirian | Mode non-compact di card full-width menyisakan banyak ruang kosong (canvas fixed 300px + legend flex-1 meregang); dipasangkan dengan card berbobot visual serupa jauh lebih proporsional |
 
 ---
 
 ## Current Status
-**Phase 1 Frontend: 95% Complete**
+**Phase 1 Frontend: 98% Complete**
 
-✅ All 5 pages implemented (Upload, Extraction Review, COA Mapping, Dashboard, Analytics)
+✅ All 6 pages implemented (Upload, Extraction Review, COA Mapping, Dashboard, Analytics, Settings)
+✅ UI/UX polish pass menyeluruh selesai — 3-layer depth, hover CSS-based, keyboard accessibility, design system konsisten di semua halaman
 
 ### Remaining Phase 1 Work
 - ⏳ Real file upload flow (connect stubs to API routes) — `POST /api/upload/{csv|excel|pdf}`
 - ⏳ API integration for financial data (replace mock data) — `GET /api/analytics/{clientId}/monthly`, `/balance-sheet`, `/coa-breakdown`
+- ⏳ Settings — Master COA upload perlu backend nyata (`POST /api/clients/[id]/coa`); Analytics Metrics Visibility perlu persist ke database (saat ini useState per sesi)
 
 ### Next Sprint
 Begin Phase 2 — Backend & Database setup (PostgreSQL, authentication, API endpoints)

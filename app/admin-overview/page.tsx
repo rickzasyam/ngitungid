@@ -68,18 +68,13 @@ export default function AdminOverviewPage() {
                         key={client.id}
                         type="button"
                         onClick={() => setActiveClient(client)}
-                        className="text-left rounded-3xl overflow-hidden animate-slide-up"
+                        className="text-left rounded-3xl overflow-hidden animate-slide-up ng-card-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                         style={{
                           background: 'white',
                           border: isOverdue ? '1.5px solid #fde68a' : '1px solid #f0f0f0',
                           boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                           animationDelay: `${index * 75}ms`,
-                          opacity: 0,
-                          animationFillMode: 'forwards',
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.10)' }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)' }}
                       >
                         {/* Left accent strip — lime jika up-to-date, peach/amber jika overdue */}
                         <div style={{

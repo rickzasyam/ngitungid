@@ -285,13 +285,11 @@ export function MetricDrawer({
                 <button
                   key={key}
                   onClick={() => onNavigate('dim:' + key)}
+                  className="ng-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                   style={{
                     padding: '12px 14px', borderRadius: 12, border: '1px solid #ececec',
-                    background: '#fafafa', cursor: 'pointer', textAlign: 'left', width: '100%',
-                    transition: 'all 0.15s',
+                    cursor: 'pointer', textAlign: 'left', width: '100%',
                   }}
-                  onMouseEnter={e => { const el = e.currentTarget; el.style.background = 'white'; el.style.boxShadow = '0 2px 10px rgba(0,0,0,0.06)' }}
-                  onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fafafa'; el.style.boxShadow = 'none' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -346,14 +344,12 @@ export function MetricDrawer({
                 <button
                   key={mk}
                   onClick={() => onNavigate(mk)}
+                  className="ng-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                   style={{
                     padding: '10px 12px', borderRadius: 10, border: '1px solid #ececec',
-                    background: '#fafafa', cursor: 'pointer', textAlign: 'left', width: '100%',
+                    cursor: 'pointer', textAlign: 'left', width: '100%',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    transition: 'all 0.15s',
                   }}
-                  onMouseEnter={e => { const el = e.currentTarget; el.style.background = 'white'; el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)' }}
-                  onMouseLeave={e => { const el = e.currentTarget; el.style.background = '#fafafa'; el.style.boxShadow = 'none' }}
                 >
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#1f2430', marginBottom: 2 }}>{m.label}</div>

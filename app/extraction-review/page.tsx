@@ -136,7 +136,7 @@ export default function ExtractionReviewPage() {
     setLines(prev => prev.map(l =>
       l.status !== 'rejected' ? { ...l, status: 'matched' } : l
     ))
-    console.log('[Review] All lines confirmed — TODO: POST to /api/reports/confirm')
+    // TODO: POST to /api/reports/confirm
   }
 
   const tabs = [
@@ -159,7 +159,7 @@ export default function ExtractionReviewPage() {
 
             {/* LEFT PANEL — PDF Preview */}
             <div
-              className="w-full md:w-2/5 min-w-[280px] h-[300px] md:h-auto flex-shrink-0 flex flex-col border-r overflow-hidden"
+              className="ng-rise w-full md:w-2/5 min-w-[280px] h-[300px] md:h-auto flex-shrink-0 flex flex-col border-r overflow-hidden"
               style={{ borderColor: '#e5e5e5', background: 'white' }}
             >
               {/* PDF panel header */}
@@ -294,7 +294,7 @@ export default function ExtractionReviewPage() {
             </div>
 
             {/* RIGHT PANEL — Extracted Data */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="ng-rise flex-1 flex flex-col overflow-hidden" style={{ animationDelay: '100ms' }}>
 
               {/* Right panel header */}
               <div
@@ -312,13 +312,11 @@ export default function ExtractionReviewPage() {
                   </div>
                   <button
                     onClick={handleConfirmAll}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200"
+                    className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200 hover:shadow-[0_4px_12px_rgba(218,241,99,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                     style={{
                       background: 'var(--color-accent-primary)',
                       color: 'var(--color-bg-main)',
                     }}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(218,241,99,0.4)'}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
                   >
                     <Check className="w-3.5 h-3.5" />
                     Konfirmasi Semua
@@ -416,26 +414,17 @@ export default function ExtractionReviewPage() {
                   return (
                     <div
                       key={line.id}
-                      className="grid px-4 py-2.5 transition-colors"
+                      className={`grid px-4 py-2.5 transition-colors ${
+                        isRejected
+                          ? 'bg-[#fafafa]'
+                          : line.status === 'unmatched'
+                            ? 'bg-[#fffbeb] hover:bg-[#f9fff3]'
+                            : `${idx % 2 === 0 ? 'bg-white' : 'bg-[#fdfdfd]'} hover:bg-[#f9fff3]`
+                      }`}
                       style={{
                         gridTemplateColumns: '1fr 1fr 100px 80px 80px',
                         borderBottom: '1px solid #f5f5f5',
-                        background: isRejected
-                          ? '#fafafa'
-                          : line.status === 'unmatched'
-                            ? '#fffbeb'
-                            : idx % 2 === 0 ? 'white' : '#fdfdfd',
                         opacity: isRejected ? 0.45 : 1,
-                      }}
-                      onMouseEnter={e => {
-                        if (!isRejected) e.currentTarget.style.background = '#f9fff3'
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = isRejected
-                          ? '#fafafa'
-                          : line.status === 'unmatched'
-                            ? '#fffbeb'
-                            : idx % 2 === 0 ? 'white' : '#fdfdfd'
                       }}
                     >
                       {/* Col 1: Raw name */}
@@ -549,22 +538,18 @@ export default function ExtractionReviewPage() {
                             <button
                               onClick={() => handleEdit(line)}
                               title="Edit COA"
-                              className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors"
-                              style={{ background: '#f0f0f0' }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#e5e5e5'}
-                              onMouseLeave={e => e.currentTarget.style.background = '#f0f0f0'}
+                              aria-label={`Edit COA untuk ${line.rawName}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                             >
-                              <Edit3 className="w-2.5 h-2.5" style={{ color: '#6b7280' }} />
+                              <Edit3 className="w-3 h-3" style={{ color: '#6b7280' }} />
                             </button>
                             <button
                               onClick={() => handleReject(line.id)}
                               title="Tolak baris ini"
-                              className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors"
-                              style={{ background: '#fef2f2' }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                              onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                              aria-label={`Tolak baris ${line.rawName}`}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors bg-[#fef2f2] hover:bg-[#fee2e2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                             >
-                              <X className="w-2.5 h-2.5" style={{ color: '#dc2626' }} />
+                              <X className="w-3 h-3" style={{ color: '#dc2626' }} />
                             </button>
                           </>
                         )}
@@ -572,12 +557,10 @@ export default function ExtractionReviewPage() {
                           <button
                             onClick={() => handleReset(line.id)}
                             title="Batalkan penolakan"
-                            className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors"
-                            style={{ background: '#f0f0f0' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#e5e5e5'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#f0f0f0'}
+                            aria-label={`Batalkan penolakan ${line.rawName}`}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                           >
-                            <RotateCcw className="w-2.5 h-2.5" style={{ color: '#6b7280' }} />
+                            <RotateCcw className="w-3 h-3" style={{ color: '#6b7280' }} />
                           </button>
                         )}
                       </div>
@@ -596,9 +579,8 @@ export default function ExtractionReviewPage() {
                 </p>
                 <div className="flex items-center gap-3">
                   <button
-                    className="px-4 py-2 rounded-full text-xs font-medium transition-colors"
+                    className="px-4 py-2 rounded-full text-xs font-medium transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                     style={{
-                      background: '#f0f0f0',
                       color: '#6b7280',
                       border: '1px solid #e5e5e5',
                     }}
@@ -608,10 +590,8 @@ export default function ExtractionReviewPage() {
                   </button>
                   <button
                     onClick={handleConfirmAll}
-                    className="flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold transition-all"
+                    className="flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold transition-all hover:shadow-[0_4px_12px_rgba(218,241,99,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                     style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-main)' }}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(218,241,99,0.4)'}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
                   >
                     Lanjut ke COA Mapping →
                   </button>

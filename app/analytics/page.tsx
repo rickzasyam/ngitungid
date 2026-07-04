@@ -131,7 +131,7 @@ interface RowDef {
   getVal: (c: Omit<ColData, 'label'>) => number
 }
 const ROW_DEFS: RowDef[] = [
-  { key: 'rev',  label: 'Pendapatan',        accent: '#3b82f6', bold: true, expandable: true, getVal: c => c.rev,
+  { key: 'rev',  label: 'Pendapatan',        bold: true, expandable: true, getVal: c => c.rev,
     sub: [{ label: 'Produk', portion: 0.62 }, { label: 'Channel Online', portion: 0.26 }, { label: 'Customer B2B', portion: 0.12 }] },
   { key: 'hpp',  label: 'HPP',               muted: true, neg: true, expandable: true, getVal: c => c.hpp,
     sub: [{ label: 'Bahan Baku', portion: 0.58 }, { label: 'Tenaga Kerja Langsung', portion: 0.27 }, { label: 'Overhead Produksi', portion: 0.15 }] },
@@ -147,17 +147,14 @@ const ROW_DEFS: RowDef[] = [
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="animate-slide-up"
+      className="animate-slide-up ng-card-lift"
       style={{
         background: 'white',
         borderRadius: 18,
         padding: '18px 20px',
         border: '1px solid #ececec',
         boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
-        transition: 'box-shadow 0.2s ease',
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.03)' }}
     >
       {children}
     </div>
@@ -438,10 +435,13 @@ export default function AnalyticsPage() {
                     ].map(item => (
                       <div
                         key={item.key}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${item.label}: ${item.value}. Buka detail.`}
                         onClick={() => setDrawer(item.key)}
-                        style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: 11, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.15s' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.09)' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.05)' }}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrawer(item.key) } }}
+                        className="ng-dark-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                        style={{ flex: 1, borderRadius: 11, padding: '10px 12px', cursor: 'pointer' }}
                       >
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>{item.label}</div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{item.value}</div>
@@ -477,10 +477,13 @@ export default function AnalyticsPage() {
                         return (
                           <div
                             key={i}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Alert: ${alert.title}. Buka detail metrik.`}
                             onClick={() => setDrawer(alert.metric)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrawer(alert.metric) } }}
+                            className="ng-fade-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                             style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: s.bg, borderRadius: 9, padding: '8px 10px', cursor: 'pointer' }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.opacity = '0.82' }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.opacity = '1' }}
                           >
                             <div style={{ width: 7, height: 7, borderRadius: '50%', background: s.dot, flexShrink: 0, marginTop: 4 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -517,10 +520,13 @@ export default function AnalyticsPage() {
                       return (
                         <div
                           key={card.key}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${card.label}: ${card.value}. Buka detail.`}
                           onClick={() => setDrawer(card.key)}
-                          style={{ padding: 14, borderRadius: 13, background: '#fafafa', border: '1px solid #efefef', cursor: 'pointer', transition: 'all 0.15s' }}
-                          onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.background = 'white'; el.style.boxShadow = '0 4px 14px rgba(0,0,0,0.07)'; el.style.transform = 'translateY(-1px)' }}
-                          onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.background = '#fafafa'; el.style.boxShadow = 'none'; el.style.transform = 'none' }}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrawer(card.key) } }}
+                          className="ng-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                          style={{ padding: 14, borderRadius: 13, border: '1px solid #efefef', cursor: 'pointer' }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                             <span style={{ fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>{card.label}</span>
@@ -563,10 +569,13 @@ export default function AnalyticsPage() {
                     return (
                       <div
                         key={dim.key}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${dim.label}: skor ${dim.score}, ${dim.status}. Buka detail dimensi.`}
                         onClick={() => setDrawer('dim:' + dim.key)}
-                        style={{ cursor: 'pointer', borderRadius: 10, padding: '10px 12px', transition: 'background 0.15s' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrawer('dim:' + dim.key) } }}
+                        className="ng-dim-row focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                        style={{ cursor: 'pointer', borderRadius: 10, padding: '10px 12px' }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -697,7 +706,7 @@ export default function AnalyticsPage() {
                           const bl = row.accent ? `3px solid ${row.accent}` : '3px solid transparent'
                           const delta = getDelta(row)
                           const showTrend = row.key === 'rev' || row.key === 'np'
-                          const trendColor = row.key === 'rev' ? '#3b82f6' : '#16a34a'
+                          const trendColor = row.key === 'rev' ? '#0284c7' : '#16a34a'
                           const trendArr = row.key === 'rev' ? pRevArr : pNPArr
                           const totalVal = row.getVal(pnlTotal)
                           return (

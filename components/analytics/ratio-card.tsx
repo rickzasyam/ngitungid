@@ -9,7 +9,7 @@ export const TONES: Record<ToneKey, { fg: string; bg: string; dot: string; bar: 
   perhatian: { fg: '#b45309', bg: '#fef3c7', dot: '#d97706', bar: '#f59e0b' },
   risiko:    { fg: '#b91c1c', bg: '#fee2e2', dot: '#dc2626', bar: '#ef4444' },
   netral:    { fg: '#475569', bg: '#eef2f7', dot: '#64748b', bar: '#64748b' },
-  info:      { fg: '#1d4ed8', bg: '#dbeafe', dot: '#2563eb', bar: '#3b82f6' },
+  info:      { fg: '#0369a1', bg: '#f0f9ff', dot: '#0284c7', bar: '#7dd3fc' },
 }
 
 export function Pill({ tone, label }: { tone: ToneKey; label: string }) {
@@ -41,27 +41,28 @@ export function RatioCard({
   const t = TONES[tone]
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${label}: ${value}, status ${status}. Buka detail analisis.`}
       onClick={onClick}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      className="ng-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
       style={{
-        padding: 15, borderRadius: 13, background: '#fafafa',
-        border: '1px solid #efefef', borderLeft: `3px solid ${t.bar}`,
-        cursor: 'pointer', transition: 'all 0.15s',
-      }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLDivElement
-        el.style.background = 'white'
-        el.style.boxShadow = '0 4px 14px rgba(0,0,0,0.07)'
-        el.style.transform = 'translateY(-1px)'
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLDivElement
-        el.style.background = '#fafafa'
-        el.style.boxShadow = 'none'
-        el.style.transform = 'none'
+        padding: 15, borderRadius: 13,
+        border: '1px solid #efefef',
+        cursor: 'pointer',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>{label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: t.dot, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+        </div>
         <Pill tone={tone} label={status} />
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 8 }}>

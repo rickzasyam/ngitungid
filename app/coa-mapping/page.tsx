@@ -13,6 +13,7 @@ import {
   Search,
   CheckCircle2,
   ArrowLeft,
+  ArrowRightLeft,
 } from 'lucide-react'
 
 // ============================================================
@@ -361,19 +362,10 @@ function COADropdown({
                       key={opt.kode}
                       type="button"
                       onClick={() => onSelect(opt)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors"
-                      style={{
-                        background: value?.kode === opt.kode ? '#f9fff3' : 'transparent',
-                        borderBottom: '1px solid #f8f8f8',
-                      }}
-                      onMouseEnter={e => {
-                        if (value?.kode !== opt.kode)
-                          e.currentTarget.style.background = '#f8f8f8'
-                      }}
-                      onMouseLeave={e => {
-                        if (value?.kode !== opt.kode)
-                          e.currentTarget.style.background = 'transparent'
-                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-inset ${
+                        value?.kode === opt.kode ? 'bg-[#f9fff3]' : 'hover:bg-[#f8f8f8]'
+                      }`}
+                      style={{ borderBottom: '1px solid #f8f8f8' }}
                     >
                       <span
                         className="text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded"
@@ -530,10 +522,8 @@ function MappingCard({
               <button
                 type="button"
                 onClick={onDropdownToggle}
-                className="text-xs px-2 py-1 rounded-lg transition-colors flex-shrink-0"
-                style={{ color: '#6b7280', background: '#f0f0f0' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#e5e5e5'}
-                onMouseLeave={e => e.currentTarget.style.background = '#f0f0f0'}
+                className="text-xs px-3 py-2 rounded-lg transition-colors flex-shrink-0 bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ color: '#6b7280' }}
               >
                 Ubah
               </button>
@@ -576,10 +566,7 @@ function AutoMatchedTable({
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 sm:px-6 py-4 transition-colors"
-        style={{ background: 'white' }}
-        onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
-        onMouseLeave={e => e.currentTarget.style.background = 'white'}
+        className="w-full flex items-center justify-between px-4 sm:px-6 py-4 transition-colors bg-white hover:bg-[#fafafa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-inset"
       >
         <div className="flex items-center gap-3">
           <div
@@ -707,7 +694,6 @@ export default function COAMappingPage() {
   }
 
   const handleSave = () => {
-    console.log('[COA Mapping] Saving mappings:', mappings)
     // TODO: POST to /api/reports/[id]/mapping
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -758,20 +744,28 @@ export default function COAMappingPage() {
 
               {/* Unmapped section */}
               <div
-                className="rounded-3xl p-4 sm:p-6"
+                className="ng-rise rounded-3xl p-4 sm:p-6"
                 style={{
                   background: 'white',
                   boxShadow: '0 4px 20px rgb(0,0,0,0.05)',
                   border: '1px solid #f0f0f0',
                 }}
               >
-                <div className="mb-5">
-                  <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
-                    Akun Belum Dipetakan
-                  </h2>
-                  <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
-                    Petakan setiap akun ke Master COA {client?.name ?? SESSION.clientName}
-                  </p>
+                <div className="flex items-center gap-3 mb-5">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
+                  >
+                    <ArrowRightLeft className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
+                      Akun Belum Dipetakan
+                    </h2>
+                    <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+                      Petakan setiap akun ke Master COA {client?.name ?? SESSION.clientName}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -779,8 +773,14 @@ export default function COAMappingPage() {
                     <div
                       key={item.id}
                       data-dropdown
-                      className="animate-slide-up"
-                      style={{ animationDelay: `${index * 80}ms`, opacity: 0, animationFillMode: 'forwards' }}
+                      className="animate-slide-up relative"
+                      style={{
+                        animationDelay: `${index * 80}ms`,
+                        // animate-slide-up (fill-mode both) meninggalkan transform yang membuat
+                        // stacking context per-card — card dengan dropdown terbuka harus di atas
+                        // sibling berikutnya supaya panel dropdown tidak tertimpa
+                        zIndex: openDropdownId === item.id ? 30 : 0,
+                      }}
                     >
                       <MappingCard
                         item={item}
@@ -797,10 +797,12 @@ export default function COAMappingPage() {
               </div>
 
               {/* Auto-matched section */}
-              <AutoMatchedTable
-                isExpanded={autoMatchedExpanded}
-                onToggle={() => setAutoMatchedExpanded(p => !p)}
-              />
+              <div className="ng-rise" style={{ animationDelay: '120ms' }}>
+                <AutoMatchedTable
+                  isExpanded={autoMatchedExpanded}
+                  onToggle={() => setAutoMatchedExpanded(p => !p)}
+                />
+              </div>
 
             </div>
           </main>
@@ -845,14 +847,11 @@ export default function COAMappingPage() {
               <button
                 type="button"
                 onClick={() => window.history.back()}
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                 style={{
                   color: '#6b7280',
-                  background: '#f0f0f0',
                   border: '1px solid #e5e5e5',
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#e5e5e5'}
-                onMouseLeave={e => e.currentTarget.style.background = '#f0f0f0'}
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 Kembali ke Review
@@ -862,16 +861,11 @@ export default function COAMappingPage() {
                 type="button"
                 onClick={handleSave}
                 disabled={!isAllMapped}
-                className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all"
+                className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all enabled:hover:shadow-[0_4px_16px_rgba(218,241,99,0.4)] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                 style={{
                   background: isAllMapped ? 'var(--color-accent-primary)' : '#e5e5e5',
                   color: isAllMapped ? 'var(--color-bg-main)' : '#9ca3af',
-                  cursor: isAllMapped ? 'pointer' : 'not-allowed',
                 }}
-                onMouseEnter={e => {
-                  if (isAllMapped) e.currentTarget.style.boxShadow = '0 4px 16px rgba(218,241,99,0.4)'
-                }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
               >
                 {saved ? (
                   <>

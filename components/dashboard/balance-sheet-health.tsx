@@ -26,7 +26,7 @@ interface BalanceSheetHealthProps {
 export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: BalanceSheetHealthProps) {
   return (
     <div
-      className="rounded-3xl p-6"
+      className="ng-card-lift rounded-3xl p-6"
       style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
     >
       <div className="flex items-center gap-3 mb-5">
@@ -71,7 +71,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               <div
                 style={{
                   flex: balanceSheet.aktivaLainnya,
-                  background: '#3b82f6',
+                  background: '#7dd3fc',
                   borderRadius: '0 999px 999px 0',
                 }}
                 title={`Aktiva Lainnya: ${formatRupiahShort(balanceSheet.aktivaLainnya)}`}
@@ -81,7 +81,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               {[
                 { label: 'Aktiva Lancar', value: balanceSheet.aktivaLancar, color: '#daf163' },
                 { label: 'Aktiva Tetap', value: balanceSheet.aktivaTetap, color: '#bbb3f3' },
-                { label: 'Lainnya', value: balanceSheet.aktivaLainnya, color: '#3b82f6' },
+                { label: 'Lainnya', value: balanceSheet.aktivaLainnya, color: '#7dd3fc' },
               ].map(item => (
                 <div key={item.label} className="flex items-center gap-1.5">
                   <span className="rounded-full flex-shrink-0" style={{ width: '7px', height: '7px', background: item.color }} />
@@ -104,7 +104,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               <div
                 style={{
                   flex: balanceSheet.totalHutang,
-                  background: '#c0ffee',
+                  background: '#fdba74',
                   borderRadius: '999px 0 0 999px',
                 }}
                 title={`Total Hutang: ${formatRupiahShort(balanceSheet.totalHutang)}`}
@@ -112,7 +112,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               <div
                 style={{
                   flex: balanceSheet.totalModal,
-                  background: '#02a9a3',
+                  background: '#6ee7b7',
                   borderRadius: '0 999px 999px 0',
                 }}
                 title={`Total Modal: ${formatRupiahShort(balanceSheet.totalModal)}`}
@@ -120,8 +120,8 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
             </div>
             <div className="flex items-center gap-4 mt-2 flex-wrap">
               {[
-                { label: 'Hutang', value: balanceSheet.totalHutang, color: '#c0ffee' },
-                { label: 'Modal', value: balanceSheet.totalModal, color: '#02a9a3' },
+                { label: 'Hutang', value: balanceSheet.totalHutang, color: '#fdba74' },
+                { label: 'Modal', value: balanceSheet.totalModal, color: '#6ee7b7' },
               ].map(item => (
                 <div key={item.label} className="flex items-center gap-1.5">
                   <span className="rounded-full flex-shrink-0" style={{ width: '7px', height: '7px', background: item.color }} />

@@ -21,7 +21,7 @@ interface ExpenseBreakdownDonutProps {
 export function ExpenseBreakdownDonut({ data, totalExpenses }: ExpenseBreakdownDonutProps) {
   return (
     <div
-      className="rounded-3xl p-6"
+      className="ng-card-lift rounded-3xl p-6"
       style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
     >
       <div className="flex items-center gap-3 mb-4">

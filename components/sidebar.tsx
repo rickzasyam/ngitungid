@@ -133,10 +133,10 @@ export function Sidebar() {
       {/* Mobile hamburger — only visible on small screens */}
       <button
         className="md:hidden fixed z-40 flex items-center justify-center rounded-xl"
-        style={{ top: '12px', left: '12px', width: '36px', height: '36px', background: '#222124' }}
+        style={{ top: '12px', left: '12px', width: '36px', height: '36px', background: 'var(--color-bg-sidebar)' }}
         onClick={() => setIsMobileOpen(true)}
       >
-        <Menu className="w-4 h-4" style={{ color: '#daf163' }} />
+        <Menu className="w-4 h-4" style={{ color: 'var(--color-accent-primary)' }} />
       </button>
 
       {/* Mobile backdrop */}
