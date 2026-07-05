@@ -1,0 +1,153 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
+
+## Project Overview
+
+NgitungID BI is a multi-client Financial Business Intelligence SaaS for Indonesian SMEs
+(UMKM). Ricko operates as admin, managing an accounting team that prepares client financial
+reports and uploads them to the platform. AI extraction and COA mapping turn raw
+uploads into automated financial dashboards for clients.
+
+**Always read `ROADMAP.md` at the project root first**, before starting any task. It is the
+source of truth for what's done, what's pending, and what decisions have already been made.
+Update it after completing any task.
+
+## Business Flow (read this to understand why each page exists)
+
+```
+1. Client Setup
+   Admin creates a client, then uploads that client's Master COA (Excel).
+   Master COA defines account classification: name, Posisi (Debit/Kredit),
+   Kelompok (Laba Rugi / Neraca), Sub Kelompok, Kode, Class CF (Operating/
+   Investing/Funding). Example: "Biaya Gaji Karyawan" -> Kelompok: Laba Rugi,
+   Class CF: Operating. This is the foundation every later mapping step depends on.
+
+2. Upload (/upload)
+   Admin selects a client + period, then uploads 3 separate files:
+   Laba Rugi (P&L), Neraca (Balance Sheet), Arus Kas (Cash Flow).
+   Formats: PDF, CSV, or Excel, max 25MB each. Kept separate intentionally —
+   improves AI extraction accuracy per report type.
+
+3. Extraction (AI processing — not yet built, currently mocked)
+   PDF -> Gemini API OCR -> table detection -> parsing -> per-row confidence score.
+   CSV/Excel -> parsed directly (MVP priority, higher accuracy).
+
+4. Extraction Review (/extraction-review)
+   Split-screen: original PDF (left) vs extracted table (right). Admin edits
+   low-confidence rows, rejects wrong ones, confirms the rest.
+
+5. COA Mapping (/coa-mapping)
+   Each extracted line item is mapped to the client's Master COA. Card states:
+   amber (unmapped) -> lilac (AI suggested) -> lime (mapped). AI suggestions
+   improve over time from `coa_mapping_history`.
+
+6. Output — auto-generated after mapping is complete
+   Dashboard (/dashboard): KPI cards, revenue trend, P&L overview, expense
+   breakdown, balance sheet health, cashflow waterfall, quick insights.
+   Analytics (/analytics): Likuiditas / Profitabilitas / Leverage / Efisiensi
+   ratios with benchmarks, 0-100 health score, period comparisons, alerts.
+
+Settings (/settings): scoped to whichever client is active in the sidebar
+client switcher — Master COA management and Analytics metric visibility are
+per-client, NOT global. General platform settings (language, currency format,
+timezone) are the exception — those are platform-wide, not per-client.
+```
+
+## Roles (RBAC)
+
+- **Admin**: full access — Upload, Extraction Review, COA Mapping, Settings, all clients.
+- **User (client)**: read-only — Dashboard + Analytics only. Does not see the extraction/
+  mapping process. Not yet implemented (Phase 2).
+
+## Current Status
+
+Phase 1 (Frontend) is nearly complete, built entirely on mock data — no backend exists yet.
+Phase 2 (PostgreSQL, Prisma/Drizzle, NextAuth RBAC, API routes) has not started. Do not wire
+real data or build backend features unless explicitly asked — check `ROADMAP.md` for the
+current phase before assuming scope.
+
+## Tech Stack
+
+Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui, Recharts, PostgreSQL (Phase 2,
+not yet set up).
+
+Tailwind v4 specifics: configuration lives in `globals.css` via `@theme inline {}`. There is
+no `tailwind.config.ts` — do not create one.
+
+## Design System (locked — do not deviate)
+
+If you find references to other color values anywhere in this codebase, old prompts, old
+personas, or design docs (e.g. `#c0ff33`, `#1a1a1a`, `#a78bfa`), those are deprecated. Use
+only the values below as source of truth.
+
+```
+Primary Lime:     #daf163   (text on top: #1a1a1a black)
+Secondary Lilac:  #bbb3f3   (text on top: #1a1a1a black)
+Critical Pink:    #f472b6   (text on top: white)
+Canvas bg:        #222124   (Soft Black)
+Extended palette: sky #7dd3fc, peach #fdba74, mint #6ee7b7
+```
+
+### 3-layer depth pattern (apply on every page)
+
+```
+Layer 1 — Canvas:  bg-[#222124]        full-screen background
+Layer 2 — Float:   white, rounded-3xl  floating card/shell
+Layer 3 — Inset:   #f8f8f8             scrollable content area
+```
+
+Reference implementations that are already correct: `app/dashboard/page.tsx` and
+`app/upload/page.tsx`. Match this pattern exactly on any page that doesn't have it yet.
+
+### Shape & shadow
+
+- Main cards, modals: `rounded-3xl`
+- Buttons, badges, menu items: `rounded-full` or `rounded-2xl`
+- Primary floating card shadow: `0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)`
+- Secondary card shadow (hover-lift): `0 2px 8px rgba(0,0,0,0.05)` -> hover
+  `0 6px 20px rgba(0,0,0,0.10)`
+
+## Known Gotchas (do not repeat these mistakes)
+
+1. **Tailwind v4 strips `@keyframes` declared inside `@layer utilities`.** Always put
+   keyframes (`fadeIn`, `slideUp`, `slideInRight`, `scaleIn`, etc.) at the top level of
+   `globals.css`, outside any `@layer` block. This previously caused entire card grids to
+   render invisible because `opacity: 0` never animated back to 1. Verify after build:
+   ```bash
+   npm run build
+   grep -c "slideUp" .next/static/css/*.css   # must be > 0
+   ```
+
+2. Use `animation-fill-mode: both`, not just `forwards`, so content doesn't disappear in
+   hidden tabs or headless rendering.
+
+3. Accessibility is required, not optional: `role="button"`, `tabIndex`, `aria-label`,
+   `onKeyDown` on any non-native interactive element. `focus-visible:ring-2` for keyboard
+   navigation. Add `@media (prefers-reduced-motion: reduce)` fallback for all animations.
+
+4. Do not implement hover state with inline `onMouseEnter`/`onMouseLeave` JS — it breaks for
+   keyboard focus. Use CSS class-based hover (`.card-hover:hover { ... }` in `globals.css`),
+   with a CSS variable per instance if the hover color needs to vary per card.
+
+5. Minimum touch target size is 32-36px, not 20-28px.
+
+6. Hardcoded hex colors should be CSS variables in `globals.css` — one source of truth, not
+   scattered across components.
+
+## Working Conventions
+
+- Read `ROADMAP.md` before starting, update it after finishing.
+- Don't remove or refactor existing components outside the current task's scope without
+  confirming first — components can be disconnected from a page without being deleted (this
+  has happened before: a chart component was fully intact but stopped being rendered during
+  a polish pass).
+- When restructuring a page that has an existing working feature (e.g. Master COA
+  management, Analytics metric toggles), move the existing logic into the new structure
+  rather than rewriting it from scratch.
+- For large or ambiguous UI/visual work, describe the desired outcome and constraints in
+  detail rather than pasting exact code — let the implementation decisions follow existing
+  patterns already present in the codebase.
+- Prefer English for UI chrome/settings labels (e.g. "General", "Analytics Display") unless
+  the label is user-facing product copy already established in Indonesian (e.g. "Laba
+  Rugi", "Neraca", "Kelola Master COA").
