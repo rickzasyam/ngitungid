@@ -7,10 +7,10 @@ import bcrypt from 'bcryptjs'
 import { db } from './index'
 import { clients, users } from './schema'
 
-// UUID tetap (bukan random) supaya bisa dijembatani ke MOCK_CLIENTS di
-// lib/client-context.tsx (yang masih pakai id 'client-1' dst — sengaja
-// belum diganti, lihat TODO(2.3) di file itu). Idempotent: aman dijalankan
-// ulang berkali-kali (onConflictDoNothing).
+// UUID tetap (bukan random) supaya seed idempotent & deterministik — aman
+// dijalankan ulang berkali-kali (onConflictDoNothing target id). Sejak Phase
+// 2.3 klien ini adalah data asli yang dipakai app; bridge MOCK_CLIENTS di
+// lib/client-context.tsx sudah dihapus (klien di-fetch dari GET /api/clients).
 const SEED_CLIENTS = [
   { id: '11111111-1111-1111-1111-111111111111', name: 'Rasyuka', type: 'E-commerce' },
   { id: '22222222-2222-2222-2222-222222222222', name: 'Graphicook', type: 'Jasa Kreatif' },

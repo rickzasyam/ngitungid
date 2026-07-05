@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-07-02
-**Current Phase:** Phase 2 — Backend & Database (dimulai; Phase 1 Frontend 98% selesai)
+**Last Updated:** 2026-07-05
+**Current Phase:** Phase 2 — Backend & Database (2.1–2.3 selesai; Phase 1 Frontend 98% selesai)
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -128,7 +128,7 @@
 - ✅ Migration SQL ter-generate & tervalidasi (`drizzle-kit generate`, tanpa perlu live DB connection) — `lib/db/migrations/0000_early_lilandra.sql`
 - ✅ Migrasi dijalankan ke Neon project nyata milik user — 6 tabel terkonfirmasi ada & kosong
 
-### 2.2 Authentication (RBAC) — **Kode selesai 2026-07-02, menunggu konfirmasi login end-to-end dari user**
+### 2.2 Authentication (RBAC) — **COMPLETED 2026-07-05** (login end-to-end dikonfirmasi user)
 - ✅ NextAuth v5 (`next-auth@beta`) setup — Credentials provider (email+password), session strategy JWT, `lib/auth.ts`
 - ✅ Admin role — full access, `clientId` null, bisa switch klien manapun
 - ✅ User (client) role — `clientId` terisi (FK ke clients, onDelete restrict), dipin ke 1 klien, tidak bisa switch
@@ -139,12 +139,16 @@
 - ✅ Migration users table ter-generate, ter-review, dan ter-migrasi ke Neon nyata
 - ✅ Build terverifikasi: `ƒ Proxy (Middleware)` terpasang, akses tanpa login ke `/` redirect ke `/login?callbackUrl=...`
 - ✅ `pnpm db:seed` berhasil membuat 3 klien + akun admin asli user
-- ⏳ User belum mengonfirmasi hasil login manual dengan kredensial asli mereka sendiri — lihat Deferred di bawah
+- ✅ Login manual end-to-end dikonfirmasi user (kredensial asli mereka, di browser) — 2.2 fully closed
 
-### 2.3 Client Onboarding API
-- ⏳ POST /api/clients — create new client
-- ⏳ POST /api/clients/[id]/coa — import master COA from Excel
-- ⏳ GET /api/clients/[id]/coa — list master COA
+### 2.3 Client Onboarding API — **COMPLETED 2026-07-05**
+- ✅ GET /api/clients — role-aware (admin: semua klien urut nama; user: hanya klien miliknya). Menggantikan `MOCK_CLIENTS` + bridge UUID sepenuhnya.
+- ✅ POST /api/clients — admin-only, buat klien baru `{ name, type }` (validasi non-empty, trim)
+- ✅ POST /api/clients/[id]/coa — admin-only, import Master COA dari Excel (xlsx). Replace-all atomik via `db.batch([delete, insert])`, validasi header toleran + error per-baris, 400 tanpa menyentuh DB kalau ada error
+- ✅ GET /api/clients/[id]/coa — admin (klien mana pun) atau user pemilik; balikin `{ count, updatedAt, accounts }` urut kode
+- ✅ `lib/api/guards.ts` (`requireUser`/`requireAdmin`) + `lib/coa-import.ts` (`parseCoaWorkbook` — normalisasi header, alias toleran, dedup kode, validasi field wajib, Class CF nullable)
+- ✅ Frontend disambungkan: `client-context` fetch `GET /api/clients` (`MOCK_CLIENTS` + `SEED_CLIENT_UUID_TO_MOCK_ID` dihapus, expose `clients` + `refreshClients`), sidebar switcher, admin-overview + modal "Klien Baru", Settings Master COA (upload/preview/status asli via API)
+- ✅ Terverifikasi end-to-end di browser (session admin asli): buat klien → muncul tanpa reload; upload COA valid → persist 4 akun (Class CF kosong → null); upload malformed (kolom Kode hilang) → 400 + COA lama TIDAK terhapus; preview & badge Settings render dari DB. Klien uji dibersihkan setelahnya (DB kembali 3 klien seed)
 
 ### 2.4 Upload & Extraction API
 - ⏳ POST /api/upload/csv — parse CSV with PapaParse
@@ -243,6 +247,13 @@
 | 2026-07-02 | bcryptjs (pure-JS) dipakai untuk password hashing, cost factor 12, bukan native `bcrypt`/`argon2` | Tidak butuh native binding (lebih portable lintas environment deploy); cost 12 standar industri saat ini |
 | 2026-07-02 | `MOCK_CLIENTS` (id `'client-1'` dst, dipakai admin-overview & settings) TIDAK diganti ke UUID asli; dijembatani via lookup map `SEED_CLIENT_UUID_TO_MOCK_ID` di `lib/client-context.tsx` | Mengubah `MOCK_CLIENTS` butuh menyentuh 2 halaman lain di luar scope auth; 3 klien di-seed dengan UUID **tetap** (bukan random) supaya bridge-nya deterministic. Ditandai `TODO(2.3)`: bridge ini dibongkar begitu `GET /api/clients` menggantikan `MOCK_CLIENTS` sepenuhnya |
 | 2026-07-02 | Belum ada halaman public register — akun baru (admin/staff/user) dibuat manual lewat `lib/db/seed.ts` (admin pertama, dari env var) atau `pnpm db:studio` (tambahan, hash manual via bcryptjs CLI one-liner) | Semua akun dibuat internal oleh Ricko, bukan self-service signup — sesuai model bisnis (admin yang provisioning akun klien), jadi register page bukan prioritas sebelum ada UI Account management |
+| 2026-07-05 | **Bridge `SEED_CLIENT_UUID_TO_MOCK_ID` + `MOCK_CLIENTS` dihapus** (menutup `TODO(2.3)`) — klien di-fetch dari `GET /api/clients` di `client-context`, di-consume via context (`clients`) oleh sidebar/admin-overview/settings | 2.3 memang titik pembongkaran yang direncanakan; UUID seed tetap tetap (idempotency), tapi tidak lagi dipetakan ke id mock |
+| 2026-07-05 | Import Master COA pakai **replace-all** (hapus semua COA klien lalu insert), bukan upsert per-kode | Cocok dengan UX "Ganti Excel" (file baru = sumber kebenaran baru); upsert menyisakan baris lama yang dihapus di file baru → COA tidak konsisten dengan file |
+| 2026-07-05 | Replace-all dieksekusi via `db.batch([delete, insert])`, BUKAN `db.transaction()` | Diverifikasi di `node_modules/drizzle-orm/neon-http/session.js`: `transaction()` throw `"No transactions support in neon-http driver"`. `db.batch()` dikirim sebagai satu Neon HTTP transaction (atomik) — pas untuk rangkaian statement yang sudah diketahui di depan. Konsisten dgn keputusan driver `neon-http` (2.1) |
+| 2026-07-05 | `parseCoaWorkbook` (`lib/coa-import.ts`): header toleran (normalisasi + alias), validasi **all-or-nothing** (ada error baris → 400, DB tidak disentuh), dedup kode dalam file, Class CF nullable | Master COA data fondasi — lebih aman tolak file bermasalah dgn pesan per-baris daripada import sebagian. Alias header bisa ditambah kalau ketemu format template klien baru |
+| 2026-07-05 | `GET /api/clients` role-aware dalam satu endpoint (admin: semua; user: hanya klien-nya) | Satu sumber untuk `client-context` kedua role; user role tetap ter-scope ke klien-nya (RBAC di layer API, bukan cuma UI) |
+| 2026-07-05 | Tetap mock (di luar scope 2.3): status upload/overdue di admin-overview (→ 2.4/2.6), bar "storage used" sidebar (kosmetik, `pseudoStorage` deterministik → 2.6), persistensi Analytics Metrics Visibility (tabel `client_metric_visibility` ada, disambung setelah route API) | Menghindari scope creep; masing-masing bergantung subsistem yang belum dibangun. Data fabrikasi di admin-overview diganti state netral "Buka workspace" biar tidak menampilkan angka palsu dgn klien asli |
+| 2026-07-05 | Buat klien lewat modal "Klien Baru" di admin-overview; belum ada UI edit/hapus klien | Onboarding (create) yang dibutuhkan 2.3; edit/hapus menyusul bareng UI Account management. Hapus klien juga perlu hati-hati (FK `users.clientId` onDelete restrict) |
 
 ---
 
@@ -255,12 +266,14 @@
 ### Remaining Phase 1 Work
 - ⏳ Real file upload flow (connect stubs to API routes) — `POST /api/upload/{csv|excel|pdf}`
 - ⏳ API integration for financial data (replace mock data) — `GET /api/analytics/{clientId}/monthly`, `/balance-sheet`, `/coa-breakdown`
-- ⏳ Settings — Master COA upload perlu backend nyata (`POST /api/clients/[id]/coa`); Analytics Metrics Visibility sudah ada tabelnya (`client_metric_visibility`), tinggal disambungkan setelah API routes (2.3) dibangun
+- ✅ Settings — Master COA upload/preview/status sudah pakai backend nyata (`POST`/`GET /api/clients/[id]/coa`, selesai 2.3)
+- ⏳ Settings — Analytics Metrics Visibility masih mock; tabel `client_metric_visibility` sudah ada, tinggal disambungkan (route `GET`/`PUT` per klien) — follow-up kecil
 
 ### Phase 2 Progress
 ✅ 2.1 Database Schema — 7 tabel (termasuk `users` dari 2.2) + 4 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, migrasi sudah dijalankan ke Neon project nyata milik user
-✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — kode selesai, build terverifikasi (proxy redirect ke `/login` jalan), `pnpm db:seed` berhasil membuat 3 klien + akun admin asli user. Satu hal belum terkonfirmasi: user belum melaporkan hasil login manual mereka sendiri di browser
-⏳ 2.3-2.6 Client Onboarding, Upload/Extraction, COA Matching, Financial Data API — belum dimulai
+✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — selesai penuh; login manual end-to-end dikonfirmasi user di browser (kredensial asli mereka)
+✅ 2.3 Client Onboarding API — 4 route (`GET`/`POST /api/clients`, `GET`/`POST /api/clients/[id]/coa`) + parser Excel + guards; frontend lepas dari mock (`MOCK_CLIENTS` & bridge UUID dihapus). Terverifikasi end-to-end di browser, DB dibersihkan dari data uji
+⏳ 2.4-2.6 Upload/Extraction, COA Matching, Financial Data API — belum dimulai
 
 ### Next Sprint
-Konfirmasi login manual user (`/login` dengan kredensial di `.env.local`) — lalu lanjut 2.3 Client Onboarding API (`POST /api/clients`, import Master COA lewat API menggantikan mock)
+2.4 Upload & Extraction API — `POST /api/upload/{csv|excel|pdf}` (mulai dari CSV/Excel via PapaParse/xlsx sesuai prioritas MVP), `GET /api/reports/[id]/status`. Sambungkan stub upload di `app/upload/page.tsx` ke route asli. Master COA sekarang sudah tersedia per klien (2.3) sebagai target mapping.

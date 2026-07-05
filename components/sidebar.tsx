@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useClient, MOCK_CLIENTS, ClientInfo } from '@/lib/client-context'
+import { useClient, ClientInfo } from '@/lib/client-context'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
 const CAPSULE_TRANSITION = 'transform .48s cubic-bezier(.34,1.42,.5,1), height .48s cubic-bezier(.34,1.42,.5,1)'
@@ -34,7 +34,7 @@ const ROUTE_ACTIVE_MAP: Record<string, string> = {
 export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
-  const { activeClient, setActiveClient, role, storageMap } = useClient()
+  const { activeClient, setActiveClient, role, storageMap, clients } = useClient()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
@@ -437,7 +437,7 @@ export function Sidebar() {
 
                 {/* Client list */}
                 <div className="py-1">
-                  {MOCK_CLIENTS.map(client => (
+                  {clients.map(client => (
                     <button
                       key={client.id}
                       type="button"

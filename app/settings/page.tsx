@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   FileSpreadsheet,
   Upload,
@@ -8,6 +8,8 @@ import {
   ChevronUp,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
+  Loader2,
   Droplets,
   TrendingUp,
   Scale,
@@ -19,33 +21,32 @@ import {
   Bell,
   Building2,
 } from 'lucide-react'
-import { useClient, MOCK_CLIENTS } from '@/lib/client-context'
+import { useClient } from '@/lib/client-context'
 
-// ── Mock: status Master COA per klien ────────────────────────
-// Nantinya dari GET /api/clients/[id]/coa (Phase 2)
-type CoaStatus = {
-  hasCoa: boolean
-  accountCount: number
-  updatedAt: string
+// ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
+type CoaAccount = {
+  kode: string
+  nama: string
+  posisi: string
+  kelompok: string
+  subKelompok: string
+  classCf: string | null
 }
 
-const INITIAL_COA_STATUS: Record<string, CoaStatus> = {
-  'client-1': { hasCoa: true, accountCount: 87, updatedAt: '12 Jun 2026' },
-  'client-2': { hasCoa: true, accountCount: 54, updatedAt: '28 Mei 2026' },
-  'client-3': { hasCoa: false, accountCount: 0, updatedAt: '' },
+type CoaData = {
+  count: number
+  updatedAt: string | null
+  accounts: CoaAccount[]
 }
 
-// Mock preview struktur Master COA — kolom sesuai template Excel
-const MOCK_COA_ROWS = [
-  { kode: '01-0001', nama: 'Kas & Bank',                        posisi: 'Debit',  kelompok: 'Neraca',    subKelompok: 'Aktiva Lancar',        classCf: 'Operating' },
-  { kode: '02-0001', nama: 'Persediaan Barang',                 posisi: 'Debit',  kelompok: 'Neraca',    subKelompok: 'Aktiva Lancar',        classCf: 'Operating' },
-  { kode: '04-0001', nama: 'Penjualan Bruto - Shopee',          posisi: 'Kredit', kelompok: 'Laba Rugi', subKelompok: 'Pendapatan',           classCf: 'Operating' },
-  { kode: '05-0001', nama: 'HPP - Shopee',                      posisi: 'Debit',  kelompok: 'Laba Rugi', subKelompok: 'Harga Pokok Penjualan', classCf: 'Operating' },
-  { kode: '11-0001', nama: 'Biaya Admin Marketplace - Shopee',  posisi: 'Debit',  kelompok: 'Laba Rugi', subKelompok: 'Variable Cost',        classCf: 'Operating' },
-  { kode: '24-0001', nama: 'Beban Gaji',                        posisi: 'Debit',  kelompok: 'Laba Rugi', subKelompok: 'Fixed Cost',           classCf: 'Operating' },
-  { kode: '15-0001', nama: 'Hutang Usaha',                      posisi: 'Kredit', kelompok: 'Neraca',    subKelompok: 'Kewajiban Lancar',     classCf: 'Funding' },
-  { kode: '30-0001', nama: 'Modal Disetor',                     posisi: 'Kredit', kelompok: 'Neraca',    subKelompok: 'Ekuitas',              classCf: 'Funding' },
-]
+const PREVIEW_LIMIT = 8
+
+function formatCoaDate(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 // ── Metrics visibility — kategori mengikuti Analytics page ───
 type MetricDef = { id: string; label: string; desc: string }
@@ -348,13 +349,63 @@ function GeneralTab() {
 
 // ── Tab: Master COA (scoped ke klien aktif) ──────────────────
 
-function MasterCoaTab({ clientId, status, onUpload }: {
-  clientId: string
-  status: CoaStatus
-  onUpload: (file: File) => void
-}) {
+function MasterCoaTab({ clientId }: { clientId: string }) {
+  const [data, setData] = useState<CoaData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/coa`)
+      setData(res.ok ? await res.json() : { count: 0, updatedAt: null, accounts: [] })
+    } catch {
+      setData({ count: 0, updatedAt: null, accounts: [] })
+    } finally {
+      setLoading(false)
+    }
+  }, [clientId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const handleFile = async (file: File) => {
+    const name = file.name.toLowerCase()
+    if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+      setError('Format file harus .xlsx atau .xls')
+      return
+    }
+    setUploading(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch(`/api/clients/${clientId}/coa`, { method: 'POST', body: fd })
+      const payload = (await res.json().catch(() => null)) as
+        | { error?: string; details?: string[] }
+        | null
+      if (!res.ok) {
+        const details = payload?.details
+        setError(details?.length ? details.join(' · ') : (payload?.error ?? 'Gagal upload Master COA.'))
+        return
+      }
+      await load()
+      setShowPreview(true)
+    } catch {
+      setError('Terjadi kesalahan jaringan. Coba lagi.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const count = data?.count ?? 0
+  const hasCoa = count > 0
+  const previewRows = data?.accounts.slice(0, PREVIEW_LIMIT) ?? []
+  const updatedAtLabel = formatCoaDate(data?.updatedAt ?? null)
 
   return (
     <SettingsCard>
@@ -365,10 +416,7 @@ function MasterCoaTab({ clientId, status, onUpload }: {
         className="hidden"
         onChange={e => {
           const file = e.target.files?.[0]
-          if (file) {
-            onUpload(file)
-            setShowPreview(true)
-          }
+          if (file) handleFile(file)
           e.target.value = ''
         }}
       />
@@ -384,13 +432,21 @@ function MasterCoaTab({ clientId, status, onUpload }: {
         </div>
 
         {/* Status badge */}
-        {status.hasCoa ? (
+        {loading ? (
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0"
+            style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)' }}
+          >
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Memuat…</span>
+          </div>
+        ) : hasCoa ? (
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium flex-shrink-0"
             style={{ background: '#f0fdf4', color: '#15803d' }}
           >
             <CheckCircle2 className="w-3 h-3" />
-            <span>{status.accountCount} akun · {status.updatedAt}</span>
+            <span>{count} akun{updatedAtLabel ? ` · ${updatedAtLabel}` : ''}</span>
           </div>
         ) : (
           <div
@@ -405,7 +461,7 @@ function MasterCoaTab({ clientId, status, onUpload }: {
 
       {/* Actions */}
       <div className="flex items-center gap-2 mt-4">
-        {status.hasCoa && (
+        {hasCoa && (
           <button
             type="button"
             onClick={() => setShowPreview(!showPreview)}
@@ -421,16 +477,37 @@ function MasterCoaTab({ clientId, status, onUpload }: {
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-200 hover:-translate-y-px hover:shadow-[0_4px_14px_rgba(218,241,99,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+          disabled={uploading}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-200 enabled:hover:-translate-y-px enabled:hover:shadow-[0_4px_14px_rgba(218,241,99,0.4)] disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
           style={{ background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
         >
-          <Upload className="w-3.5 h-3.5" />
-          {status.hasCoa ? 'Ganti Excel' : 'Upload Master COA'}
+          {uploading ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Mengupload…
+            </>
+          ) : (
+            <>
+              <Upload className="w-3.5 h-3.5" />
+              {hasCoa ? 'Ganti Excel' : 'Upload Master COA'}
+            </>
+          )}
         </button>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div
+          className="mt-4 flex items-start gap-2 px-3.5 py-2.5 rounded-2xl animate-fade-in"
+          style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+        >
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#dc2626' }} />
+          <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{error}</span>
+        </div>
+      )}
+
       {/* Empty state hint */}
-      {!status.hasCoa && (
+      {!loading && !hasCoa && (
         <div
           className="mt-4 rounded-2xl px-4 py-3"
           style={{ border: '2px dashed #fde68a', background: 'linear-gradient(135deg, #fffdf0 0%, #fefce8 100%)' }}
@@ -443,7 +520,7 @@ function MasterCoaTab({ clientId, status, onUpload }: {
       )}
 
       {/* Preview struktur */}
-      {status.hasCoa && showPreview && (
+      {hasCoa && showPreview && (
         <div className="mt-4 rounded-2xl overflow-hidden border animate-fade-in" style={{ borderColor: '#f0f0f0', background: '#fafafa' }}>
           <div className="overflow-x-auto">
             <table className="w-full" style={{ fontSize: 12 }}>
@@ -461,11 +538,11 @@ function MasterCoaTab({ clientId, status, onUpload }: {
                 </tr>
               </thead>
               <tbody>
-                {MOCK_COA_ROWS.map((row, i) => (
+                {previewRows.map((row, i) => (
                   <tr
                     key={row.kode}
                     style={{
-                      borderBottom: i < MOCK_COA_ROWS.length - 1 ? '1px solid #f0f0f0' : 'none',
+                      borderBottom: i < previewRows.length - 1 ? '1px solid #f0f0f0' : 'none',
                       background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.6)',
                     }}
                   >
@@ -491,14 +568,18 @@ function MasterCoaTab({ clientId, status, onUpload }: {
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--color-text-muted)' }}>{row.subKelompok}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span
-                        className="px-2 py-0.5 rounded-full text-[10.5px] font-medium"
-                        style={row.classCf === 'Operating'
-                          ? { background: '#f0f9ff', color: '#0369a1' }
-                          : { background: '#fff7ed', color: '#c2410c' }}
-                      >
-                        {row.classCf}
-                      </span>
+                      {row.classCf ? (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[10.5px] font-medium"
+                          style={row.classCf === 'Operating'
+                            ? { background: '#f0f9ff', color: '#0369a1' }
+                            : { background: '#fff7ed', color: '#c2410c' }}
+                        >
+                          {row.classCf}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -506,7 +587,7 @@ function MasterCoaTab({ clientId, status, onUpload }: {
             </table>
           </div>
           <p className="px-4 py-2.5 text-[10.5px] border-t" style={{ color: 'var(--color-text-muted)', borderColor: '#f0f0f0' }}>
-            Menampilkan {MOCK_COA_ROWS.length} dari {status.accountCount} akun · Preview struktur — data lengkap tersimpan per klien
+            Menampilkan {previewRows.length} dari {count} akun · Preview struktur — data lengkap tersimpan per klien
           </p>
         </div>
       )}
@@ -640,29 +721,16 @@ export default function SettingsPage() {
   const { activeClient } = useClient()
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
-  // Master COA — status keyed per klien
-  const [coaStatus, setCoaStatus] = useState(INITIAL_COA_STATUS)
-
-  const handleCoaUpload = (clientId: string, file: File) => {
-    const ok = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
-    if (!ok) return
-    // TODO: POST /api/clients/[id]/coa (Phase 2) — sekarang mock update state
-    setCoaStatus(prev => ({
-      ...prev,
-      [clientId]: { hasCoa: true, accountCount: MOCK_COA_ROWS.length, updatedAt: 'Baru saja' },
-    }))
-  }
-
-  // Metrics visibility — keyed per klien, tiap klien punya state independen
-  const [metricsByClient, setMetricsByClient] = useState<Record<string, Record<string, boolean>>>(() =>
-    Object.fromEntries(MOCK_CLIENTS.map(c => [c.id, defaultVisibility()]))
-  )
+  // Metrics visibility — keyed per klien, tiap klien punya state independen.
+  // Init kosong; default di-resolve lazy per klien via `?? defaultVisibility()`
+  // (tab ini masih mock sampai client_metric_visibility disambungkan — Phase 2.3 note).
+  const [metricsByClient, setMetricsByClient] = useState<Record<string, Record<string, boolean>>>({})
 
   const toggleMetric = (clientId: string, metricId: string) =>
-    setMetricsByClient(prev => ({
-      ...prev,
-      [clientId]: { ...prev[clientId], [metricId]: !prev[clientId]?.[metricId] },
-    }))
+    setMetricsByClient(prev => {
+      const current = prev[clientId] ?? defaultVisibility()
+      return { ...prev, [clientId]: { ...current, [metricId]: !current[metricId] } }
+    })
 
   const toggleCategory = (clientId: string, catId: string) => {
     const cat = METRIC_CATEGORIES.find(c => c.id === catId)!
@@ -762,12 +830,7 @@ export default function SettingsPage() {
               {activeTab === 'general' && <GeneralTab />}
 
               {activeTab === 'coa' && activeClient && (
-                <MasterCoaTab
-                  key={activeClient.id}
-                  clientId={activeClient.id}
-                  status={coaStatus[activeClient.id] ?? { hasCoa: false, accountCount: 0, updatedAt: '' }}
-                  onUpload={file => handleCoaUpload(activeClient.id, file)}
-                />
+                <MasterCoaTab key={activeClient.id} clientId={activeClient.id} />
               )}
 
               {activeTab === 'analytics' && activeClient && (
