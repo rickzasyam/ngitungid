@@ -1,8 +1,8 @@
 # NgitungID BI — Development Roadmap
 
 **Last Updated:** 2026-07-02
-**Current Phase:** Phase 1 — Frontend Foundation  
-**Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL · Gemini API
+**Current Phase:** Phase 2 — Backend & Database (dimulai; Phase 1 Frontend 98% selesai)
+**Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
 
@@ -116,14 +116,17 @@
 
 ## Phase 2 — Backend & Database
 
-### 2.1 Database Schema
-- ⏳ PostgreSQL setup
-- ⏳ clients table
-- ⏳ master_coa table
-- ⏳ financial_reports table
-- ⏳ report_line_items table
-- ⏳ coa_mapping_history table
-- ⏳ Drizzle ORM or Prisma setup
+### 2.1 Database Schema — **Schema selesai 2026-07-02, menunggu koneksi Neon nyata dari user**
+- ✅ PostgreSQL setup — Neon (serverless), driver `neon-http`
+- ✅ Drizzle ORM setup — `lib/db/schema.ts`, `lib/db/index.ts`, `drizzle.config.ts`, scripts `db:generate`/`db:migrate`/`db:push`/`db:studio`
+- ✅ clients table
+- ✅ master_coa table — unique(client_id, kode), index client_id
+- ✅ financial_reports table — enum report_type & status, unique(client_id, report_type, period_start, period_end), index (client_id, report_type, period_start)
+- ✅ report_line_items table — enum status, index report_id & master_coa_id, FK onDelete set null/restrict sesuai konteks
+- ✅ coa_mapping_history table — unique(client_id, raw_name) sebagai target upsert untuk fuzzy-match nanti (2.5)
+- ✅ client_metric_visibility table (di luar daftar awal, ditambahkan karena menutup gap "Remaining Phase 1 Work" — kecil & tidak bergantung pekerjaan yang di-defer)
+- ✅ Migration SQL ter-generate & tervalidasi (`drizzle-kit generate`, tanpa perlu live DB connection) — `lib/db/migrations/0000_early_lilandra.sql`
+- ⏳ Migrasi dijalankan ke Neon project nyata — menunggu user mendaftar di neon.tech & mengisi `DATABASE_URL` di `.env.local`
 
 ### 2.2 Authentication (RBAC)
 - ⏳ NextAuth.js setup
@@ -219,6 +222,12 @@
 | 2026-07-02 | Dead code dihapus: kpi-card.tsx lama, quick-insights.tsx, upload-form.tsx (via git rm, histori tetap ada) | Sudah tidak ada importer setelah beberapa kali refactor; tapi lihat catatan di bawah soal top-receipts-bubble.tsx |
 | 2026-07-02 | top-receipts-bubble.tsx sempat ikut terhapus di cleanup yang sama, lalu di-restore + dirender kembali di Dashboard | Komponennya lengkap dan tidak rusak — cuma kehilangan pemanggil (`<TopReceiptsBubble>`) di salah satu sesi polish sebelumnya; pelajaran: verifikasi "tidak ada importer" harus dicek ulang tepat sebelum hapus, bukan cuma sekali di awal sesi |
 | 2026-07-02 | Dashboard: Top 5 Sumber Penerimaan dipasang `compact` sejajar Expense Breakdown Donut (2 kolom setara), bukan full-width sendirian | Mode non-compact di card full-width menyisakan banyak ruang kosong (canvas fixed 300px + legend flex-1 meregang); dipasangkan dengan card berbobot visual serupa jauh lebih proporsional |
+| 2026-07-02 | Phase 2.1 dimulai — DB host: Neon, ORM: Drizzle (dikonfirmasi user, ROADMAP sebelumnya masih "Drizzle or Prisma") | Neon serverless cocok dengan deployment Next.js/Vercel tanpa setup lokal; Drizzle ringan & sintaksnya dekat SQL, cocok dipasangkan Neon |
+| 2026-07-02 | Driver `neon-http` dipilih, bukan `neon-serverless` (websocket pool) | Tidak ada operasi Phase 2 yang direncanakan butuh transaksi multi-statement lintas round-trip; neon-http lebih rendah latensi & tanpa lifecycle connection pool di lingkungan serverless. Ganti driver gampang (satu baris) kalau 2.5 nanti ternyata butuh transaksi |
+| 2026-07-02 | Enum Postgres (`pgEnum`) hanya untuk `report_type` & 2 status field (financial_reports, report_line_items) — `posisi`/`kelompok`/`sub_kelompok`/`class_cf` tetap `text` | Report type & status adalah state machine yang sudah hardcode di banyak komponen UI, biaya migrasi enum sudah "gratis" (ubah value = ubah kode juga). Kelompok/sub-kelompok berasal dari data Excel klien yang di-import & masih berpotensi berubah bentuk — enum Postgres (`ALTER TYPE ADD VALUE` tidak reversibel) terlalu kaku untuk data yang masih iterating |
+| 2026-07-02 | Tabel snapshot agregat (monthly_financials, balance_sheet_snapshots) sengaja TIDAK dibuat di 2.1 | Semua data dashboard/analytics (MONTHLY_DATA, rasio CR/ROE/dst) adalah derivasi dari `report_line_items` + `master_coa` — dihitung on-the-fly saat Financial Data API (2.6) dibangun, bukan snapshot yang bisa stale. Belum ada data produksi/query aggregation yang butuh optimasi sekarang |
+| 2026-07-02 | `financial_reports` punya `unique(client_id, report_type, period_start, period_end)` | Mencegah admin upload dua kali untuk klien+tipe+periode yang sama tanpa sadar; sekaligus catatan untuk 2.6 nanti: periode upload sebaiknya divalidasi selalu 1 bulan penuh (bukan rentang custom sembarang) supaya agregasi bulanan di dashboard tidak perlu rekonsiliasi rentang yang tidak rata |
+| 2026-07-02 | `client_metric_visibility` dibuat sekarang, bukan ditunda bareng auth/API | Tabelnya kecil, tidak bergantung pada subsistem yang di-defer (auth/matching engine), dan langsung menutup gap yang sudah dicatat di "Remaining Phase 1 Work" — menunda hanya menambah satu sesi migrasi lagi untuk tabel 2 kolom |
 
 ---
 
@@ -231,7 +240,12 @@
 ### Remaining Phase 1 Work
 - ⏳ Real file upload flow (connect stubs to API routes) — `POST /api/upload/{csv|excel|pdf}`
 - ⏳ API integration for financial data (replace mock data) — `GET /api/analytics/{clientId}/monthly`, `/balance-sheet`, `/coa-breakdown`
-- ⏳ Settings — Master COA upload perlu backend nyata (`POST /api/clients/[id]/coa`); Analytics Metrics Visibility perlu persist ke database (saat ini useState per sesi)
+- ⏳ Settings — Master COA upload perlu backend nyata (`POST /api/clients/[id]/coa`); Analytics Metrics Visibility sudah ada tabelnya (`client_metric_visibility`), tinggal disambungkan setelah API routes (2.3) dibangun
+
+### Phase 2 Progress
+✅ 2.1 Database Schema — 6 tabel + 3 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, menunggu koneksi Neon nyata dari user untuk benar-benar dijalankan
+⏳ 2.2 Authentication (NextAuth.js, RBAC) — belum dimulai
+⏳ 2.3-2.6 Client Onboarding, Upload/Extraction, COA Matching, Financial Data API — belum dimulai
 
 ### Next Sprint
-Begin Phase 2 — Backend & Database setup (PostgreSQL, authentication, API endpoints)
+Setelah user setup Neon + jalankan migrasi pertama: lanjut 2.2 Authentication (NextAuth.js + RBAC middleware)
