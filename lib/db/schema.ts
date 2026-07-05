@@ -34,6 +34,8 @@ export const lineItemStatusEnum = pgEnum('line_item_status', [
   'rejected',
 ])
 
+export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])
+
 // ── clients ──────────────────────────────────────────────────
 export const clients = pgTable('clients', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -176,6 +178,22 @@ export const clientMetricVisibility = pgTable(
   ]
 )
 
+// ── users ────────────────────────────────────────────────────
+// clientId null = admin (akses semua klien), terisi = role 'user'
+// dipin ke 1 klien — sama persis dengan perilaku MOCK_ROLE saat ini.
+// onDelete restrict: klien tidak boleh terhapus diam-diam selama masih
+// ada user yang terikat ke situ.
+export const users = pgTable('users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  name: text('name').notNull(),
+  role: userRoleEnum('role').notNull().default('user'),
+  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -183,6 +201,11 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   financialReports: many(financialReports),
   coaMappingHistory: many(coaMappingHistory),
   metricVisibility: many(clientMetricVisibility),
+  users: many(users),
+}))
+
+export const usersRelations = relations(users, ({ one }) => ({
+  client: one(clients, { fields: [users.clientId], references: [clients.id] }),
 }))
 
 export const masterCoaRelations = relations(masterCoa, ({ one, many }) => ({

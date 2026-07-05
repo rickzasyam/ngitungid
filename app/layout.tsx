@@ -2,8 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-import { ClientProvider } from '@/lib/client-context'
-import { Sidebar } from '@/components/sidebar'
+import { AppShell } from '@/components/app-shell'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({
@@ -50,14 +49,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
-        <ClientProvider>
-          {/* Shared app shell — persists across route navigations so the sidebar's
-              nav capsule can animate between pages instead of remounting cold. */}
-          <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
-            <Sidebar />
-            {children}
-          </div>
-        </ClientProvider>
+        <AppShell>{children}</AppShell>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

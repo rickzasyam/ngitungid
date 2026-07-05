@@ -116,7 +116,7 @@
 
 ## Phase 2 — Backend & Database
 
-### 2.1 Database Schema — **Schema selesai 2026-07-02, menunggu koneksi Neon nyata dari user**
+### 2.1 Database Schema — **COMPLETED 2026-07-02**
 - ✅ PostgreSQL setup — Neon (serverless), driver `neon-http`
 - ✅ Drizzle ORM setup — `lib/db/schema.ts`, `lib/db/index.ts`, `drizzle.config.ts`, scripts `db:generate`/`db:migrate`/`db:push`/`db:studio`
 - ✅ clients table
@@ -126,13 +126,20 @@
 - ✅ coa_mapping_history table — unique(client_id, raw_name) sebagai target upsert untuk fuzzy-match nanti (2.5)
 - ✅ client_metric_visibility table (di luar daftar awal, ditambahkan karena menutup gap "Remaining Phase 1 Work" — kecil & tidak bergantung pekerjaan yang di-defer)
 - ✅ Migration SQL ter-generate & tervalidasi (`drizzle-kit generate`, tanpa perlu live DB connection) — `lib/db/migrations/0000_early_lilandra.sql`
-- ⏳ Migrasi dijalankan ke Neon project nyata — menunggu user mendaftar di neon.tech & mengisi `DATABASE_URL` di `.env.local`
+- ✅ Migrasi dijalankan ke Neon project nyata milik user — 6 tabel terkonfirmasi ada & kosong
 
-### 2.2 Authentication (RBAC)
-- ⏳ NextAuth.js setup
-- ⏳ Admin role — full access
-- ⏳ User (client) role — dashboard only
-- ⏳ Middleware route protection
+### 2.2 Authentication (RBAC) — **Kode selesai 2026-07-02, menunggu konfirmasi login end-to-end dari user**
+- ✅ NextAuth v5 (`next-auth@beta`) setup — Credentials provider (email+password), session strategy JWT, `lib/auth.ts`
+- ✅ Admin role — full access, `clientId` null, bisa switch klien manapun
+- ✅ User (client) role — `clientId` terisi (FK ke clients, onDelete restrict), dipin ke 1 klien, tidak bisa switch
+- ✅ `proxy.ts` (BUKAN `middleware.ts` — lihat Decisions & Notes) — protect semua route kecuali `/login`, `/api/auth/*`, static assets
+- ✅ users table — email unique, passwordHash (bcryptjs), role enum, clientId nullable
+- ✅ `lib/db/seed.ts` + `pnpm db:seed` — idempotent, seed 3 clients (UUID tetap) + admin pertama dari env var
+- ✅ `app/login/page.tsx` — 3-layer depth pattern, form email+password, error state
+- ✅ Migration users table ter-generate, ter-review, dan ter-migrasi ke Neon nyata
+- ✅ Build terverifikasi: `ƒ Proxy (Middleware)` terpasang, akses tanpa login ke `/` redirect ke `/login?callbackUrl=...`
+- ✅ `pnpm db:seed` berhasil membuat 3 klien + akun admin asli user
+- ⏳ User belum mengonfirmasi hasil login manual dengan kredensial asli mereka sendiri — lihat Deferred di bawah
 
 ### 2.3 Client Onboarding API
 - ⏳ POST /api/clients — create new client
@@ -228,6 +235,14 @@
 | 2026-07-02 | Tabel snapshot agregat (monthly_financials, balance_sheet_snapshots) sengaja TIDAK dibuat di 2.1 | Semua data dashboard/analytics (MONTHLY_DATA, rasio CR/ROE/dst) adalah derivasi dari `report_line_items` + `master_coa` — dihitung on-the-fly saat Financial Data API (2.6) dibangun, bukan snapshot yang bisa stale. Belum ada data produksi/query aggregation yang butuh optimasi sekarang |
 | 2026-07-02 | `financial_reports` punya `unique(client_id, report_type, period_start, period_end)` | Mencegah admin upload dua kali untuk klien+tipe+periode yang sama tanpa sadar; sekaligus catatan untuk 2.6 nanti: periode upload sebaiknya divalidasi selalu 1 bulan penuh (bukan rentang custom sembarang) supaya agregasi bulanan di dashboard tidak perlu rekonsiliasi rentang yang tidak rata |
 | 2026-07-02 | `client_metric_visibility` dibuat sekarang, bukan ditunda bareng auth/API | Tabelnya kecil, tidak bergantung pada subsistem yang di-defer (auth/matching engine), dan langsung menutup gap yang sudah dicatat di "Remaining Phase 1 Work" — menunda hanya menambah satu sesi migrasi lagi untuk tabel 2 kolom |
+| 2026-07-02 | NextAuth v5 (`next-auth@5.0.0-beta.31`, beta pinned tanpa caret) + Credentials provider (email+password), bukan OAuth/magic-link | User konfirmasi email+password; tim internal admin & klien UMKM, tidak butuh SSO. Versi di-pin exact karena masih beta — caret range bisa narik breaking change tanpa sadar |
+| 2026-07-02 | Session strategy JWT, bukan database session | Neon serverless + `neon-http` (bukan connection pool) lebih cocok stateless; menghindari query session di setiap request |
+| 2026-07-02 | **Next.js 16.2.6 mengganti `middleware.ts` → `proxy.ts`** (fungsi diekspor bernama `proxy`, bukan `middleware`) | Ditemukan & diverifikasi independen lewat `node_modules/next/dist/lib/constants.js` (`PROXY_FILENAME`) + dokumentasi resmi `nextjs.org/docs/messages/middleware-to-proxy` sebelum diimplementasi — `middleware.ts` di versi ini silently diabaikan, bukan error, jadi mudah lolos tanpa sadar. Route protection juga butuh `callbacks.authorized` di `lib/auth.ts`, bukan cuma re-export `auth` — re-export polos hanya attach `req.auth`, tidak redirect |
+| 2026-07-02 | `users.clientId` nullable FK, tanpa tabel join many-to-many | Null = admin (akses semua klien), terisi = user dipin ke 1 klien — cocok dengan RBAC 2-role yang ada sekarang (admin/user). Tidak ada requirement multi-klien per user; join table jadi over-engineering |
+| 2026-07-02 | `users.clientId` pakai `onDelete: 'restrict'` (bukan cascade/set null) | Menghapus klien yang masih punya user terpasang harus gagal eksplisit, bukan diam-diam menghapus/orphan user tsb — mencegah kehilangan akses tanpa sadar |
+| 2026-07-02 | bcryptjs (pure-JS) dipakai untuk password hashing, cost factor 12, bukan native `bcrypt`/`argon2` | Tidak butuh native binding (lebih portable lintas environment deploy); cost 12 standar industri saat ini |
+| 2026-07-02 | `MOCK_CLIENTS` (id `'client-1'` dst, dipakai admin-overview & settings) TIDAK diganti ke UUID asli; dijembatani via lookup map `SEED_CLIENT_UUID_TO_MOCK_ID` di `lib/client-context.tsx` | Mengubah `MOCK_CLIENTS` butuh menyentuh 2 halaman lain di luar scope auth; 3 klien di-seed dengan UUID **tetap** (bukan random) supaya bridge-nya deterministic. Ditandai `TODO(2.3)`: bridge ini dibongkar begitu `GET /api/clients` menggantikan `MOCK_CLIENTS` sepenuhnya |
+| 2026-07-02 | Belum ada halaman public register — akun baru (admin/staff/user) dibuat manual lewat `lib/db/seed.ts` (admin pertama, dari env var) atau `pnpm db:studio` (tambahan, hash manual via bcryptjs CLI one-liner) | Semua akun dibuat internal oleh Ricko, bukan self-service signup — sesuai model bisnis (admin yang provisioning akun klien), jadi register page bukan prioritas sebelum ada UI Account management |
 
 ---
 
@@ -243,9 +258,9 @@
 - ⏳ Settings — Master COA upload perlu backend nyata (`POST /api/clients/[id]/coa`); Analytics Metrics Visibility sudah ada tabelnya (`client_metric_visibility`), tinggal disambungkan setelah API routes (2.3) dibangun
 
 ### Phase 2 Progress
-✅ 2.1 Database Schema — 6 tabel + 3 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, menunggu koneksi Neon nyata dari user untuk benar-benar dijalankan
-⏳ 2.2 Authentication (NextAuth.js, RBAC) — belum dimulai
+✅ 2.1 Database Schema — 7 tabel (termasuk `users` dari 2.2) + 4 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, migrasi sudah dijalankan ke Neon project nyata milik user
+✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — kode selesai, build terverifikasi (proxy redirect ke `/login` jalan), `pnpm db:seed` berhasil membuat 3 klien + akun admin asli user. Satu hal belum terkonfirmasi: user belum melaporkan hasil login manual mereka sendiri di browser
 ⏳ 2.3-2.6 Client Onboarding, Upload/Extraction, COA Matching, Financial Data API — belum dimulai
 
 ### Next Sprint
-Setelah user setup Neon + jalankan migrasi pertama: lanjut 2.2 Authentication (NextAuth.js + RBAC middleware)
+Konfirmasi login manual user (`/login` dengan kredensial di `.env.local`) — lalu lanjut 2.3 Client Onboarding API (`POST /api/clients`, import Master COA lewat API menggantikan mock)
