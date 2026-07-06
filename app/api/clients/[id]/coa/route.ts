@@ -81,7 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Ukuran file melebihi 10MB.' }, { status: 400 })
   }
 
-  const { rows, errors } = parseCoaWorkbook(await file.arrayBuffer())
+  const { rows, errors, warnings } = parseCoaWorkbook(await file.arrayBuffer())
   if (errors.length > 0) {
     return NextResponse.json(
       { error: 'Gagal memproses Excel — perbaiki file lalu upload ulang.', details: errors },
@@ -98,5 +98,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     db.insert(masterCoa).values(values),
   ])
 
-  return NextResponse.json({ inserted: values.length, count: values.length }, { status: 200 })
+  return NextResponse.json(
+    { inserted: values.length, count: values.length, warnings: warnings ?? [] },
+    { status: 200 }
+  )
 }

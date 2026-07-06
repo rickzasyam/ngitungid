@@ -354,6 +354,7 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [warning, setWarning] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -381,12 +382,13 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
     }
     setUploading(true)
     setError(null)
+    setWarning(null)
     try {
       const fd = new FormData()
       fd.append('file', file)
       const res = await fetch(`/api/clients/${clientId}/coa`, { method: 'POST', body: fd })
       const payload = (await res.json().catch(() => null)) as
-        | { error?: string; details?: string[] }
+        | { error?: string; details?: string[]; warnings?: string[] }
         | null
       if (!res.ok) {
         const details = payload?.details
@@ -395,6 +397,7 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
       }
       await load()
       setShowPreview(true)
+      setWarning(payload?.warnings?.length ? payload.warnings.join(' · ') : null)
     } catch {
       setError('Terjadi kesalahan jaringan. Coba lagi.')
     } finally {
@@ -503,6 +506,17 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
         >
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#dc2626' }} />
           <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{error}</span>
+        </div>
+      )}
+
+      {/* Warning banner — non-blocking (mis. kode dobel disesuaikan otomatis) */}
+      {warning && (
+        <div
+          className="mt-4 flex items-start gap-2 px-3.5 py-2.5 rounded-2xl animate-fade-in"
+          style={{ background: '#fffbeb', border: '1px solid #fde68a' }}
+        >
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#b45309' }} />
+          <span className="text-xs font-medium" style={{ color: '#92400e' }}>{warning}</span>
         </div>
       )}
 

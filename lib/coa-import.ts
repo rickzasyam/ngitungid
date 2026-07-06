@@ -16,6 +16,9 @@ export interface ParsedCoaRow {
 export interface CoaParseResult {
   rows: ParsedCoaRow[]
   errors: string[]
+  // Non-blocking: mis. kode dobel yang di-suffix otomatis. Import tetap lanjut.
+  // Optional — early-return (error) path tidak mengisinya; konsumen pakai `?? []`.
+  warnings?: string[]
 }
 
 type Field = 'kode' | 'nama' | 'posisi' | 'kelompok' | 'subKelompok' | 'classCf'
@@ -47,6 +50,10 @@ const HEADER_ALIASES: Record<string, Field> = {
   'name': 'nama',
   'akun': 'nama',
   'keterangan': 'nama',
+  // Template Rasyuka menamai kolom nama akun-nya "COA".
+  'coa': 'nama',
+  'nama coa': 'nama',
+  'account': 'nama',
   'posisi': 'posisi',
   'posisi normal': 'posisi',
   'saldo normal': 'posisi',
@@ -86,6 +93,15 @@ function cellToString(value: unknown): string {
   return String(value).trim()
 }
 
+// D/K (dan variannya) → Debit/Kredit — template Rasyuka pakai singkatan.
+// Nilai lain (mis. "-" pada baris non-postable) disimpan apa adanya.
+function normalizePosisi(raw: string): string {
+  const v = raw.trim().toLowerCase()
+  if (v === 'd' || v === 'dr' || v === 'debit') return 'Debit'
+  if (v === 'k' || v === 'kr' || v === 'cr' || v === 'c' || v === 'kredit' || v === 'credit') return 'Kredit'
+  return raw.trim()
+}
+
 /**
  * Parse workbook Master COA menjadi baris tervalidasi.
  * Kontrak: kalau `errors` tidak kosong, JANGAN tulis ke DB — kembalikan 400.
@@ -110,9 +126,26 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
 
   if (matrix.length === 0) return { rows: [], errors: ['Sheet kosong.'] }
 
-  // Baris pertama yang punya isi dianggap header.
-  const headerRowIdx = matrix.findIndex(row => row.some(cell => cellToString(cell) !== ''))
-  if (headerRowIdx === -1) return { rows: [], errors: ['Tidak ada header terdeteksi.'] }
+  // Deteksi baris header: baris (dalam ~15 baris pertama) dengan cell paling
+  // banyak cocok ke alias yang dikenal. Ini melewati baris banner/judul seperti
+  // "DATA MASTER COA" & preamble — "baris non-kosong pertama" tidak cukup karena
+  // template klien sering diawali judul.
+  const scanLimit = Math.min(matrix.length, 15)
+  let headerRowIdx = -1
+  let bestScore = 0
+  for (let i = 0; i < scanLimit; i++) {
+    const score = matrix[i].reduce<number>(
+      (n, cell) => n + (HEADER_ALIASES[normalizeHeader(cell)] ? 1 : 0),
+      0
+    )
+    if (score > bestScore) {
+      bestScore = score
+      headerRowIdx = i
+    }
+  }
+  if (headerRowIdx === -1) {
+    return { rows: [], errors: ['Baris header tidak terdeteksi (tidak ada kolom yang dikenali).'] }
+  }
 
   const headerRow = matrix[headerRowIdx]
 
@@ -136,6 +169,7 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
 
   const rows: ParsedCoaRow[] = []
   const errors: string[] = []
+  const suffixedKode: string[] = []
   const seenKode = new Set<string>()
 
   const pick = (row: unknown[], field: Field): string =>
@@ -165,18 +199,23 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
       continue
     }
 
-    if (seenKode.has(values.kode)) {
-      if (errors.length < MAX_ERRORS) {
-        errors.push(`Baris ${excelRow}: kode "${values.kode}" duplikat di dalam file.`)
-      }
-      continue
+    // Kode dobel di-suffix otomatis (-2, -3, …) supaya tetap unik terhadap
+    // unique(client_id, kode). Template klien kadang mulai ulang nomor di section
+    // berbeda (mis. "Pendapatan & Biaya Lain-Lain" pakai ulang 24-xxxx). Nama akun
+    // (yang jadi identitas untuk mapping) tetap utuh & tidak disentuh.
+    let kode = values.kode
+    if (seenKode.has(kode)) {
+      let n = 2
+      while (seenKode.has(`${values.kode}-${n}`)) n++
+      kode = `${values.kode}-${n}`
+      suffixedKode.push(`${values.kode} → ${kode}`)
     }
-    seenKode.add(values.kode)
+    seenKode.add(kode)
 
     rows.push({
-      kode: values.kode,
+      kode,
       nama: values.nama,
-      posisi: values.posisi,
+      posisi: normalizePosisi(values.posisi),
       kelompok: values.kelompok,
       subKelompok: values.subKelompok,
       classCf: values.classCf === '' ? null : values.classCf,
@@ -187,5 +226,12 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
     errors.push('Tidak ada baris data akun yang ditemukan di bawah header.')
   }
 
-  return { rows, errors }
+  const warnings: string[] = []
+  if (suffixedKode.length > 0) {
+    warnings.push(
+      `${suffixedKode.length} kode dobel disesuaikan otomatis agar unik: ${suffixedKode.join(', ')}`
+    )
+  }
+
+  return { rows, errors, warnings }
 }

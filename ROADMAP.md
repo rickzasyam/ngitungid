@@ -149,6 +149,7 @@
 - ✅ `lib/api/guards.ts` (`requireUser`/`requireAdmin`) + `lib/coa-import.ts` (`parseCoaWorkbook` — normalisasi header, alias toleran, dedup kode, validasi field wajib, Class CF nullable)
 - ✅ Frontend disambungkan: `client-context` fetch `GET /api/clients` (`MOCK_CLIENTS` + `SEED_CLIENT_UUID_TO_MOCK_ID` dihapus, expose `clients` + `refreshClients`), sidebar switcher, admin-overview + modal "Klien Baru", Settings Master COA (upload/preview/status asli via API)
 - ✅ Terverifikasi end-to-end di browser (session admin asli): buat klien → muncul tanpa reload; upload COA valid → persist 4 akun (Class CF kosong → null); upload malformed (kolom Kode hilang) → 400 + COA lama TIDAK terhapus; preview & badge Settings render dari DB. Klien uji dibersihkan setelahnya (DB kembali 3 klien seed)
+- ✅ **2026-07-06 — hardening vs file asli (`Master COA RASYUKA.xlsx`):** parser awalnya menolak file nyata (baris judul "DATA MASTER COA", kolom nama berjudul "COA", posisi `D`/`K`, 5 kode dobel). Diperbaiki di `lib/coa-import.ts`: deteksi baris header by skor kecocokan alias (lewati banner), alias `COA`→nama, normalisasi `D`/`K`→`Debit`/`Kredit`, kode dobel di-suffix `-2` otomatis + `warnings[]` non-blocking (route + banner Settings). Hasil: **106 akun, 0 error**, terverifikasi insert ke Neon (unique(client_id, kode) terpenuhi, klien uji dibersihkan)
 
 ### 2.4 Upload & Extraction API
 - ⏳ POST /api/upload/csv — parse CSV with PapaParse
@@ -254,6 +255,8 @@
 | 2026-07-05 | `GET /api/clients` role-aware dalam satu endpoint (admin: semua; user: hanya klien-nya) | Satu sumber untuk `client-context` kedua role; user role tetap ter-scope ke klien-nya (RBAC di layer API, bukan cuma UI) |
 | 2026-07-05 | Tetap mock (di luar scope 2.3): status upload/overdue di admin-overview (→ 2.4/2.6), bar "storage used" sidebar (kosmetik, `pseudoStorage` deterministik → 2.6), persistensi Analytics Metrics Visibility (tabel `client_metric_visibility` ada, disambung setelah route API) | Menghindari scope creep; masing-masing bergantung subsistem yang belum dibangun. Data fabrikasi di admin-overview diganti state netral "Buka workspace" biar tidak menampilkan angka palsu dgn klien asli |
 | 2026-07-05 | Buat klien lewat modal "Klien Baru" di admin-overview; belum ada UI edit/hapus klien | Onboarding (create) yang dibutuhkan 2.3; edit/hapus menyusul bareng UI Account management. Hapus klien juga perlu hati-hati (FK `users.clientId` onDelete restrict) |
+| 2026-07-06 | Parser Master COA di-harden setelah uji file asli Rasyuka: deteksi header by skor alias (lewati baris judul), alias `COA`→nama, `D`/`K`→`Debit`/`Kredit`, kode dobel **di-suffix `-2`** (bukan ditolak) + `warnings[]` | Template klien nyata beda dari asumsi awal (banner judul, kolom bernama "COA", singkatan posisi, kode dipakai ulang antar section: mis. section "Lain-Lain" mulai ulang `24-xxxx`). Nama akun 100% unik (106/106) jadi identitas mapping tetap aman; suffix mempertahankan `unique(client_id, kode)` **tanpa migration & tanpa edit Excel** (pilihan user, vs relax constraint / renumber manual) |
+| 2026-07-06 | Phase 3 (Gemini PDF extraction) ditunda — laporan L/R klien ternyata PDF, butuh OCR Gemini + API key | User pilih fokus fix 2.3 dulu; Phase 3.1 lanjut sesi berikutnya saat `GEMINI_API_KEY` siap. Gemini bisa baca PDF native (inline base64, L/R Rasyuka cuma 104KB) → tidak perlu poppler/render lokal |
 
 ---
 
@@ -276,4 +279,4 @@
 ⏳ 2.4-2.6 Upload/Extraction, COA Matching, Financial Data API — belum dimulai
 
 ### Next Sprint
-2.4 Upload & Extraction API — `POST /api/upload/{csv|excel|pdf}` (mulai dari CSV/Excel via PapaParse/xlsx sesuai prioritas MVP), `GET /api/reports/[id]/status`. Sambungkan stub upload di `app/upload/page.tsx` ke route asli. Master COA sekarang sudah tersedia per klien (2.3) sebagai target mapping.
+**Phase 3.1 — Gemini PDF Extraction** (diprioritaskan di atas 2.4 CSV/Excel karena laporan klien nyata berbentuk PDF, bukan CSV/Excel). **Blocker: `GEMINI_API_KEY` di `.env.local`.** Rencana: SDK `@google/genai` + model Gemini Flash, kirim PDF native (inline base64) → ekstraksi line item terstruktur (rawName, amount, isSubtotal, confidence) → simpan `financial_reports` + `report_line_items` → wire upload(PDF)→extract→`extraction-review` (lepas dari `MOCK_LINES`). Mulai dari Laba Rugi (sample `01. January … L_R.pdf` sudah dipegang; strukturnya = mock extraction-review saat ini). 2.4 CSV/Excel ditunda (tim akunting pakai PDF); Master COA per klien sudah siap (2.3) sebagai target mapping 2.5.
