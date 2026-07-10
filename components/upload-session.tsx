@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Calendar,
   FileText,
@@ -12,9 +13,19 @@ import {
   BarChart3,
   BookOpen,
   ArrowLeftRight,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { useClient } from '@/lib/client-context'
+
+// Date → 'YYYY-MM-DD' dari komponen lokal (hindari geser hari akibat UTC).
+const toYMD = (d: Date) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 interface DateRange {
   from: Date | undefined
@@ -67,6 +78,10 @@ type UploadState = {
 
 export function UploadSession() {
   const { activeClient, role } = useClient()
+  const router = useRouter()
+
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [processError, setProcessError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(2026, 0, 1),
@@ -88,21 +103,17 @@ export function UploadSession() {
   }
 
   const handleFileSelect = (reportId: keyof UploadState, file: File) => {
-    const allowed = [
-      'application/pdf',
-      'text/csv',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ]
-    const isAllowed =
-      allowed.includes(file.type) ||
-      file.name.endsWith('.pdf') ||
-      file.name.endsWith('.csv') ||
-      file.name.endsWith('.xlsx') ||
-      file.name.endsWith('.xls')
-
-    if (!isAllowed || file.size > 25 * 1024 * 1024) return
-
+    // Fase 3.1 hanya PDF (ekstraksi Gemini). CSV/Excel menyusul.
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf) {
+      setProcessError('Fase ini hanya mendukung file PDF (CSV/Excel menyusul).')
+      return
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setProcessError('Ukuran file melebihi 25MB.')
+      return
+    }
+    setProcessError(null)
     setUploads((prev) => ({
       ...prev,
       [reportId]: { file, status: 'ready' },
@@ -132,8 +143,35 @@ export function UploadSession() {
   const uploadedCount = Object.values(uploads).filter(Boolean).length
   const isReadyToProcess = activeClient && dateRange?.from && uploadedCount > 0
 
-  const handleProcessSession = () => {
-    // TODO: POST to /api/upload/session
+  const handleProcessSession = async () => {
+    if (!activeClient || !dateRange?.from) return
+    const from = dateRange.from
+    const to = dateRange.to ?? dateRange.from
+
+    const fd = new FormData()
+    fd.append('clientId', activeClient.id)
+    fd.append('periodStart', toYMD(from))
+    fd.append('periodEnd', toYMD(to))
+    if (uploads.pnl) fd.append('pnl', uploads.pnl.file)
+    if (uploads.neraca) fd.append('neraca', uploads.neraca.file)
+    if (uploads.cashflow) fd.append('cashflow', uploads.cashflow.file)
+
+    setIsProcessing(true)
+    setProcessError(null)
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        setProcessError(payload?.error ?? 'Gagal memproses laporan.')
+        setIsProcessing(false)
+        return
+      }
+      // Sukses → ke extraction-review untuk periode ini (klien dari context).
+      router.push(`/extraction-review?start=${toYMD(from)}&end=${toYMD(to)}`)
+    } catch {
+      setProcessError('Terjadi kesalahan jaringan. Coba lagi.')
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -216,7 +254,7 @@ export function UploadSession() {
               <input
                 ref={ref}
                 type="file"
-                accept=".pdf,.csv,.xlsx,.xls"
+                accept=".pdf,application/pdf"
                 className="hidden"
                 onChange={e => {
                   const file = e.target.files?.[0]
@@ -354,7 +392,7 @@ export function UploadSession() {
                       {isDragOver ? 'Lepaskan di sini' : 'Drag & drop atau klik'}
                     </p>
                     <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-                      PDF, CSV, Excel · Max 25 MB
+                      PDF · Max 25 MB
                     </p>
                     <p className="text-[10px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
                       {report.description}
@@ -441,18 +479,51 @@ export function UploadSession() {
         <button
           key={isReadyToProcess ? 'ready' : 'idle'}
           onClick={handleProcessSession}
-          disabled={!isReadyToProcess}
+          disabled={!isReadyToProcess || isProcessing}
           className="ng-chip-in flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold flex-shrink-0 transition-all duration-300 enabled:hover:-translate-y-px enabled:active:scale-[.96] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--color-accent-primary)"
           style={{
-            background: isReadyToProcess ? 'var(--color-accent-primary)' : '#e5e5e5',
-            color: isReadyToProcess ? 'var(--color-bg-main)' : '#9ca3af',
-            boxShadow: isReadyToProcess ? '0 4px 16px rgba(218,241,99,0.4)' : 'none',
+            background: isReadyToProcess && !isProcessing ? 'var(--color-accent-primary)' : '#e5e5e5',
+            color: isReadyToProcess && !isProcessing ? 'var(--color-bg-main)' : '#9ca3af',
+            boxShadow: isReadyToProcess && !isProcessing ? '0 4px 16px rgba(218,241,99,0.4)' : 'none',
           }}
         >
-          Proses Laporan
-          <ArrowRight className="w-4 h-4" />
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Mengekstrak dengan AI…
+            </>
+          ) : (
+            <>
+              Proses Laporan
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </div>
+
+      {/* Error proses */}
+      {processError && (
+        <div
+          className="flex items-center gap-2 px-4 py-3 rounded-2xl animate-fade-in"
+          style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+        >
+          <AlertCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#dc2626' }} />
+          <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{processError}</span>
+        </div>
+      )}
+
+      {/* Info saat AI memproses */}
+      {isProcessing && (
+        <div
+          className="flex items-center gap-2 px-4 py-3 rounded-2xl animate-fade-in"
+          style={{ background: '#f7fde8', border: '1px solid #d9f99d' }}
+        >
+          <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" style={{ color: '#4d7c0f' }} />
+          <span className="text-xs font-medium" style={{ color: '#4d7c0f' }}>
+            AI sedang mengekstrak laporan — bisa memakan ~10–30 detik. Jangan tutup halaman ini.
+          </span>
+        </div>
+      )}
 
     </div>
   )

@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-07-05
-**Current Phase:** Phase 2 — Backend & Database (2.1–2.3 selesai; Phase 1 Frontend 98% selesai)
+**Last Updated:** 2026-07-06
+**Current Phase:** Phase 2 Backend (2.1–2.3 ✅) + Phase 3.1 Gemini PDF Extraction ✅ — Phase 1 Frontend 98%
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -160,7 +160,10 @@
 ### 2.5 COA Matching Engine
 - ⏳ Exact match algorithm
 - ⏳ Fuzzy match with history boost (coa_mapping_history)
-- ⏳ POST /api/reports/[id]/mapping — confirm line item mapping
+- ✅ POST /api/reports/[id]/mapping — confirm line item mapping (2026-07-10)
+- ✅ GET /api/reports/periods — daftar periode per klien (prasyarat period selector)
+- ✅ GET/PUT /api/clients/[id]/metrics — persist client_metric_visibility (2026-07-10)
+- ✅ /coa-mapping lepas dari mock: dropdown COA + line item + period selector dari API
 
 ### 2.6 Financial Data API
 - ⏳ GET /api/dashboard/[clientId] — aggregated metrics
@@ -171,13 +174,17 @@
 
 ## Phase 3 — AI Integration
 
-### 3.1 Gemini PDF Extraction
-- ⏳ Gemini API setup and auth
-- ⏳ PnL extraction prompt — line items, amounts, categories
-- ⏳ Balance sheet extraction prompt — assets, liabilities, equity
-- ⏳ Cash flow extraction prompt — operating/investing/financing detail
-- ⏳ Confidence scoring per extracted line item
-- ⏳ Header/total row filtering (ignore subtotals)
+### 3.1 Gemini PDF Extraction — **COMPLETED 2026-07-06**
+- ✅ Gemini setup & auth — `@google/genai` v2.10, model `gemini-3.5-flash`, `GEMINI_API_KEY`; `lib/gemini/client.ts` (lazy singleton) + `lib/gemini/extract.ts`
+- ✅ Ekstraksi structured output (`responseSchema`) — PDF native inline base64, per baris: `rawName`, `amount` (negatif utk pengurang/kurung), `isSubtotal`, `confidence`; retry transient 429/5xx (honor server `retryDelay`)
+- ✅ Prompt per tipe — Laba Rugi / Neraca / Arus Kas (hint struktur & pola subtotal masing-masing)
+- ✅ Confidence per baris (0–100, dari Gemini)
+- ✅ Subtotal DITANDAI (`isSubtotal`), bukan difilter — toggle show/hide di extraction-review
+- ✅ Divalidasi vs 3 PDF asli Rasyuka Maret 2026: L/R 46 baris, Neraca 29 (TOTAL AKTIVA = TOTAL PASIVA seimbang), Arus Kas 38 — amount/tanda/subtotal akurat
+- ✅ Upload API (`POST /api/upload`, admin) — simpan PDF (bytea) + ekstrak paralel + simpan `report_line_items` (`unmatched`) + status `review`; wire tombol "Proses Laporan" + state "Mengekstrak dengan AI…"
+- ✅ Reports API (`GET /api/reports` by client+period, `GET /api/reports/[id]/pdf`) + extraction-review lepas dari `MOCK_LINES`/`MOCK_REPORT_META` (line item asli + PDF `<iframe>`)
+- ✅ `financial_reports.sourcePdf` bytea (migration `0002`) — round-trip Buffer terverifikasi via neon-http
+- ⏳ Persist review actions (edit/reject/confirm) + "Lanjut ke COA Mapping" → digabung ke Phase 2.5
 
 ### 3.2 COA Auto-Mapping AI
 - ⏳ Gemini-assisted fuzzy matching
@@ -256,7 +263,13 @@
 | 2026-07-05 | Tetap mock (di luar scope 2.3): status upload/overdue di admin-overview (→ 2.4/2.6), bar "storage used" sidebar (kosmetik, `pseudoStorage` deterministik → 2.6), persistensi Analytics Metrics Visibility (tabel `client_metric_visibility` ada, disambung setelah route API) | Menghindari scope creep; masing-masing bergantung subsistem yang belum dibangun. Data fabrikasi di admin-overview diganti state netral "Buka workspace" biar tidak menampilkan angka palsu dgn klien asli |
 | 2026-07-05 | Buat klien lewat modal "Klien Baru" di admin-overview; belum ada UI edit/hapus klien | Onboarding (create) yang dibutuhkan 2.3; edit/hapus menyusul bareng UI Account management. Hapus klien juga perlu hati-hati (FK `users.clientId` onDelete restrict) |
 | 2026-07-06 | Parser Master COA di-harden setelah uji file asli Rasyuka: deteksi header by skor alias (lewati baris judul), alias `COA`→nama, `D`/`K`→`Debit`/`Kredit`, kode dobel **di-suffix `-2`** (bukan ditolak) + `warnings[]` | Template klien nyata beda dari asumsi awal (banner judul, kolom bernama "COA", singkatan posisi, kode dipakai ulang antar section: mis. section "Lain-Lain" mulai ulang `24-xxxx`). Nama akun 100% unik (106/106) jadi identitas mapping tetap aman; suffix mempertahankan `unique(client_id, kode)` **tanpa migration & tanpa edit Excel** (pilihan user, vs relax constraint / renumber manual) |
-| 2026-07-06 | Phase 3 (Gemini PDF extraction) ditunda — laporan L/R klien ternyata PDF, butuh OCR Gemini + API key | User pilih fokus fix 2.3 dulu; Phase 3.1 lanjut sesi berikutnya saat `GEMINI_API_KEY` siap. Gemini bisa baca PDF native (inline base64, L/R Rasyuka cuma 104KB) → tidak perlu poppler/render lokal |
+| 2026-07-06 | Phase 3 (Gemini PDF extraction) ditunda — laporan L/R klien ternyata PDF, butuh OCR Gemini + API key | ~~User pilih fokus fix 2.3 dulu~~ → **dikerjakan 2026-07-06** setelah user isi `GEMINI_API_KEY`. Gemini baca PDF native (inline base64, ~100KB) → tidak perlu poppler/render lokal |
+| 2026-07-06 | SDK `@google/genai` (v2.10) + model `gemini-3.5-flash`, structured output (`responseSchema` + `responseMimeType: application/json`), `temperature: 0` | SDK unified GA (bukan `@google/generative-ai` lawas); API dipin ke tipe SDK terpasang (dua sumber dok beda — satu halusinasi `interactions.create`). Flash cukup akurat & murah utk dokumen. Schema output menjamin JSON valid → tak perlu parsing bebas |
+| 2026-07-06 | PDF disimpan di Neon sebagai `bytea` (kolom `financial_reports.source_pdf`, nullable) — bukan Vercel Blob | File kecil (~100KB–1MB), TOAST aman; tanpa service/token tambahan. neon-http kembalikan `Buffer` langsung (round-trip terverifikasi). Ganti ke object storage kalau nanti perlu file besar/skala |
+| 2026-07-06 | Ekstraksi SINKRON saat upload, paralel (`Promise.all`) lintas file; `export const maxDuration = 60` di route | 3 PDF paralel ~17–25s (bounded by slowest) < 60s. Async + polling (`GET /api/reports/[id]/status`) = jalur produksi kalau perlu, belum dibangun. Retry transient (429 free-tier/5xx) honor `retryDelay` |
+| 2026-07-06 | "Sesi upload" = (clientId, periodStart, periodEnd) — TANPA tabel session baru | 3 laporan dikelompokkan by klien+periode (sejalan `unique(client, type, period)`); extraction-review load by query `?start=&end=`. Sederhana, tak ada entitas baru |
+| 2026-07-06 | **Free tier `gemini-3.5-flash` = 5 request/menit** — didokumentasikan di `.env.example` | 1 upload = 1 request/file (maks 3). Pemakaian rutin banyak klien butuh billing berbayar. Retry sudah honor `retryDelay` tapi tidak menembus kuota menit |
+| 2026-07-06 | `pnpm-workspace.yaml` `allowBuilds`: `@google/genai` & `protobufjs` = `false` | pnpm v11 memblok `pnpm <script>` (precheck install exit 1) kalau build script belum diputuskan. SDK jalan tanpa build (ekstraksi terverifikasi) → `false` = jangan jalankan postinstall, tanpa risiko script pihak ketiga |
 
 ---
 
@@ -275,8 +288,17 @@
 ### Phase 2 Progress
 ✅ 2.1 Database Schema — 7 tabel (termasuk `users` dari 2.2) + 4 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, migrasi sudah dijalankan ke Neon project nyata milik user
 ✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — selesai penuh; login manual end-to-end dikonfirmasi user di browser (kredensial asli mereka)
-✅ 2.3 Client Onboarding API — 4 route (`GET`/`POST /api/clients`, `GET`/`POST /api/clients/[id]/coa`) + parser Excel + guards; frontend lepas dari mock (`MOCK_CLIENTS` & bridge UUID dihapus). Terverifikasi end-to-end di browser, DB dibersihkan dari data uji
-⏳ 2.4-2.6 Upload/Extraction, COA Matching, Financial Data API — belum dimulai
+✅ 2.3 Client Onboarding API — 4 route (`GET`/`POST /api/clients`, `GET`/`POST /api/clients/[id]/coa`) + parser Excel + guards; frontend lepas dari mock (`MOCK_CLIENTS` & bridge UUID dihapus). Parser di-harden vs Master COA asli Rasyuka (2026-07-06)
+✅ 3.1 Gemini PDF Extraction — `@google/genai` + `gemini-3.5-flash`, `POST /api/upload` (simpan PDF bytea + ekstrak paralel + line item), `GET /api/reports(+/[id]/pdf)`, upload page & extraction-review lepas dari mock. Divalidasi vs 3 PDF asli; pipeline DB terverifikasi. (2.4 CSV/Excel di-skip — laporan klien PDF)
+🟡 2.5 COA Matching — **persist mapping SUDAH jalan** (`POST /api/reports/[id]/mapping` → `coa_mapping_history` upsert + `report_line_items.status='matched'` + report `status='mapped'` kalau habis). Sisa: exact/fuzzy match engine + persist review actions extraction-review. `/coa-mapping` sudah full backend (2026-07-10)
+✅ Persistensi Analytics Metrics Visibility — `GET/PUT /api/clients/[id]/metrics`, `AnalyticsDisplayTab` pegang datanya sendiri (menutup TODO 2026-07-05). Backend hanya simpan metrik yang pernah di-toggle; daftar + default tetap di frontend (`METRIC_CATEGORIES`)
+⏳ 2.6 Financial Data API (`/dashboard` + `/analytics`) — belum dimulai, **butuh semantic layer** (lihat catatan di bawah)
 
 ### Next Sprint
-**Phase 3.1 — Gemini PDF Extraction** (diprioritaskan di atas 2.4 CSV/Excel karena laporan klien nyata berbentuk PDF, bukan CSV/Excel). **Blocker: `GEMINI_API_KEY` di `.env.local`.** Rencana: SDK `@google/genai` + model Gemini Flash, kirim PDF native (inline base64) → ekstraksi line item terstruktur (rawName, amount, isSubtotal, confidence) → simpan `financial_reports` + `report_line_items` → wire upload(PDF)→extract→`extraction-review` (lepas dari `MOCK_LINES`). Mulai dari Laba Rugi (sample `01. January … L_R.pdf` sudah dipegang; strukturnya = mock extraction-review saat ini). 2.4 CSV/Excel ditunda (tim akunting pakai PDF); Master COA per klien sudah siap (2.3) sebagai target mapping 2.5.
+**Phase 2.5 — COA Matching + persist review.** Line item hasil ekstraksi sekarang `unmatched` tanpa COA. Bangun: exact match + fuzzy match (dengan history boost dari `coa_mapping_history`) rawName → Master COA per klien; `suggestedCoa` muncul di extraction-review & coa-mapping. Lalu PERSIST review actions (edit/reject/confirm) via `PATCH`/`POST /api/reports/[id]/...` supaya "Konfirmasi Semua" & "Lanjut ke COA Mapping" nyata (sekarang masih state lokal). Master COA per klien (2.3) + line item (3.1) sudah siap sebagai input.
+
+Catatan operasional: `GEMINI_API_KEY` saat ini **free tier (5 req/menit)** — cukup utk 1 upload (≤3 file), tapi pemakaian rutin butuh billing berbayar (lihat `.env.example`).
+
+**Blocker 2.6 (Financial Data API).** `/dashboard` & `/analytics` tidak bisa dihitung penuh dari schema sekarang. `master_coa.sub_kelompok` disimpan **verbatim dari Excel klien** (`lib/coa-import.ts` cuma menormalkan `posisi`), jadi tidak ada cara deterministik mengenali "Aktiva Lancar", "Persediaan", "Hutang Lancar", atau memisah Hutang vs Modal (dua-duanya `posisi='Kredit'` di `kelompok='Neraca'`). Rasio likuiditas/leverage/efisiensi, health score, dan benchmark semuanya bergantung ini. Butuh **semantic layer** (kolom `account_role` ternormalisasi atau tabel pemetaan `sub_kelompok → role` per klien) sebelum 2.6 bisa dimulai. Yang sudah bisa dihitung tanpa itu: revenue, total expenses, net profit, expense breakdown (label apa adanya), dan cashflow waterfall (pakai `master_coa.class_cf`).
+
+**Dev fixture.** `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) mengisi Master COA + 1–2 periode laporan + line item **berbeda per klien** (Rasyuka/Graphicook/Nusantara). Idempotent, tidak menyentuh `seed.ts`. Dipakai untuk memverifikasi reaktivitas client switcher — DB sebelumnya kosong sehingga semua klien tampak sama.

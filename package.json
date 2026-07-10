@@ -11,10 +11,12 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx --env-file=.env.local lib/db/seed.ts"
+    "db:seed": "tsx --env-file=.env.local lib/db/seed.ts",
+    "db:seed:dev": "tsx --env-file=.env.local lib/db/seed-dev.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@google/genai": "^2.10.0",
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/analytics": "1.6.1",
     "bcryptjs": "^3.0.3",

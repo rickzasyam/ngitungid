@@ -1,0 +1,1 @@
+ALTER TABLE "financial_reports" ADD COLUMN "source_pdf" "bytea";

@@ -15,6 +15,13 @@
       "when": 1783240586175,
       "tag": "0001_rapid_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783310026016,
+      "tag": "0002_clammy_agent_brand",
+      "breakpoints": true
     }
   ]
 }

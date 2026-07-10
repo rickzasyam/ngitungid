@@ -11,7 +11,16 @@ import {
   timestamp,
   unique,
   index,
+  customType,
 } from 'drizzle-orm/pg-core'
+
+// Postgres bytea — drizzle pg-core tidak punya helper bawaan; simpan Buffer
+// (byte PDF asli untuk preview split-screen di extraction-review).
+const bytea = customType<{ data: Buffer; default: false }>({
+  dataType() {
+    return 'bytea'
+  },
+})
 
 // ── Enums ────────────────────────────────────────────────────
 // Nilai stabil, dipakai di banyak tempat kode (UI state machine,
@@ -85,6 +94,9 @@ export const financialReports = pgTable(
     periodStart: date('period_start').notNull(),
     periodEnd: date('period_end').notNull(),
     sourceFileName: text('source_file_name').notNull(),
+    // Byte PDF asli (nullable) — dipakai preview kiri di extraction-review.
+    // Null untuk sumber non-PDF (mis. CSV/Excel nanti).
+    sourcePdf: bytea('source_pdf'),
     status: reportStatusEnum('status').notNull().default('uploaded'),
     extractedAt: timestamp('extracted_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

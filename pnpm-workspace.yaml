@@ -1,4 +1,8 @@
 allowBuilds:
+  # @google/genai & protobufjs tidak butuh build script — SDK jalan tanpa itu
+  # (ekstraksi PDF terverifikasi). false = jangan jalankan postinstall-nya.
+  '@google/genai': false
   esbuild: true
   msw: true
+  protobufjs: false
   sharp: true

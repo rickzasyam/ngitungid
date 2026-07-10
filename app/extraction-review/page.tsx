@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Header } from '@/components/header'
 import { useRequireClient } from '@/lib/use-require-client'
 import {
@@ -18,19 +20,9 @@ import {
   TrendingUp,
   Scale,
   Waves,
+  Loader2,
+  Upload,
 } from 'lucide-react'
-
-// Mock extracted data — will be replaced with real Gemini API data in Phase 3
-const MOCK_REPORT_META = {
-  clientName: 'Rasyuka',
-  reportType: 'Laba Rugi',
-  periode: 'Januari 2026',
-  fileName: '01. January - Laporan Keuangan Rasyuka 2026 - L_R.pdf',
-  extractedAt: '2026-06-19 14:32',
-  totalLines: 28,
-  matchedLines: 25,
-  unmatchedLines: 3,
-}
 
 type LineStatus = 'matched' | 'unmatched' | 'edited' | 'rejected'
 
@@ -46,32 +38,29 @@ type ExtractedLine = {
   editedName?: string
 }
 
-const MOCK_LINES: ExtractedLine[] = [
-  { id: '1', rawName: 'Penjualan Shopee Rasyuka Official', suggestedCOA: 'Penjualan Bruto - Shopee', masterCOACode: '04-0001', amount: 422597000, isSubtotal: false, confidence: 98, status: 'matched' },
-  { id: '2', rawName: 'Penjualan Tiktok', suggestedCOA: 'Penjualan Bruto - Tiktok', masterCOACode: '04-0002', amount: 112199000, isSubtotal: false, confidence: 97, status: 'matched' },
-  { id: '3', rawName: 'Penjualan Offline', suggestedCOA: 'Penjualan Bruto - Offline', masterCOACode: '04-0003', amount: 63804000, isSubtotal: false, confidence: 95, status: 'matched' },
-  { id: '4', rawName: 'Retur Penjualan - Tiktok', suggestedCOA: 'Retur Penjualan - Tiktok', masterCOACode: '04-0005', amount: -534000, isSubtotal: false, confidence: 93, status: 'matched' },
-  { id: '5', rawName: 'Retur Penjualan - Shopee Rasyuka Official', suggestedCOA: 'Retur Penjualan - Shopee', masterCOACode: '04-0004', amount: -2526000, isSubtotal: false, confidence: 92, status: 'matched' },
-  { id: '6', rawName: 'Potongan Harga - Tiktok', suggestedCOA: 'Potongan Harga - Tiktok', masterCOACode: '04-0007', amount: -23815076, isSubtotal: false, confidence: 90, status: 'matched' },
-  { id: '7', rawName: 'Potongan Harga - Shopee Rasyuka Official', suggestedCOA: 'Potongan Harga - Shopee', masterCOACode: '04-0006', amount: -86637993, isSubtotal: false, confidence: 91, status: 'matched' },
-  { id: '8', rawName: 'PENERIMAAN BERSIH', suggestedCOA: null, masterCOACode: null, amount: 485086931, isSubtotal: true, confidence: 100, status: 'matched' },
-  { id: '9', rawName: 'Harga Pokok Penjualan - Shopee Rasyuka Official', suggestedCOA: 'HPP - Shopee', masterCOACode: '05-0001', amount: 138697320, isSubtotal: false, confidence: 96, status: 'matched' },
-  { id: '10', rawName: 'Harga Pokok Penjualan - Tiktok', suggestedCOA: 'HPP - Tiktok', masterCOACode: '05-0002', amount: 35120790, isSubtotal: false, confidence: 95, status: 'matched' },
-  { id: '11', rawName: 'Harga Pokok Penjualan - Offline', suggestedCOA: 'HPP - Offline', masterCOACode: '05-0003', amount: 26636093, isSubtotal: false, confidence: 94, status: 'matched' },
-  { id: '12', rawName: 'Biaya Admin MP - Shopee Rasyuka Official', suggestedCOA: 'Biaya Admin Marketplace - Shopee', masterCOACode: '11-0001', amount: 54103662, isSubtotal: false, confidence: 88, status: 'matched' },
-  { id: '13', rawName: 'Beban Ads Shopee', suggestedCOA: 'Beban Iklan - Shopee', masterCOACode: '11-0003', amount: 38453972, isSubtotal: false, confidence: 85, status: 'matched' },
-  { id: '14', rawName: 'Biaya Admin MP - Tiktok', suggestedCOA: 'Biaya Admin Marketplace - Tiktok', masterCOACode: '11-0002', amount: 16043662, isSubtotal: false, confidence: 87, status: 'matched' },
-  { id: '15', rawName: 'Beban Ads Tiktok', suggestedCOA: 'Beban Iklan - Tiktok', masterCOACode: '11-0004', amount: 12297117, isSubtotal: false, confidence: 84, status: 'matched' },
-  { id: '16', rawName: 'Beban Ads Meta', suggestedCOA: null, masterCOACode: null, amount: 1674449, isSubtotal: false, confidence: 42, status: 'unmatched' },
-  { id: '17', rawName: 'Biaya Gaji Karyawan Staf', suggestedCOA: 'Beban Gaji', masterCOACode: '24-0001', amount: 19767100, isSubtotal: false, confidence: 78, status: 'unmatched' },
-  { id: '18', rawName: 'Biaya Sewa Kantor', suggestedCOA: 'Biaya Sewa', masterCOACode: '25-0001', amount: 2666667, isSubtotal: false, confidence: 72, status: 'unmatched' },
-  { id: '19', rawName: 'Biaya Konsultan', suggestedCOA: 'Biaya Konsultan Manajemen', masterCOACode: '26-0001', amount: 2375000, isSubtotal: false, confidence: 65, status: 'matched' },
-  { id: '20', rawName: 'Biaya Konsumsi', suggestedCOA: 'Biaya Konsumsi dan Entertainment', masterCOACode: '27-0001', amount: 873000, isSubtotal: false, confidence: 82, status: 'matched' },
-  { id: '21', rawName: 'Infaq Shadaqah', suggestedCOA: 'Infaq dan Shodaqoh', masterCOACode: '31-0001', amount: -1435000, isSubtotal: false, confidence: 99, status: 'matched' },
-  { id: '22', rawName: 'Biaya Penyusutan Peralatan Kantor', suggestedCOA: 'Beban Penyusutan Peralatan', masterCOACode: '32-0001', amount: -2158020, isSubtotal: false, confidence: 96, status: 'matched' },
-  { id: '23', rawName: 'LABA SEBELUM PAJAK', suggestedCOA: null, masterCOACode: null, amount: 127635672, isSubtotal: true, confidence: 100, status: 'matched' },
-  { id: '24', rawName: 'LABA BERSIH SETELAH PAJAK', suggestedCOA: null, masterCOACode: null, amount: 127635672, isSubtotal: true, confidence: 100, status: 'matched' },
-]
+type ReportType = 'laba_rugi' | 'neraca' | 'arus_kas'
+type TabId = 'pnl' | 'neraca' | 'cashflow'
+
+type ReportData = {
+  id: string
+  reportType: ReportType
+  sourceFileName: string
+  status: string
+  extractedAt: string | null
+  lineItems: ExtractedLine[]
+}
+
+const TYPE_TO_TAB: Record<ReportType, TabId> = {
+  laba_rugi: 'pnl',
+  neraca: 'neraca',
+  arus_kas: 'cashflow',
+}
+const TAB_ORDER: TabId[] = ['pnl', 'neraca', 'cashflow']
+const TAB_META: Record<TabId, { label: string; Icon: typeof TrendingUp }> = {
+  pnl: { label: 'Laba Rugi', Icon: TrendingUp },
+  neraca: { label: 'Neraca', Icon: Scale },
+  cashflow: { label: 'Arus Kas', Icon: Waves },
+}
 
 const formatRupiah = (amount: number) => {
   const abs = Math.abs(amount)
@@ -85,15 +74,96 @@ const getConfidenceStyle = (confidence: number) => {
   return { color: '#dc2626', bg: '#fef2f2', label: 'Rendah' }
 }
 
-export default function ExtractionReviewPage() {
-  const { activeClient, isLoaded } = useRequireClient()
+function formatPeriode(start: string | null, end: string | null): string {
+  if (!start || !end) return ''
+  const s = new Date(`${start}T00:00:00`)
+  const e = new Date(`${end}T00:00:00`)
+  const sm = s.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  const em = e.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  if (sm === em) return sm
+  return `${s.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+}
 
-  const [lines, setLines] = useState<ExtractedLine[]>(MOCK_LINES)
+function formatExtractedAt(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+const EMPTY_LINES: Record<TabId, ExtractedLine[]> = { pnl: [], neraca: [], cashflow: [] }
+const EMPTY_REPORTS: Record<TabId, ReportData | null> = { pnl: null, neraca: null, cashflow: null }
+
+function ExtractionReviewInner() {
+  const { activeClient, isLoaded } = useRequireClient()
+  const searchParams = useSearchParams()
+  const start = searchParams.get('start')
+  const end = searchParams.get('end')
+
+  const [reports, setReports] = useState<Record<TabId, ReportData | null>>(EMPTY_REPORTS)
+  const [linesByTab, setLinesByTab] = useState<Record<TabId, ExtractedLine[]>>(EMPTY_LINES)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [showSubtotals, setShowSubtotals] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'unmatched' | 'matched'>('all')
-  const [activeTab, setActiveTab] = useState<'pnl' | 'neraca' | 'cashflow'>('pnl')
+  const [activeTab, setActiveTab] = useState<TabId>('pnl')
+
+  useEffect(() => {
+    if (!isLoaded || !activeClient || !start || !end) {
+      if (isLoaded) setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setLoadError(null)
+    ;(async () => {
+      try {
+        const res = await fetch(
+          `/api/reports?clientId=${activeClient.id}&periodStart=${start}&periodEnd=${end}`
+        )
+        if (!res.ok) {
+          if (!cancelled) {
+            setLoadError('Gagal memuat laporan.')
+            setLoading(false)
+          }
+          return
+        }
+        const data = (await res.json()) as { reports: ReportData[] }
+        if (cancelled) return
+        const r: Record<TabId, ReportData | null> = { pnl: null, neraca: null, cashflow: null }
+        const l: Record<TabId, ExtractedLine[]> = { pnl: [], neraca: [], cashflow: [] }
+        for (const rep of data.reports) {
+          const tab = TYPE_TO_TAB[rep.reportType]
+          if (tab) {
+            r[tab] = rep
+            l[tab] = rep.lineItems
+          }
+        }
+        setReports(r)
+        setLinesByTab(l)
+        const firstAvail = TAB_ORDER.find(t => r[t])
+        if (firstAvail) setActiveTab(firstAvail)
+        setLoading(false)
+      } catch {
+        if (!cancelled) {
+          setLoadError('Terjadi kesalahan saat memuat.')
+          setLoading(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isLoaded, activeClient, start, end])
+
+  const lines = linesByTab[activeTab]
+  const activeReport = reports[activeTab]
+
+  const updateActiveLines = (fn: (l: ExtractedLine) => ExtractedLine) =>
+    setLinesByTab(prev => ({ ...prev, [activeTab]: prev[activeTab].map(fn) }))
 
   const visibleLines = lines.filter(line => {
     if (!showSubtotals && line.isSubtotal) return false
@@ -106,13 +176,8 @@ export default function ExtractionReviewPage() {
   const confirmedCount = lines.filter(l => l.status === 'matched' || l.status === 'edited').length
   const rejectedCount = lines.filter(l => l.status === 'rejected').length
 
-  const handleAccept = (id: string) => {
-    setLines(prev => prev.map(l => l.id === id ? { ...l, status: 'matched' } : l))
-  }
-
-  const handleReject = (id: string) => {
-    setLines(prev => prev.map(l => l.id === id ? { ...l, status: 'rejected' } : l))
-  }
+  const handleReject = (id: string) =>
+    updateActiveLines(l => (l.id === id ? { ...l, status: 'rejected' } : l))
 
   const handleEdit = (line: ExtractedLine) => {
     setEditingId(line.id)
@@ -120,32 +185,34 @@ export default function ExtractionReviewPage() {
   }
 
   const handleSaveEdit = (id: string) => {
-    setLines(prev => prev.map(l =>
+    updateActiveLines(l =>
       l.id === id ? { ...l, suggestedCOA: editValue, editedName: editValue, status: 'edited' } : l
-    ))
+    )
     setEditingId(null)
   }
 
-  const handleReset = (id: string) => {
-    setLines(prev => prev.map(l =>
+  const handleReset = (id: string) =>
+    updateActiveLines(l =>
       l.id === id ? { ...l, status: l.confidence >= 70 ? 'matched' : 'unmatched', editedName: undefined } : l
-    ))
-  }
+    )
 
   const handleConfirmAll = () => {
-    setLines(prev => prev.map(l =>
-      l.status !== 'rejected' ? { ...l, status: 'matched' } : l
-    ))
-    // TODO: POST to /api/reports/confirm
+    updateActiveLines(l => (l.status !== 'rejected' ? { ...l, status: 'matched' } : l))
+    // TODO(2.5): persist review + POST /api/reports/[id]/confirm lalu ke COA Mapping.
   }
 
-  const tabs = [
-    { id: 'pnl',      label: 'Laba Rugi', Icon: TrendingUp, count: 24 },
-    { id: 'neraca',   label: 'Neraca',    Icon: Scale,      count: 0  },
-    { id: 'cashflow', label: 'Arus Kas',  Icon: Waves,      count: 0  },
-  ]
+  const tabs = TAB_ORDER.map(id => ({
+    id,
+    label: TAB_META[id].label,
+    Icon: TAB_META[id].Icon,
+    count: linesByTab[id].filter(l => !l.isSubtotal).length,
+    available: !!reports[id],
+  }))
 
   if (!isLoaded || !activeClient) return null
+
+  const noPeriod = !start || !end
+  const noReports = !loading && !noPeriod && TAB_ORDER.every(t => !reports[t])
 
   return (
     <div className="flex-1 p-3 min-w-0 overflow-hidden">
@@ -153,29 +220,55 @@ export default function ExtractionReviewPage() {
         className="h-full rounded-3xl overflow-hidden flex flex-col"
         style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
       >
-          <Header currentStep={2} />
+        <Header currentStep={2} />
 
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center gap-2" style={{ background: '#f8f8f8', color: '#9ca3af' }}>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Memuat hasil ekstraksi…</span>
+          </div>
+        ) : noPeriod || noReports ? (
+          <div className="flex-1 flex items-center justify-center p-6" style={{ background: '#f8f8f8' }}>
+            <div className="text-center max-w-sm">
+              <div
+                className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+                style={{ border: '1.5px dashed rgba(218,241,99,0.9)', background: '#fbfef2' }}
+              >
+                <FileText className="w-6 h-6" style={{ color: '#8aa32e' }} />
+              </div>
+              <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>
+                {loadError ?? 'Belum ada laporan untuk direview'}
+              </p>
+              <p className="text-xs mb-4" style={{ color: '#6b7280' }}>
+                {noPeriod
+                  ? 'Buka halaman ini lewat tombol "Proses Laporan" di Upload.'
+                  : 'Upload & proses laporan untuk periode ini dulu.'}
+              </p>
+              <Link
+                href="/upload"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+                style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-main)' }}
+              >
+                <Upload className="w-4 h-4" />
+                Ke halaman Upload
+              </Link>
+            </div>
+          </div>
+        ) : (
           <main className="flex-1 overflow-hidden flex flex-col md:flex-row" style={{ background: '#f8f8f8' }}>
-
             {/* LEFT PANEL — PDF Preview */}
             <div
               className="ng-rise w-full md:w-2/5 min-w-[280px] h-[300px] md:h-auto flex-shrink-0 flex flex-col border-r overflow-hidden"
               style={{ borderColor: '#e5e5e5', background: 'white' }}
             >
-              {/* PDF panel header */}
-              <div className="px-5 py-4 border-b flex items-center justify-between flex-shrink-0"
-                style={{ borderColor: '#f0f0f0' }}>
-                <div>
+              <div className="px-5 py-4 border-b flex items-center justify-between flex-shrink-0" style={{ borderColor: '#f0f0f0' }}>
+                <div className="min-w-0">
                   <h3 className="text-sm font-bold" style={{ color: '#2d2d2d' }}>Dokumen PDF</h3>
-                  <p className="text-xs mt-0.5 truncate max-w-[240px]"
-                    style={{ color: '#6b7280' }}>
-                    {MOCK_REPORT_META.fileName}
+                  <p className="text-xs mt-0.5 truncate max-w-[240px]" style={{ color: '#6b7280' }}>
+                    {activeReport?.sourceFileName ?? '—'}
                   </p>
                 </div>
-                <div
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-                  style={{ background: '#f0f0f0' }}
-                >
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0" style={{ background: '#f0f0f0' }}>
                   <Eye className="w-3.5 h-3.5" style={{ color: '#6b7280' }} />
                   <span className="text-xs font-medium" style={{ color: '#6b7280' }}>Preview</span>
                 </div>
@@ -186,8 +279,9 @@ export default function ExtractionReviewPage() {
                 {tabs.map(tab => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200"
+                    onClick={() => tab.available && setActiveTab(tab.id)}
+                    disabled={!tab.available}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: activeTab === tab.id ? 'var(--color-accent-primary)' : '#f0f0f0',
                       color: activeTab === tab.id ? 'var(--color-bg-main)' : '#6b7280',
@@ -211,82 +305,23 @@ export default function ExtractionReviewPage() {
               </div>
 
               {/* PDF viewer area */}
-              <div className="flex-1 overflow-y-auto p-4">
-                {activeTab === 'pnl' ? (
-                  <div
-                    className="rounded-2xl overflow-hidden"
-                    style={{ border: '1px solid #e5e5e5' }}
-                  >
-                    {/* Mock PDF content — styled to look like the Rasyuka PnL PDF */}
-                    <div className="p-4" style={{ background: '#fafafa' }}>
-                      <div className="text-center mb-4">
-                        <p className="text-sm font-bold" style={{ color: 'var(--color-bg-main)' }}>RASYUKA</p>
-                        <p className="text-sm font-bold" style={{ color: 'var(--color-bg-main)' }}>Laba Rugi</p>
-                        <p className="text-sm font-bold" style={{ color: 'var(--color-bg-main)' }}>January 2026</p>
-                      </div>
-                      <div className="space-y-0.5">
-                        {[
-                          { label: 'PENERIMAAN :', value: null, bold: true, indent: 0 },
-                          { label: 'Penjualan Shopee Rasyuka Official', value: '422,597,000', bold: false, indent: 1 },
-                          { label: 'Penjualan Tiktok', value: '112,199,000', bold: false, indent: 1 },
-                          { label: 'Penjualan Offline', value: '63,804,000', bold: false, indent: 1 },
-                          { label: 'Retur Penjualan - Tiktok', value: '(534,000)', bold: false, indent: 1 },
-                          { label: 'Retur Penjualan - Shopee Rasyuka Official', value: '(2,526,000)', bold: false, indent: 1 },
-                          { label: 'Potongan Harga - Tiktok', value: '(23,815,076)', bold: false, indent: 1 },
-                          { label: 'Potongan Harga - Shopee Rasyuka Official', value: '(86,637,993)', bold: false, indent: 1 },
-                          { label: 'PENERIMAAN BERSIH', value: '485,086,931', bold: true, indent: 0 },
-                          { label: 'Total HPP', value: '200,454,203', bold: true, indent: 0 },
-                          { label: 'LABA KOTOR', value: '284,632,728', bold: true, indent: 0 },
-                          { label: 'Total Variabel Cost', value: '124,303,362', bold: true, indent: 0 },
-                          { label: 'Total Fixed Cost', value: '29,100,674', bold: true, indent: 0 },
-                          { label: 'TOTAL BIAYA OPERASIONAL', value: '153,404,036', bold: true, indent: 0 },
-                          { label: 'LABA/RUGI OPERASI', value: '131,228,692', bold: true, indent: 0 },
-                          { label: 'LABA SEBELUM PAJAK', value: '127,635,672', bold: true, indent: 0 },
-                          { label: 'LABA BERSIH SETELAH PAJAK', value: '127,635,672', bold: true, indent: 0 },
-                        ].map((row, i) => (
-                          <div
-                            key={i}
-                            className="flex justify-between items-baseline py-0.5 px-2 rounded"
-                            style={{
-                              paddingLeft: row.indent ? '1.5rem' : '0.5rem',
-                              background: row.bold ? '#f0f0f0' : 'transparent',
-                            }}
-                          >
-                            <span
-                              className="text-xs flex-1 pr-4"
-                              style={{
-                                color: '#2d2d2d',
-                                fontWeight: row.bold ? 600 : 400,
-                              }}
-                            >
-                              {row.label}
-                            </span>
-                            {row.value && (
-                              <span
-                                className="text-xs flex-shrink-0"
-                                style={{
-                                  color: '#2d2d2d',
-                                  fontWeight: row.bold ? 600 : 400,
-                                }}
-                              >
-                                {row.value}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+              <div className="flex-1 overflow-hidden p-4">
+                {activeReport ? (
+                  <iframe
+                    key={activeReport.id}
+                    src={`/api/reports/${activeReport.id}/pdf`}
+                    title={`PDF ${TAB_META[activeTab].label}`}
+                    className="w-full h-full rounded-2xl"
+                    style={{ border: '1px solid #e5e5e5', background: 'white' }}
+                  />
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center">
                       <FileText className="w-10 h-10 mx-auto mb-3" style={{ color: '#d4d4d4' }} />
                       <p className="text-sm font-medium" style={{ color: '#6b7280' }}>
-                        {tabs.find(t => t.id === activeTab)?.label} belum diupload
+                        {TAB_META[activeTab].label} belum diupload
                       </p>
-                      <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>
-                        Upload file di halaman sebelumnya
-                      </p>
+                      <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>Upload file di halaman sebelumnya</p>
                     </div>
                   </div>
                 )}
@@ -295,28 +330,18 @@ export default function ExtractionReviewPage() {
 
             {/* RIGHT PANEL — Extracted Data */}
             <div className="ng-rise flex-1 flex flex-col overflow-hidden" style={{ animationDelay: '100ms' }}>
-
-              {/* Right panel header */}
-              <div
-                className="px-5 py-4 border-b flex-shrink-0"
-                style={{ borderColor: '#f0f0f0', background: 'white' }}
-              >
+              <div className="px-5 py-4 border-b flex-shrink-0" style={{ borderColor: '#f0f0f0', background: 'white' }}>
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="text-sm font-bold" style={{ color: '#2d2d2d' }}>
-                      Hasil Ekstraksi AI
-                    </h3>
-                    <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
-                      {MOCK_REPORT_META.clientName} · {MOCK_REPORT_META.reportType} · {MOCK_REPORT_META.periode}
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold" style={{ color: '#2d2d2d' }}>Hasil Ekstraksi AI</h3>
+                    <p className="text-xs mt-0.5 truncate" style={{ color: '#6b7280' }}>
+                      {activeClient.name} · {TAB_META[activeTab].label} · {formatPeriode(start, end)}
                     </p>
                   </div>
                   <button
                     onClick={handleConfirmAll}
-                    className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200 hover:shadow-[0_4px_12px_rgba(218,241,99,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
-                    style={{
-                      background: 'var(--color-accent-primary)',
-                      color: 'var(--color-bg-main)',
-                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold flex-shrink-0 transition-all duration-200 hover:shadow-[0_4px_12px_rgba(218,241,99,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+                    style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-main)' }}
                   >
                     <Check className="w-3.5 h-3.5" />
                     Konfirmasi Semua
@@ -324,34 +349,19 @@ export default function ExtractionReviewPage() {
                 </div>
 
                 {/* Stats row */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-                    style={{ background: '#f0fdf4' }}
-                  >
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: '#f0fdf4' }}>
                     <CheckCircle2 className="w-3 h-3" style={{ color: '#15803d' }} />
-                    <span className="text-xs font-medium" style={{ color: '#15803d' }}>
-                      {confirmedCount} matched
-                    </span>
+                    <span className="text-xs font-medium" style={{ color: '#15803d' }}>{confirmedCount} matched</span>
                   </div>
-                  <div
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-                    style={{ background: '#fef2f2' }}
-                  >
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: '#fef2f2' }}>
                     <AlertTriangle className="w-3 h-3" style={{ color: '#dc2626' }} />
-                    <span className="text-xs font-medium" style={{ color: '#dc2626' }}>
-                      {unmatchedCount} perlu review
-                    </span>
+                    <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{unmatchedCount} perlu review</span>
                   </div>
                   {rejectedCount > 0 && (
-                    <div
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-                      style={{ background: '#f9f9f9' }}
-                    >
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: '#f9f9f9' }}>
                       <XCircle className="w-3 h-3" style={{ color: '#6b7280' }} />
-                      <span className="text-xs font-medium" style={{ color: '#6b7280' }}>
-                        {rejectedCount} ditolak
-                      </span>
+                      <span className="text-xs font-medium" style={{ color: '#6b7280' }}>{rejectedCount} ditolak</span>
                     </div>
                   )}
                 </div>
@@ -375,11 +385,7 @@ export default function ExtractionReviewPage() {
                   <button
                     onClick={() => setShowSubtotals(!showSubtotals)}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all"
-                    style={{
-                      background: showSubtotals ? '#f0f0f0' : 'transparent',
-                      color: '#6b7280',
-                      border: '1px solid #e5e5e5',
-                    }}
+                    style={{ background: showSubtotals ? '#f0f0f0' : 'transparent', color: '#6b7280', border: '1px solid #e5e5e5' }}
                   >
                     {showSubtotals ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     {showSubtotals ? 'Sembunyikan subtotal' : 'Tampilkan subtotal'}
@@ -390,21 +396,14 @@ export default function ExtractionReviewPage() {
               {/* Table header */}
               <div
                 className="grid px-4 py-2 flex-shrink-0"
-                style={{
-                  gridTemplateColumns: '1fr 1fr 100px 80px 80px',
-                  background: '#f8f8f8',
-                  borderBottom: '1px solid #e5e5e5',
-                }}
+                style={{ gridTemplateColumns: '1fr 1fr 100px 80px 80px', background: '#f8f8f8', borderBottom: '1px solid #e5e5e5' }}
               >
                 {['Nama di PDF', 'COA Master', 'Jumlah (Rp)', 'Conf.', 'Aksi'].map(h => (
-                  <span key={h} className="text-[10px] font-semibold uppercase tracking-wide"
-                    style={{ color: '#9ca3af' }}>
-                    {h}
-                  </span>
+                  <span key={h} className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9ca3af' }}>{h}</span>
                 ))}
               </div>
 
-              {/* Table rows — scrollable */}
+              {/* Table rows */}
               <div className="flex-1 overflow-y-auto">
                 {visibleLines.map((line, idx) => {
                   const conf = getConfidenceStyle(line.confidence)
@@ -421,29 +420,16 @@ export default function ExtractionReviewPage() {
                             ? 'bg-[#fffbeb] hover:bg-[#f9fff3]'
                             : `${idx % 2 === 0 ? 'bg-white' : 'bg-[#fdfdfd]'} hover:bg-[#f9fff3]`
                       }`}
-                      style={{
-                        gridTemplateColumns: '1fr 1fr 100px 80px 80px',
-                        borderBottom: '1px solid #f5f5f5',
-                        opacity: isRejected ? 0.45 : 1,
-                      }}
+                      style={{ gridTemplateColumns: '1fr 1fr 100px 80px 80px', borderBottom: '1px solid #f5f5f5', opacity: isRejected ? 0.45 : 1 }}
                     >
                       {/* Col 1: Raw name */}
                       <div className="flex items-center gap-2 pr-2 min-w-0">
                         {line.isSubtotal && (
-                          <span
-                            className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
-                            style={{ background: '#f0f0f0', color: '#9ca3af' }}
-                          >
-                            SUB
-                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#f0f0f0', color: '#9ca3af' }}>SUB</span>
                         )}
                         <span
                           className="text-xs truncate"
-                          style={{
-                            color: '#2d2d2d',
-                            fontWeight: line.isSubtotal ? 600 : 400,
-                            textDecoration: isRejected ? 'line-through' : 'none',
-                          }}
+                          style={{ color: '#2d2d2d', fontWeight: line.isSubtotal ? 600 : 400, textDecoration: isRejected ? 'line-through' : 'none' }}
                         >
                           {line.rawName}
                         </span>
@@ -457,29 +443,17 @@ export default function ExtractionReviewPage() {
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
                               className="flex-1 text-xs px-2 py-1 rounded-lg outline-none min-w-0"
-                              style={{
-                                border: '1.5px solid var(--color-accent-primary)',
-                                background: 'white',
-                                color: '#2d2d2d',
-                              }}
+                              style={{ border: '1.5px solid var(--color-accent-primary)', background: 'white', color: '#2d2d2d' }}
                               autoFocus
                               onKeyDown={e => {
                                 if (e.key === 'Enter') handleSaveEdit(line.id)
                                 if (e.key === 'Escape') setEditingId(null)
                               }}
                             />
-                            <button
-                              onClick={() => handleSaveEdit(line.id)}
-                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-                              style={{ background: 'var(--color-accent-primary)' }}
-                            >
+                            <button onClick={() => handleSaveEdit(line.id)} className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0" style={{ background: 'var(--color-accent-primary)' }}>
                               <Check className="w-2.5 h-2.5" style={{ color: 'var(--color-bg-main)' }} />
                             </button>
-                            <button
-                              onClick={() => setEditingId(null)}
-                              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-                              style={{ background: '#f0f0f0' }}
-                            >
+                            <button onClick={() => setEditingId(null)} className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0" style={{ background: '#f0f0f0' }}>
                               <X className="w-2.5 h-2.5" style={{ color: '#6b7280' }} />
                             </button>
                           </div>
@@ -487,22 +461,15 @@ export default function ExtractionReviewPage() {
                           <div className="flex items-center gap-1.5 min-w-0">
                             {line.suggestedCOA ? (
                               <>
-                                <span className="text-xs truncate" style={{ color: '#2d2d2d' }}>
-                                  {line.editedName ?? line.suggestedCOA}
-                                </span>
+                                <span className="text-xs truncate" style={{ color: '#2d2d2d' }}>{line.editedName ?? line.suggestedCOA}</span>
                                 {line.masterCOACode && (
-                                  <span
-                                    className="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0"
-                                    style={{ background: '#f0f0f0', color: '#9ca3af' }}
-                                  >
-                                    {line.masterCOACode}
-                                  </span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#f0f0f0', color: '#9ca3af' }}>{line.masterCOACode}</span>
                                 )}
                               </>
+                            ) : line.isSubtotal ? (
+                              <span className="text-xs" style={{ color: '#d4d4d4' }}>—</span>
                             ) : (
-                              <span className="text-xs italic" style={{ color: '#f59e0b' }}>
-                                Belum dipetakan
-                              </span>
+                              <span className="text-xs italic" style={{ color: '#f59e0b' }}>Belum dipetakan</span>
                             )}
                           </div>
                         )}
@@ -510,10 +477,7 @@ export default function ExtractionReviewPage() {
 
                       {/* Col 3: Amount */}
                       <div className="flex items-center">
-                        <span
-                          className="text-xs font-medium tabular-nums"
-                          style={{ color: line.amount < 0 ? '#dc2626' : '#2d2d2d' }}
-                        >
+                        <span className="text-xs font-medium tabular-nums" style={{ color: line.amount < 0 ? '#dc2626' : '#2d2d2d' }}>
                           {formatRupiah(line.amount)}
                         </span>
                       </div>
@@ -521,10 +485,7 @@ export default function ExtractionReviewPage() {
                       {/* Col 4: Confidence */}
                       <div className="flex items-center">
                         {!line.isSubtotal && (
-                          <div
-                            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                            style={{ background: conf.bg, color: conf.color }}
-                          >
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: conf.bg, color: conf.color }}>
                             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: conf.color }} />
                             {line.confidence}%
                           </div>
@@ -567,40 +528,49 @@ export default function ExtractionReviewPage() {
                     </div>
                   )
                 })}
+
+                {visibleLines.length === 0 && (
+                  <div className="py-16 text-center">
+                    <p className="text-sm" style={{ color: '#9ca3af' }}>Tidak ada baris untuk filter ini.</p>
+                  </div>
+                )}
               </div>
 
               {/* Bottom action bar */}
-              <div
-                className="px-5 py-4 border-t flex items-center justify-between flex-shrink-0"
-                style={{ borderColor: '#f0f0f0', background: 'white' }}
-              >
+              <div className="px-5 py-4 border-t flex items-center justify-between flex-shrink-0" style={{ borderColor: '#f0f0f0', background: 'white' }}>
                 <p className="text-xs" style={{ color: '#6b7280' }}>
-                  {visibleLines.length} baris ditampilkan · Diekstrak {MOCK_REPORT_META.extractedAt}
+                  {visibleLines.length} baris ditampilkan
+                  {activeReport?.extractedAt ? ` · Diekstrak ${formatExtractedAt(activeReport.extractedAt)}` : ''}
                 </p>
                 <div className="flex items-center gap-3">
-                  <button
+                  <Link
+                    href="/upload"
                     className="px-4 py-2 rounded-full text-xs font-medium transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                    style={{
-                      color: '#6b7280',
-                      border: '1px solid #e5e5e5',
-                    }}
-                    onClick={() => window.history.back()}
+                    style={{ color: '#6b7280', border: '1px solid #e5e5e5' }}
                   >
                     ← Kembali ke Upload
-                  </button>
-                  <button
-                    onClick={handleConfirmAll}
+                  </Link>
+                  <Link
+                    href="/coa-mapping"
                     className="flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold transition-all hover:shadow-[0_4px_12px_rgba(218,241,99,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                     style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-main)' }}
                   >
                     Lanjut ke COA Mapping →
-                  </button>
+                  </Link>
                 </div>
               </div>
-
             </div>
           </main>
-        </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+export default function ExtractionReviewPage() {
+  return (
+    <Suspense fallback={null}>
+      <ExtractionReviewInner />
+    </Suspense>
   )
 }
