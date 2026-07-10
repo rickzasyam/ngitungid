@@ -157,13 +157,15 @@
 - ⏳ POST /api/upload/pdf — trigger Gemini extraction pipeline
 - ⏳ GET /api/reports/[id]/status — polling endpoint for extraction progress
 
-### 2.5 COA Matching Engine
+### 2.5 COA Matching Engine — **mapping MANUAL selesai; AUTO-match belum**
 - ⏳ Exact match algorithm
-- ⏳ Fuzzy match with history boost (coa_mapping_history)
-- ✅ POST /api/reports/[id]/mapping — confirm line item mapping (2026-07-10)
+- ⏳ Fuzzy match with history boost (coa_mapping_history) — `suggestedCoaId` masih **selalu null**, jadi kartu "Saran AI" (lilac) di /coa-mapping belum pernah muncul
+- ✅ POST /api/reports/[id]/mapping — confirm line item mapping (2026-07-10). Set `master_coa_id` + status `matched`, upsert `coa_mapping_history`, flip report → `mapped`. Atomik via `db.batch`. Baris **subtotal & rejected dikecualikan** dari hitungan sisa — tanpa itu status tidak pernah jadi `mapped` (bug ditemukan & diperbaiki saat review)
 - ✅ GET /api/reports/periods — daftar periode per klien (prasyarat period selector)
 - ✅ GET/PUT /api/clients/[id]/metrics — persist client_metric_visibility (2026-07-10)
-- ✅ /coa-mapping lepas dari mock: dropdown COA + line item + period selector dari API
+- ✅ /coa-mapping lepas dari mock: dropdown COA (dikelompokkan per subKelompok) + line item + period selector dari API; simpan per-laporan lalu re-read dari server
+- ✅ `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) — fixture dev: Master COA + line item berbeda per klien (verifikasi client switcher)
+- ⏳ Persist review actions (edit/reject/confirm) di `extraction-review` — masih state lokal
 
 ### 2.6 Financial Data API
 - ⏳ GET /api/dashboard/[clientId] — aggregated metrics
@@ -283,7 +285,7 @@
 - ⏳ Real file upload flow (connect stubs to API routes) — `POST /api/upload/{csv|excel|pdf}`
 - ⏳ API integration for financial data (replace mock data) — `GET /api/analytics/{clientId}/monthly`, `/balance-sheet`, `/coa-breakdown`
 - ✅ Settings — Master COA upload/preview/status sudah pakai backend nyata (`POST`/`GET /api/clients/[id]/coa`, selesai 2.3)
-- ⏳ Settings — Analytics Metrics Visibility masih mock; tabel `client_metric_visibility` sudah ada, tinggal disambungkan (route `GET`/`PUT` per klien) — follow-up kecil
+- ✅ Settings — Analytics Metrics Visibility tersambung (`GET`/`PUT /api/clients/[id]/metrics`, upsert atomik, indikator "Menyimpan…") — 2026-07-10
 
 ### Phase 2 Progress
 ✅ 2.1 Database Schema — 7 tabel (termasuk `users` dari 2.2) + 4 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, migrasi sudah dijalankan ke Neon project nyata milik user
@@ -295,7 +297,9 @@
 ⏳ 2.6 Financial Data API (`/dashboard` + `/analytics`) — belum dimulai, **butuh semantic layer** (lihat catatan di bawah)
 
 ### Next Sprint
-**Phase 2.5 — COA Matching + persist review.** Line item hasil ekstraksi sekarang `unmatched` tanpa COA. Bangun: exact match + fuzzy match (dengan history boost dari `coa_mapping_history`) rawName → Master COA per klien; `suggestedCoa` muncul di extraction-review & coa-mapping. Lalu PERSIST review actions (edit/reject/confirm) via `PATCH`/`POST /api/reports/[id]/...` supaya "Konfirmasi Semua" & "Lanjut ke COA Mapping" nyata (sekarang masih state lokal). Master COA per klien (2.3) + line item (3.1) sudah siap sebagai input.
+**Sisa 2.5 — AUTO-match engine.** Mapping manual sudah jalan (kartu, dropdown, simpan, history upsert), tapi `suggestedCoaId` masih selalu null sehingga tidak ada saran sama sekali — admin memetakan 100% manual. Bangun `lib/coa-match.ts`: (1) **exact match** pada nama ternormalisasi, (2) **history boost** — cek `coa_mapping_history` (client, rawName) yang sudah dikonfirmasi sebelumnya, (3) **fuzzy match** (token/trigram similarity) dgn ambang skor. Isi `suggestedCoaId` sesudah ekstraksi di `POST /api/upload` (+ endpoint backfill untuk laporan lama). Kartu "Saran AI" (lilac) di /coa-mapping & kolom COA di extraction-review langsung hidup begitu ini ada.
+
+Lalu: PERSIST review actions (edit/reject/confirm) di extraction-review supaya "Konfirmasi Semua" & "Lanjut ke COA Mapping" nyata (sekarang state lokal). Setelah itu 2.6 Financial Data API.
 
 Catatan operasional: `GEMINI_API_KEY` saat ini **free tier (5 req/menit)** — cukup utk 1 upload (≤3 file), tapi pemakaian rutin butuh billing berbayar (lihat `.env.example`).
 
