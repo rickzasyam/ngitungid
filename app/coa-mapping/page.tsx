@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRequireClient } from '@/lib/use-require-client'
-import { useClient } from '@/lib/client-context'
 import {
   ChevronDown,
   ChevronUp,
@@ -14,126 +13,64 @@ import {
   CheckCircle2,
   ArrowLeft,
   ArrowRightLeft,
+  Loader2,
+  Inbox,
 } from 'lucide-react'
 
 // ============================================================
-// MOCK DATA
+// TYPES
 // ============================================================
 
-const SESSION = {
-  clientName: 'Rasyuka',
-  periode: '1 Jan 2026 – 31 Jan 2026',
-  reportType: 'Laba Rugi',
-  totalLines: 24,
-  autoMatchedCount: 21,
-}
+type COAOption = { id: string; kode: string; name: string }
+type COAGroup = { group: string; options: COAOption[] }
 
 type UnmappedItem = {
   id: string
   rawName: string
   amount: number
   confidence: number
-  suggestedCOA?: { kode: string; name: string }
+  suggestedCOA?: COAOption
 }
 
-const UNMAPPED_ITEMS: UnmappedItem[] = [
-  {
-    id: 'u1',
-    rawName: 'Beban Ads Meta',
-    amount: 1674449,
-    confidence: 42,
-  },
-  {
-    id: 'u2',
-    rawName: 'Biaya Gaji Karyawan Staf',
-    amount: 19767100,
-    confidence: 78,
-    suggestedCOA: { kode: '24-0001', name: 'Beban Gaji' },
-  },
-  {
-    id: 'u3',
-    rawName: 'Biaya Sewa Kantor',
-    amount: 2666667,
-    confidence: 72,
-    suggestedCOA: { kode: '25-0001', name: 'Biaya Sewa Kantor' },
-  },
-]
+type AutoMatchedItem = {
+  id: string
+  rawName: string
+  masterCOA: string
+  kode: string
+  confidence: number
+}
 
-type COAOption = { kode: string; name: string }
-type COAGroup = { group: string; options: COAOption[] }
+type Period = { periodStart: string; periodEnd: string }
 
-const MASTER_COA_GROUPS: COAGroup[] = [
-  {
-    group: 'PENERIMAAN',
-    options: [
-      { kode: '04-0001', name: 'Penjualan Bruto - Shopee' },
-      { kode: '04-0002', name: 'Penjualan Bruto - Tiktok' },
-      { kode: '04-0003', name: 'Penjualan Bruto - Offline' },
-      { kode: '04-0004', name: 'Retur Penjualan - Shopee' },
-      { kode: '04-0005', name: 'Retur Penjualan - Tiktok' },
-      { kode: '04-0006', name: 'Potongan Harga - Shopee' },
-      { kode: '04-0007', name: 'Potongan Harga - Tiktok' },
-    ],
-  },
-  {
-    group: 'BIAYA VARIABEL',
-    options: [
-      { kode: '11-0001', name: 'Biaya Admin Marketplace - Shopee' },
-      { kode: '11-0002', name: 'Biaya Admin Marketplace - Tiktok' },
-      { kode: '11-0003', name: 'Beban Iklan - Shopee' },
-      { kode: '11-0004', name: 'Beban Iklan - Tiktok' },
-      { kode: '11-0005', name: 'Beban Iklan - Meta' },
-      { kode: '11-0006', name: 'Biaya Pengiriman' },
-      { kode: '11-0007', name: 'Biaya Photoshoot' },
-      { kode: '11-0008', name: 'Biaya Promosi Lainnya' },
-    ],
-  },
-  {
-    group: 'BIAYA FIXED',
-    options: [
-      { kode: '24-0001', name: 'Beban Gaji' },
-      { kode: '24-0002', name: 'Tunjangan Karyawan' },
-      { kode: '25-0001', name: 'Biaya Sewa Kantor' },
-      { kode: '25-0002', name: 'Biaya Utilitas' },
-      { kode: '26-0001', name: 'Biaya Konsultan Manajemen' },
-      { kode: '27-0001', name: 'Biaya Konsumsi dan Entertainment' },
-      { kode: '28-0001', name: 'Biaya Perjalanan Dinas' },
-      { kode: '29-0001', name: 'Biaya IT dan Software' },
-      { kode: '30-0001', name: 'Biaya Operasional Umum' },
-    ],
-  },
-  {
-    group: 'BIAYA LAIN-LAIN',
-    options: [
-      { kode: '31-0001', name: 'Infaq dan Shodaqoh' },
-      { kode: '32-0001', name: 'Beban Penyusutan Peralatan' },
-    ],
-  },
-]
+// Bentuk mentah dari API
+type CoaAccount = {
+  id: string
+  kode: string
+  nama: string
+  subKelompok: string
+}
 
-const AUTO_MATCHED_ITEMS = [
-  { rawName: 'Penjualan Shopee Rasyuka Official', masterCOA: 'Penjualan Bruto - Shopee', kode: '04-0001', confidence: 98 },
-  { rawName: 'Penjualan Tiktok', masterCOA: 'Penjualan Bruto - Tiktok', kode: '04-0002', confidence: 97 },
-  { rawName: 'Penjualan Offline', masterCOA: 'Penjualan Bruto - Offline', kode: '04-0003', confidence: 95 },
-  { rawName: 'Retur Penjualan - Tiktok', masterCOA: 'Retur Penjualan - Tiktok', kode: '04-0005', confidence: 93 },
-  { rawName: 'Retur Penjualan - Shopee Rasyuka Official', masterCOA: 'Retur Penjualan - Shopee', kode: '04-0004', confidence: 92 },
-  { rawName: 'Potongan Harga - Tiktok', masterCOA: 'Potongan Harga - Tiktok', kode: '04-0007', confidence: 90 },
-  { rawName: 'Potongan Harga - Shopee Rasyuka Official', masterCOA: 'Potongan Harga - Shopee', kode: '04-0006', confidence: 91 },
-  { rawName: 'HPP - Shopee Rasyuka Official', masterCOA: 'HPP - Shopee', kode: '05-0001', confidence: 96 },
-  { rawName: 'HPP - Tiktok', masterCOA: 'HPP - Tiktok', kode: '05-0002', confidence: 95 },
-  { rawName: 'HPP - Offline', masterCOA: 'HPP - Offline', kode: '05-0003', confidence: 94 },
-  { rawName: 'Biaya Admin MP - Shopee Rasyuka Official', masterCOA: 'Biaya Admin Marketplace - Shopee', kode: '11-0001', confidence: 88 },
-  { rawName: 'Beban Ads Shopee', masterCOA: 'Beban Iklan - Shopee', kode: '11-0003', confidence: 85 },
-  { rawName: 'Biaya Admin MP - Tiktok', masterCOA: 'Biaya Admin Marketplace - Tiktok', kode: '11-0002', confidence: 87 },
-  { rawName: 'Beban Ads Tiktok', masterCOA: 'Beban Iklan - Tiktok', kode: '11-0004', confidence: 84 },
-  { rawName: 'Biaya Konsultan', masterCOA: 'Biaya Konsultan Manajemen', kode: '26-0001', confidence: 65 },
-  { rawName: 'Biaya Konsumsi', masterCOA: 'Biaya Konsumsi dan Entertainment', kode: '27-0001', confidence: 82 },
-  { rawName: 'Biaya Perjalanan Dinas', masterCOA: 'Biaya Perjalanan Dinas', kode: '28-0001', confidence: 94 },
-  { rawName: 'Biaya Listrik, Telp, Air', masterCOA: 'Biaya Utilitas', kode: '25-0002', confidence: 88 },
-  { rawName: 'Biaya Internet', masterCOA: 'Biaya IT dan Software', kode: '29-0001', confidence: 79 },
-  { rawName: 'Infaq Shadaqah', masterCOA: 'Infaq dan Shodaqoh', kode: '31-0001', confidence: 99 },
-  { rawName: 'Biaya Penyusutan Peralatan Kantor', masterCOA: 'Beban Penyusutan Peralatan', kode: '32-0001', confidence: 96 },
-]
+type ApiLineItem = {
+  id: string
+  rawName: string
+  amount: number
+  confidence: number
+  masterCoaId: string | null
+  suggestedCoaId: string | null
+  isSubtotal: boolean
+}
+
+type ApiReport = {
+  id: string
+  reportType: 'laba_rugi' | 'neraca' | 'arus_kas'
+  lineItems: ApiLineItem[]
+}
+
+const REPORT_TYPE_LABEL: Record<ApiReport['reportType'], string> = {
+  laba_rugi: 'Laba Rugi',
+  neraca: 'Neraca',
+  arus_kas: 'Arus Kas',
+}
 
 // ============================================================
 // HELPERS
@@ -157,15 +94,59 @@ const getConfidenceBg = (confidence: number) => {
   return '#fef2f2'
 }
 
+/** '2026-01-01' → '1 Jan 2026'. Sengaja parse manual: `new Date('2026-01-01')`
+ *  di-treat sebagai UTC midnight, bisa mundur sehari di timezone WIB. */
+const formatTanggal = (ymd: string) => {
+  const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  const [y, m, d] = ymd.split('-').map(Number)
+  return `${d} ${BULAN[m - 1]} ${y}`
+}
+
+const formatPeriode = (p: Period) => `${formatTanggal(p.periodStart)} – ${formatTanggal(p.periodEnd)}`
+
+const periodKey = (p: Period) => `${p.periodStart}_${p.periodEnd}`
+
+/** Master COA (urut kode) → grup dropdown berdasarkan subKelompok, urutan
+ *  kemunculan pertama dipertahankan supaya stabil antar render. */
+function buildCoaGroups(accounts: CoaAccount[]): COAGroup[] {
+  const groups = new Map<string, COAOption[]>()
+  for (const a of accounts) {
+    const key = a.subKelompok.toUpperCase()
+    const arr = groups.get(key) ?? []
+    arr.push({ id: a.id, kode: a.kode, name: a.nama })
+    groups.set(key, arr)
+  }
+  return [...groups].map(([group, options]) => ({ group, options }))
+}
+
 // ============================================================
 // SESSION CONTEXT BAR
 // ============================================================
 
-function SessionContextBar({ mappedCount, clientName }: { mappedCount: number; clientName: string }) {
-  const totalUnmapped = UNMAPPED_ITEMS.length
-  const totalMapped = SESSION.autoMatchedCount + mappedCount
-  const progressPct = Math.round((totalMapped / SESSION.totalLines) * 100)
-  const remaining = totalUnmapped - mappedCount
+function SessionContextBar({
+  clientName,
+  periods,
+  selectedPeriod,
+  onSelectPeriod,
+  reportTypes,
+  totalLines,
+  autoMatchedCount,
+  mappedCount,
+  unmappedTotal,
+}: {
+  clientName: string
+  periods: Period[]
+  selectedPeriod: Period | null
+  onSelectPeriod: (p: Period) => void
+  reportTypes: string[]
+  totalLines: number
+  autoMatchedCount: number
+  mappedCount: number
+  unmappedTotal: number
+}) {
+  const totalMapped = autoMatchedCount + mappedCount
+  const progressPct = totalLines > 0 ? Math.round((totalMapped / totalLines) * 100) : 0
+  const remaining = unmappedTotal - mappedCount
 
   return (
     <div
@@ -190,18 +171,53 @@ function SessionContextBar({ mappedCount, clientName }: { mappedCount: number; c
 
           <div style={{ width: '1px', height: '16px', background: '#e5e5e5' }} />
 
-          <span className="text-xs" style={{ color: '#6b7280' }}>
-            {SESSION.periode}
-          </span>
+          {/* Period selector */}
+          {periods.length === 0 ? (
+            <span className="text-xs" style={{ color: '#9ca3af' }}>
+              Belum ada periode
+            </span>
+          ) : (
+            <div className="relative">
+              <label htmlFor="period-select" className="sr-only">
+                Pilih periode laporan
+              </label>
+              <select
+                id="period-select"
+                value={selectedPeriod ? periodKey(selectedPeriod) : ''}
+                onChange={e => {
+                  const next = periods.find(p => periodKey(p) === e.target.value)
+                  if (next) onSelectPeriod(next)
+                }}
+                className="text-xs rounded-full pl-3 pr-8 py-1.5 appearance-none cursor-pointer transition-colors hover:bg-[#f0f0f0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ background: '#f8f8f8', color: '#2d2d2d', border: '1px solid #e5e5e5', minHeight: '32px' }}
+              >
+                {periods.map(p => (
+                  <option key={periodKey(p)} value={periodKey(p)}>
+                    {formatPeriode(p)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ color: '#9ca3af' }}
+              />
+            </div>
+          )}
 
-          <div style={{ width: '1px', height: '16px', background: '#e5e5e5' }} />
-
-          <span
-            className="text-xs font-medium px-2.5 py-1 rounded-full"
-            style={{ background: '#f0f0f0', color: '#2d2d2d' }}
-          >
-            {SESSION.reportType}
-          </span>
+          {reportTypes.length > 0 && (
+            <>
+              <div style={{ width: '1px', height: '16px', background: '#e5e5e5' }} />
+              {reportTypes.map(t => (
+                <span
+                  key={t}
+                  className="text-xs font-medium px-2.5 py-1 rounded-full"
+                  style={{ background: '#f0f0f0', color: '#2d2d2d' }}
+                >
+                  {t}
+                </span>
+              ))}
+            </>
+          )}
         </div>
 
         {/* Progress */}
@@ -214,7 +230,7 @@ function SessionContextBar({ mappedCount, clientName }: { mappedCount: number; c
               }
             </p>
             <p className="text-xs font-semibold" style={{ color: '#2d2d2d' }}>
-              {totalMapped} dari {SESSION.totalLines} akun
+              {totalMapped} dari {totalLines} akun
             </p>
           </div>
           <div style={{ width: '100px' }}>
@@ -246,6 +262,7 @@ function SessionContextBar({ mappedCount, clientName }: { mappedCount: number; c
 // ============================================================
 
 function COADropdown({
+  groups,
   value,
   onSelect,
   isOpen,
@@ -253,6 +270,7 @@ function COADropdown({
   searchQuery,
   onSearchChange,
 }: {
+  groups: COAGroup[]
   value: COAOption | null
   onSelect: (option: COAOption) => void
   isOpen: boolean
@@ -260,7 +278,7 @@ function COADropdown({
   searchQuery: string
   onSearchChange: (q: string) => void
 }) {
-  const filteredGroups = MASTER_COA_GROUPS.map(group => ({
+  const filteredGroups = groups.map(group => ({
     ...group,
     options: group.options.filter(opt =>
       opt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -344,7 +362,13 @@ function COADropdown({
 
           {/* Options */}
           <div className="overflow-y-auto flex-1">
-            {filteredGroups.length === 0 ? (
+            {groups.length === 0 ? (
+              <div className="px-3 py-4 text-center">
+                <p className="text-xs" style={{ color: '#9ca3af' }}>
+                  Master COA klien ini masih kosong
+                </p>
+              </div>
+            ) : filteredGroups.length === 0 ? (
               <div className="px-3 py-4 text-center">
                 <p className="text-xs" style={{ color: '#9ca3af' }}>Tidak ditemukan</p>
               </div>
@@ -359,11 +383,11 @@ function COADropdown({
                   </div>
                   {group.options.map(opt => (
                     <button
-                      key={opt.kode}
+                      key={opt.id}
                       type="button"
                       onClick={() => onSelect(opt)}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-inset ${
-                        value?.kode === opt.kode ? 'bg-[#f9fff3]' : 'hover:bg-[#f8f8f8]'
+                        value?.id === opt.id ? 'bg-[#f9fff3]' : 'hover:bg-[#f8f8f8]'
                       }`}
                       style={{ borderBottom: '1px solid #f8f8f8' }}
                     >
@@ -376,7 +400,7 @@ function COADropdown({
                       <span className="text-xs flex-1" style={{ color: '#2d2d2d' }}>
                         {opt.name}
                       </span>
-                      {value?.kode === opt.kode && (
+                      {value?.id === opt.id && (
                         <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-accent-primary)' }} />
                       )}
                     </button>
@@ -397,6 +421,7 @@ function COADropdown({
 
 function MappingCard({
   item,
+  groups,
   mappedValue,
   onMap,
   isDropdownOpen,
@@ -405,6 +430,7 @@ function MappingCard({
   onSearchChange,
 }: {
   item: UnmappedItem
+  groups: COAGroup[]
   mappedValue: COAOption | null
   onMap: (option: COAOption) => void
   isDropdownOpen: boolean
@@ -532,6 +558,7 @@ function MappingCard({
 
           {(!isMapped || isDropdownOpen) && (
             <COADropdown
+              groups={groups}
               value={mappedValue}
               onSelect={(opt) => { onMap(opt) }}
               isOpen={isDropdownOpen}
@@ -551,9 +578,11 @@ function MappingCard({
 // ============================================================
 
 function AutoMatchedTable({
+  items,
   isExpanded,
   onToggle,
 }: {
+  items: AutoMatchedItem[]
   isExpanded: boolean
   onToggle: () => void
 }) {
@@ -580,7 +609,7 @@ function AutoMatchedTable({
               Akun Ter-mapping Otomatis
             </p>
             <p className="text-xs" style={{ color: '#6b7280' }}>
-              {AUTO_MATCHED_ITEMS.length} akun dicocokkan AI secara otomatis
+              {items.length} akun dicocokkan AI secara otomatis
             </p>
           </div>
         </div>
@@ -589,7 +618,7 @@ function AutoMatchedTable({
             className="text-xs font-semibold px-2.5 py-1 rounded-full"
             style={{ background: '#f0fdf4', color: '#15803d' }}
           >
-            {AUTO_MATCHED_ITEMS.length} akun
+            {items.length} akun
           </span>
           {isExpanded
             ? <ChevronUp className="w-4 h-4" style={{ color: '#9ca3af' }} />
@@ -599,7 +628,7 @@ function AutoMatchedTable({
       </button>
 
       {/* Table */}
-      {isExpanded && (
+      {isExpanded && items.length > 0 && (
         <div style={{ borderTop: '1px solid #f0f0f0' }}>
           {/* Table header */}
           <div
@@ -622,13 +651,13 @@ function AutoMatchedTable({
           </div>
 
           {/* Rows */}
-          {AUTO_MATCHED_ITEMS.map((item, idx) => (
+          {items.map((item, idx) => (
             <div
-              key={idx}
+              key={item.id}
               className="grid px-4 sm:px-6 py-2.5 items-center"
               style={{
                 gridTemplateColumns: '1fr auto 1fr 72px 60px',
-                borderBottom: idx < AUTO_MATCHED_ITEMS.length - 1 ? '1px solid #f8f8f8' : 'none',
+                borderBottom: idx < items.length - 1 ? '1px solid #f8f8f8' : 'none',
                 background: idx % 2 === 0 ? 'white' : '#fdfdfd',
                 opacity: 0.7,
               }}
@@ -664,21 +693,170 @@ function AutoMatchedTable({
 }
 
 // ============================================================
+// STATE PANELS
+// ============================================================
+
+function CenteredState({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
+      {icon}
+      <p className="text-sm font-semibold" style={{ color: '#2d2d2d' }}>{title}</p>
+      <p className="text-xs max-w-sm" style={{ color: '#6b7280' }}>{subtitle}</p>
+    </div>
+  )
+}
+
+// ============================================================
 // MAIN PAGE
 // ============================================================
 
 export default function COAMappingPage() {
   const { activeClient, isLoaded } = useRequireClient()
-  const { activeClient: client } = useClient()
+  const clientId = activeClient?.id ?? null
+
+  const [periods, setPeriods] = useState<Period[]>([])
+  const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null)
+  const [accounts, setAccounts] = useState<CoaAccount[]>([])
+  const [reports, setReports] = useState<ApiReport[]>([])
+
+  const [loadingPeriods, setLoadingPeriods] = useState(false)
+  const [loadingData, setLoadingData] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [mappings, setMappings] = useState<Record<string, COAOption>>({})
   const [autoMatchedExpanded, setAutoMatchedExpanded] = useState(false)
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null)
   const [searchQueries, setSearchQueries] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // ── Fetch periode tiap kali klien aktif berubah ────────────
+  useEffect(() => {
+    if (!clientId) return
+    let cancelled = false
+
+    setLoadingPeriods(true)
+    setLoadError(null)
+    // Reset state milik klien sebelumnya supaya tidak "bocor" ke klien baru.
+    setPeriods([])
+    setSelectedPeriod(null)
+    setAccounts([])
+    setReports([])
+    setMappings({})
+    setOpenDropdownId(null)
+
+    fetch(`/api/reports/periods?clientId=${clientId}`)
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error('Gagal memuat periode.'))))
+      .then((data: { periods: Period[] }) => {
+        if (cancelled) return
+        setPeriods(data.periods)
+        setSelectedPeriod(data.periods[0] ?? null)
+      })
+      .catch(err => !cancelled && setLoadError(err.message))
+      .finally(() => !cancelled && setLoadingPeriods(false))
+
+    return () => { cancelled = true }
+  }, [clientId])
+
+  // ── Fetch Master COA + line item tiap klien / periode berubah ──
+  // Dipakai ulang setelah save supaya UI mencerminkan state yang benar-benar
+  // tersimpan di DB, bukan optimistic state di memori.
+  const loadData = useCallback(async () => {
+    if (!clientId || !selectedPeriod) return
+
+    setLoadingData(true)
+    setLoadError(null)
+
+    const qs = new URLSearchParams({
+      clientId,
+      periodStart: selectedPeriod.periodStart,
+      periodEnd: selectedPeriod.periodEnd,
+    })
+
+    try {
+      const [coaRes, reportRes]: [{ accounts: CoaAccount[] }, { reports: ApiReport[] }] =
+        await Promise.all([
+          fetch(`/api/clients/${clientId}/coa`).then(r =>
+            r.ok ? r.json() : Promise.reject(new Error('Gagal memuat Master COA.'))
+          ),
+          fetch(`/api/reports?${qs}`).then(r =>
+            r.ok ? r.json() : Promise.reject(new Error('Gagal memuat line item laporan.'))
+          ),
+        ])
+      setAccounts(coaRes.accounts)
+      setReports(reportRes.reports)
+      setMappings({})
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Gagal memuat data.')
+    } finally {
+      setLoadingData(false)
+    }
+  }, [clientId, selectedPeriod])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
+
+  // ── Turunan ────────────────────────────────────────────────
+  const coaById = useMemo(
+    () => new Map(accounts.map(a => [a.id, { id: a.id, kode: a.kode, name: a.nama }])),
+    [accounts]
+  )
+  const coaGroups = useMemo(() => buildCoaGroups(accounts), [accounts])
+
+  const allLines = useMemo(
+    () => reports.flatMap(r => r.lineItems).filter(l => !l.isSubtotal),
+    [reports]
+  )
+
+  const unmappedItems = useMemo<UnmappedItem[]>(
+    () =>
+      allLines
+        .filter(l => l.masterCoaId === null)
+        .map(l => ({
+          id: l.id,
+          rawName: l.rawName,
+          amount: l.amount,
+          confidence: l.confidence,
+          suggestedCOA: l.suggestedCoaId ? coaById.get(l.suggestedCoaId) : undefined,
+        })),
+    [allLines, coaById]
+  )
+
+  const autoMatchedItems = useMemo<AutoMatchedItem[]>(
+    () =>
+      allLines
+        .filter(l => l.masterCoaId !== null)
+        .map(l => {
+          const coa = coaById.get(l.masterCoaId!)
+          return {
+            id: l.id,
+            rawName: l.rawName,
+            masterCOA: coa?.name ?? '—',
+            kode: coa?.kode ?? '—',
+            confidence: l.confidence,
+          }
+        }),
+    [allLines, coaById]
+  )
+
+  const reportTypes = useMemo(
+    () => [...new Set(reports.map(r => REPORT_TYPE_LABEL[r.reportType]))],
+    [reports]
+  )
+
+  // Line item bisa tersebar di beberapa laporan (Laba Rugi / Neraca / Arus Kas)
+  // dalam satu periode. Endpoint mapping di-scope per laporan, jadi mapping
+  // harus dikelompokkan dulu sebelum dikirim.
+  const reportIdByLineItem = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of reports) for (const li of r.lineItems) m.set(li.id, r.id)
+    return m
+  }, [reports])
 
   const mappedCount = Object.keys(mappings).length
-  const isAllMapped = mappedCount === UNMAPPED_ITEMS.length
+  const isAllMapped = unmappedItems.length > 0 && mappedCount === unmappedItems.length
 
   const handleMap = (itemId: string, option: COAOption) => {
     setMappings(prev => ({ ...prev, [itemId]: option }))
@@ -693,11 +871,45 @@ export default function COAMappingPage() {
     }
   }
 
-  const handleSave = () => {
-    // TODO: POST to /api/reports/[id]/mapping
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
+  const handleSave = useCallback(async () => {
+    const byReport = new Map<string, { lineItemId: string; masterCoaId: string }[]>()
+    for (const [lineItemId, opt] of Object.entries(mappings)) {
+      const reportId = reportIdByLineItem.get(lineItemId)
+      if (!reportId) continue
+      const arr = byReport.get(reportId) ?? []
+      arr.push({ lineItemId, masterCoaId: opt.id })
+      byReport.set(reportId, arr)
+    }
+    if (byReport.size === 0) return
+
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const responses = await Promise.all(
+        [...byReport].map(([reportId, ms]) =>
+          fetch(`/api/reports/${reportId}/mapping`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mappings: ms }),
+          })
+        )
+      )
+      const failed = responses.find(r => !r.ok)
+      if (failed) {
+        const payload = (await failed.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error ?? 'Gagal menyimpan mapping.')
+      }
+      // Baca ulang dari server: line item yang baru dipetakan sekarang punya
+      // masterCoaId, jadi pindah sendiri ke tabel "Ter-mapping Otomatis".
+      await loadData()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Gagal menyimpan mapping.')
+    } finally {
+      setSaving(false)
+    }
+  }, [mappings, reportIdByLineItem, loadData])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -714,6 +926,8 @@ export default function COAMappingPage() {
   }, [openDropdownId])
 
   if (!isLoaded || !activeClient) return null
+
+  const busy = loadingPeriods || loadingData
 
   return (
     <div className="flex-1 p-3 min-w-0 overflow-hidden">
@@ -736,75 +950,115 @@ export default function COAMappingPage() {
           </div>
 
           {/* Session context bar */}
-          <SessionContextBar mappedCount={mappedCount} clientName={client?.name ?? SESSION.clientName} />
+          <SessionContextBar
+            clientName={activeClient.name}
+            periods={periods}
+            selectedPeriod={selectedPeriod}
+            onSelectPeriod={setSelectedPeriod}
+            reportTypes={reportTypes}
+            totalLines={allLines.length}
+            autoMatchedCount={autoMatchedItems.length}
+            mappedCount={mappedCount}
+            unmappedTotal={unmappedItems.length}
+          />
 
           {/* Scrollable content */}
-          <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
-            <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+          <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }} data-testid="coa-main">
+            {busy ? (
+              <CenteredState
+                icon={<Loader2 className="w-6 h-6 animate-spin" style={{ color: '#9ca3af' }} />}
+                title="Memuat data klien..."
+                subtitle={`Mengambil Master COA dan line item untuk ${activeClient.name}.`}
+              />
+            ) : loadError ? (
+              <CenteredState
+                icon={<AlertTriangle className="w-6 h-6" style={{ color: '#dc2626' }} />}
+                title="Gagal memuat data"
+                subtitle={loadError}
+              />
+            ) : periods.length === 0 ? (
+              <CenteredState
+                icon={<Inbox className="w-6 h-6" style={{ color: '#9ca3af' }} />}
+                title="Belum ada laporan"
+                subtitle={`${activeClient.name} belum punya laporan yang diunggah. Unggah dulu lewat halaman Upload.`}
+              />
+            ) : (
+              <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
 
-              {/* Unmapped section */}
-              <div
-                className="ng-rise rounded-3xl p-4 sm:p-6"
-                style={{
-                  background: 'white',
-                  boxShadow: '0 4px 20px rgb(0,0,0,0.05)',
-                  border: '1px solid #f0f0f0',
-                }}
-              >
-                <div className="flex items-center gap-3 mb-5">
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
-                  >
-                    <ArrowRightLeft className="w-4 h-4" style={{ color: '#1a1a1a' }} />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
-                      Akun Belum Dipetakan
-                    </h2>
-                    <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
-                      Petakan setiap akun ke Master COA {client?.name ?? SESSION.clientName}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {UNMAPPED_ITEMS.map((item, index) => (
+                {/* Unmapped section */}
+                <div
+                  className="ng-rise rounded-3xl p-4 sm:p-6"
+                  style={{
+                    background: 'white',
+                    boxShadow: '0 4px 20px rgb(0,0,0,0.05)',
+                    border: '1px solid #f0f0f0',
+                  }}
+                >
+                  <div className="flex items-center gap-3 mb-5">
                     <div
-                      key={item.id}
-                      data-dropdown
-                      className="animate-slide-up relative"
-                      style={{
-                        animationDelay: `${index * 80}ms`,
-                        // animate-slide-up (fill-mode both) meninggalkan transform yang membuat
-                        // stacking context per-card — card dengan dropdown terbuka harus di atas
-                        // sibling berikutnya supaya panel dropdown tidak tertimpa
-                        zIndex: openDropdownId === item.id ? 30 : 0,
-                      }}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
                     >
-                      <MappingCard
-                        item={item}
-                        mappedValue={mappings[item.id] ?? null}
-                        onMap={(opt) => handleMap(item.id, opt)}
-                        isDropdownOpen={openDropdownId === item.id}
-                        onDropdownToggle={() => handleDropdownToggle(item.id)}
-                        searchQuery={searchQueries[item.id] ?? ''}
-                        onSearchChange={(q) => setSearchQueries(prev => ({ ...prev, [item.id]: q }))}
-                      />
+                      <ArrowRightLeft className="w-4 h-4" style={{ color: '#1a1a1a' }} />
                     </div>
-                  ))}
+                    <div>
+                      <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
+                        Akun Belum Dipetakan
+                      </h2>
+                      <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+                        Petakan setiap akun ke Master COA {activeClient.name}
+                      </p>
+                    </div>
+                  </div>
+
+                  {unmappedItems.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <p className="text-sm" style={{ color: '#6b7280' }}>
+                        Tidak ada akun yang perlu dipetakan untuk periode ini.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4" data-testid="unmapped-list">
+                      {unmappedItems.map((item, index) => (
+                        <div
+                          key={item.id}
+                          data-dropdown
+                          className="animate-slide-up relative"
+                          style={{
+                            animationDelay: `${index * 80}ms`,
+                            // animate-slide-up (fill-mode both) meninggalkan transform yang membuat
+                            // stacking context per-card — card dengan dropdown terbuka harus di atas
+                            // sibling berikutnya supaya panel dropdown tidak tertimpa
+                            zIndex: openDropdownId === item.id ? 30 : 0,
+                          }}
+                        >
+                          <MappingCard
+                            item={item}
+                            groups={coaGroups}
+                            mappedValue={mappings[item.id] ?? null}
+                            onMap={(opt) => handleMap(item.id, opt)}
+                            isDropdownOpen={openDropdownId === item.id}
+                            onDropdownToggle={() => handleDropdownToggle(item.id)}
+                            searchQuery={searchQueries[item.id] ?? ''}
+                            onSearchChange={(q) => setSearchQueries(prev => ({ ...prev, [item.id]: q }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Auto-matched section */}
-              <div className="ng-rise" style={{ animationDelay: '120ms' }}>
-                <AutoMatchedTable
-                  isExpanded={autoMatchedExpanded}
-                  onToggle={() => setAutoMatchedExpanded(p => !p)}
-                />
-              </div>
+                {/* Auto-matched section */}
+                <div className="ng-rise" style={{ animationDelay: '120ms' }}>
+                  <AutoMatchedTable
+                    items={autoMatchedItems}
+                    isExpanded={autoMatchedExpanded}
+                    onToggle={() => setAutoMatchedExpanded(p => !p)}
+                  />
+                </div>
 
-            </div>
+              </div>
+            )}
           </main>
 
           {/* Sticky action bar */}
@@ -813,7 +1067,19 @@ export default function COAMappingPage() {
             style={{ borderColor: '#f0f0f0', background: 'white' }}
           >
             <div className="flex items-center gap-2">
-              {isAllMapped ? (
+              {saveError ? (
+                <>
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center"
+                    style={{ background: '#fef2f2' }}
+                  >
+                    <AlertTriangle className="w-3 h-3" style={{ color: '#dc2626' }} />
+                  </div>
+                  <span role="alert" className="text-sm font-medium" style={{ color: '#dc2626' }}>
+                    {saveError}
+                  </span>
+                </>
+              ) : isAllMapped ? (
                 <>
                   <div
                     className="w-6 h-6 rounded-full flex items-center justify-center"
@@ -835,7 +1101,7 @@ export default function COAMappingPage() {
                   </div>
                   <span className="text-sm" style={{ color: '#6b7280' }}>
                     <strong style={{ color: '#2d2d2d' }}>
-                      {UNMAPPED_ITEMS.length - mappedCount} akun
+                      {unmappedItems.length - mappedCount} akun
                     </strong>{' '}
                     belum dipetakan
                   </span>
@@ -860,14 +1126,20 @@ export default function COAMappingPage() {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!isAllMapped}
+                disabled={!isAllMapped || saving}
+                data-testid="save-mapping"
                 className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all enabled:hover:shadow-[0_4px_16px_rgba(218,241,99,0.4)] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                 style={{
-                  background: isAllMapped ? 'var(--color-accent-primary)' : '#e5e5e5',
-                  color: isAllMapped ? 'var(--color-bg-main)' : '#9ca3af',
+                  background: isAllMapped && !saving ? 'var(--color-accent-primary)' : '#e5e5e5',
+                  color: isAllMapped && !saving ? 'var(--color-bg-main)' : '#9ca3af',
                 }}
               >
-                {saved ? (
+                {saving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : saved ? (
                   <>
                     <Check className="w-3.5 h-3.5" />
                     Tersimpan!

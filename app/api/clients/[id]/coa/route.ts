@@ -12,6 +12,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_FILE_BYTES = 10 * 1024 * 1024 // 10MB — Master COA selalu file kecil
 
 const coaColumns = {
+  // id ikut dikirim: /coa-mapping butuh masterCoaId untuk menyimpan mapping.
+  id: masterCoa.id,
   kode: masterCoa.kode,
   nama: masterCoa.nama,
   posisi: masterCoa.posisi,
