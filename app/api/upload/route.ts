@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { financialReports, reportLineItems } from '@/lib/db/schema'
+import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireAdmin } from '@/lib/api/guards'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
+import { isAutoMappable, normalizeName, suggestCoa } from '@/lib/coa-match'
 
 // Gemini + neon-http + Buffer butuh Node runtime. maxDuration dinaikkan karena
 // ekstraksi PDF (paralel) bisa ~25s — default Vercel Hobby 10s terlalu pendek.
@@ -59,6 +60,20 @@ export async function POST(req: Request) {
   }
   if (jobs.length === 0) return bad('Tidak ada file laporan yang diunggah.')
 
+  // Master COA + riwayat konfirmasi klien ini — bahan auto-map / saran COA.
+  // Di-load SEKALI (sama untuk ketiga laporan), bukan per file.
+  const [accounts, history] = await Promise.all([
+    db
+      .select({ id: masterCoa.id, nama: masterCoa.nama })
+      .from(masterCoa)
+      .where(eq(masterCoa.clientId, clientId)),
+    db
+      .select({ rawName: coaMappingHistory.rawName, masterCoaId: coaMappingHistory.masterCoaId })
+      .from(coaMappingHistory)
+      .where(eq(coaMappingHistory.clientId, clientId)),
+  ])
+  const historyByRawName = new Map(history.map(h => [normalizeName(h.rawName), h.masterCoaId]))
+
   const reports = await Promise.all(
     jobs.map(async ({ type, file }) => {
       const bytes = Buffer.from(await file.arrayBuffer())
@@ -91,24 +106,34 @@ export async function POST(req: Request) {
 
       try {
         const lines = await extractReport(bytes, type)
+        let autoMapped = 0
+        let suggested = 0
         if (lines.length > 0) {
-          await db.insert(reportLineItems).values(
-            lines.map((l, i) => ({
+          const values = lines.map((l, i) => {
+            // Baris subtotal tidak pernah dipetakan ke COA.
+            const s = l.isSubtotal ? null : suggestCoa(l.rawName, accounts, historyByRawName)
+            const auto = s !== null && isAutoMappable(s)
+            if (auto) autoMapped++
+            else if (s) suggested++
+            return {
               reportId: report.id,
               rawName: l.rawName,
               amount: String(l.amount), // numeric column → string
               isSubtotal: l.isSubtotal,
               confidence: l.confidence,
-              status: 'unmatched' as const,
+              suggestedCoaId: s ? s.masterCoaId : null,
+              masterCoaId: auto ? s.masterCoaId : null,
+              status: auto ? ('matched' as const) : ('unmatched' as const),
               lineOrder: i,
-            }))
-          )
+            }
+          })
+          await db.insert(reportLineItems).values(values)
         }
         await db
           .update(financialReports)
           .set({ status: 'review', extractedAt: new Date() })
           .where(eq(financialReports.id, report.id))
-        return { id: report.id, reportType: type, lineCount: lines.length }
+        return { id: report.id, reportType: type, lineCount: lines.length, autoMapped, suggested }
       } catch (err) {
         // Ekstraksi gagal — biarkan report (PDF tersimpan) di status 'uploaded'
         // supaya bisa di-retry; laporkan errornya.

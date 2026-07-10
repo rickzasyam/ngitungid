@@ -157,9 +157,12 @@
 - ⏳ POST /api/upload/pdf — trigger Gemini extraction pipeline
 - ⏳ GET /api/reports/[id]/status — polling endpoint for extraction progress
 
-### 2.5 COA Matching Engine — **mapping MANUAL selesai; AUTO-match belum**
-- ⏳ Exact match algorithm
-- ⏳ Fuzzy match with history boost (coa_mapping_history) — `suggestedCoaId` masih **selalu null**, jadi kartu "Saran AI" (lilac) di /coa-mapping belum pernah muncul
+### 2.5 COA Matching Engine — **COMPLETED 2026-07-10**
+- ✅ `lib/coa-match.ts` (murni, tanpa I/O) — prioritas: **history** (pernah dikonfirmasi admin utk klien ini) → **exact** (nama ternormalisasi, non-ambigu) → **fuzzy** (0.6·bigram-Dice + 0.4·token-Jaccard, ambang **0.55**). Di bawah ambang: TIDAK menyarankan apa pun — saran keliru lebih mahal daripada tidak ada saran (admin cenderung meng-klik "terima")
+- ✅ Kebijakan tunggal `isAutoMappable()`: history/exact → **auto-map** (`master_coa_id` + status `matched`, masuk tabel "Ter-mapping Otomatis"); fuzzy → **saran saja** (`suggested_coa_id`, tetap `unmatched` → kartu lilac "Saran AI"). Exact yang **ambigu** (>1 akun bernama sama setelah normalisasi) diturunkan jadi saran, tidak auto-map
+- ✅ Disambungkan di `POST /api/upload` — Master COA + history di-load SEKALI (bukan per file); response ikut `autoMapped` & `suggested` per laporan
+- ✅ `POST /api/reports/[id]/suggest` — backfill saran untuk laporan lama / sesudah Master COA diperbarui / sesudah history bertambah. **Tanpa memanggil Gemini** (hemat kuota free-tier), idempoten; subtotal, baris yang sudah dipetakan, dan baris `rejected` dilewati
+- ✅ Divalidasi vs data ASLI: 36 nama line item L/R Rasyuka vs 106 akun Master COA asli → **36/36 exact (100%)** — software akunting klien menulis nama akun yang sama persis di COA & PDF. Akun tak dikenal ("Biaya Langganan Zoom Pro") benar-benar tidak disarankan; history boost memetakan nama yang tadinya tak tersaran
 - ✅ POST /api/reports/[id]/mapping — confirm line item mapping (2026-07-10). Set `master_coa_id` + status `matched`, upsert `coa_mapping_history`, flip report → `mapped`. Atomik via `db.batch`. Baris **subtotal & rejected dikecualikan** dari hitungan sisa — tanpa itu status tidak pernah jadi `mapped` (bug ditemukan & diperbaiki saat review)
 - ✅ GET /api/reports/periods — daftar periode per klien (prasyarat period selector)
 - ✅ GET/PUT /api/clients/[id]/metrics — persist client_metric_visibility (2026-07-10)
@@ -272,6 +275,10 @@
 | 2026-07-06 | "Sesi upload" = (clientId, periodStart, periodEnd) — TANPA tabel session baru | 3 laporan dikelompokkan by klien+periode (sejalan `unique(client, type, period)`); extraction-review load by query `?start=&end=`. Sederhana, tak ada entitas baru |
 | 2026-07-06 | **Free tier `gemini-3.5-flash` = 5 request/menit** — didokumentasikan di `.env.example` | 1 upload = 1 request/file (maks 3). Pemakaian rutin banyak klien butuh billing berbayar. Retry sudah honor `retryDelay` tapi tidak menembus kuota menit |
 | 2026-07-06 | `pnpm-workspace.yaml` `allowBuilds`: `@google/genai` & `protobufjs` = `false` | pnpm v11 memblok `pnpm <script>` (precheck install exit 1) kalau build script belum diputuskan. SDK jalan tanpa build (ekstraksi terverifikasi) → `false` = jangan jalankan postinstall, tanpa risiko script pihak ketiga |
+| 2026-07-10 | COA matching **deterministik** (`lib/coa-match.ts`), BUKAN Gemini | Nama akun di PDF klien = nama di Master COA-nya (terbukti 36/36 exact utk Rasyuka). Matching lokal: gratis, instan, deterministik, tidak kena kuota. Gemini-assisted fuzzy tetap disimpan sebagai 3.2 untuk klien yang penamaannya benar-benar berbeda |
+| 2026-07-10 | history/exact → **auto-map**; fuzzy → **saran saja** (satu kebijakan: `isAutoMappable()`) | UI memang punya tabel "Ter-mapping Otomatis" (collapsed) + kartu lilac "Saran AI" — dua state ini baru hidup kalau auto-map dipisah dari saran. Exact ambigu (>1 akun bernama sama setelah normalisasi) sengaja diturunkan jadi saran supaya tidak salah petakan diam-diam |
+| 2026-07-10 | Ambang fuzzy 0.55; di bawah itu **tidak menyarankan apa pun** | Saran yang salah lebih mahal daripada tidak ada saran — admin cenderung menerima saran yang tampil. Terbukti: "Biaya Langganan Zoom Pro" (tak ada di COA) benar-benar tidak disarankan |
+| 2026-07-10 | `POST /api/reports/[id]/suggest` terpisah dari upload, tanpa panggil Gemini | Backfill laporan lama & re-run setelah Master COA / history berubah, tanpa membakar kuota free-tier (5 req/menit) dan tanpa ekstraksi ulang. Idempoten: subtotal, baris yang sudah dipetakan, dan `rejected` dilewati |
 
 ---
 
@@ -297,9 +304,11 @@
 ⏳ 2.6 Financial Data API (`/dashboard` + `/analytics`) — belum dimulai, **butuh semantic layer** (lihat catatan di bawah)
 
 ### Next Sprint
-**Sisa 2.5 — AUTO-match engine.** Mapping manual sudah jalan (kartu, dropdown, simpan, history upsert), tapi `suggestedCoaId` masih selalu null sehingga tidak ada saran sama sekali — admin memetakan 100% manual. Bangun `lib/coa-match.ts`: (1) **exact match** pada nama ternormalisasi, (2) **history boost** — cek `coa_mapping_history` (client, rawName) yang sudah dikonfirmasi sebelumnya, (3) **fuzzy match** (token/trigram similarity) dgn ambang skor. Isi `suggestedCoaId` sesudah ekstraksi di `POST /api/upload` (+ endpoint backfill untuk laporan lama). Kartu "Saran AI" (lilac) di /coa-mapping & kolom COA di extraction-review langsung hidup begitu ini ada.
+**1. Persist review actions di `extraction-review`.** Tombol "Konfirmasi Semua", edit COA inline, dan reject baris masih state lokal — hilang saat refresh. Butuh `PATCH /api/reports/[id]/line-items` (bulk: status, editedName) supaya keputusan admin tersimpan, lalu "Lanjut ke COA Mapping" jadi transisi status yang nyata.
 
-Lalu: PERSIST review actions (edit/reject/confirm) di extraction-review supaya "Konfirmasi Semua" & "Lanjut ke COA Mapping" nyata (sekarang state lokal). Setelah itu 2.6 Financial Data API.
+**2. Kemudian 2.6 Financial Data API** — `GET /api/dashboard/[clientId]`, `/api/analytics/[clientId]/ratios`, `/api/reports/[clientId]/compare`. Semua bahannya sudah ada: `report_line_items` + `master_coa` (kelompok / subKelompok / classCf) cukup untuk menurunkan MONTHLY_DATA, neraca, dan rasio secara on-the-fly (lihat keputusan 2026-07-02 soal tabel snapshot yang sengaja tidak dibuat). Ini yang akhirnya melepas Dashboard & Analytics dari mock.
+
+Catatan: setelah 2.5, upload pertama sebuah klien sudah **auto-map 100%** untuk Rasyuka (nama akun identik antara COA & PDF). Klien dgn penamaan berbeda akan jatuh ke fuzzy/saran — di situlah `coa_mapping_history` mulai belajar.
 
 Catatan operasional: `GEMINI_API_KEY` saat ini **free tier (5 req/menit)** — cukup utk 1 upload (≤3 file), tapi pemakaian rutin butuh billing berbayar (lihat `.env.example`).
 
