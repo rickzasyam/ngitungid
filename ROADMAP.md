@@ -170,9 +170,12 @@
 - ✅ `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) — fixture dev: Master COA + line item berbeda per klien (verifikasi client switcher)
 - ✅ Persist review actions (edit/reject/undo/confirm) di `extraction-review` (2026-07-10) — `PATCH /api/reports/[id]/line-items/[lineItemId]` (status + editedName, guard IDOR: baris harus milik laporan di URL) + `POST …/line-items/confirm-all` (non-rejected → matched). Frontend: optimistic update + rollback saat gagal. **Report status TIDAK disentuh di sini** — transisi review→mapped tetap milik route /mapping (berbasis masterCoaId), tidak konflik. Terverifikasi vs Neon: edit/reject/undo persist, IDOR ditolak 404 tanpa perubahan diam-diam, confirm-all melewati rejected
 
-### 2.6 Financial Data API
-- ⏳ GET /api/dashboard/[clientId] — aggregated metrics
-- ⏳ GET /api/analytics/[clientId]/ratios — financial health ratios
+### 2.6 Financial Data API — **Dashboard selesai 2026-07-10; Analytics ratios menyusul**
+- ✅ `lib/financial-agg.ts` (murni) — agregasi on-the-fly dari `report_line_items` + `master_coa` (baris matched/edited, non-subtotal). Klasifikasi berbasis kata kunci `subKelompok`/`classCf` → tahan variasi taksonomi antar klien (COA asli Rasyuka vs seed-dev). **Urutan cek penting**: "harga pokok penjualan" & "pendapatan dan biaya lain-lain" dicek sebelum kata kunci revenue (keduanya mengandungnya). Rumus P&L terverifikasi cocok dgn PDF: revenue(net) − hpp = laba kotor; − opex + lain-lain − pajak = laba bersih
+- ✅ `GET /api/dashboard/[clientId]?periodStart=&periodEnd=` — monthly P&L series, KPI totals (revenue/netProfit/**fixed & variable cost asli**, bukan lagi fudge 18.5%/79.2%), expense breakdown, neraca (point-in-time terbaru), cashflow per bulan (by classCf), top-5 penerimaan (agregasi per nama). Role-aware
+- ✅ `app/dashboard/page.tsx` lepas dari mock — fetch endpoint, bentuk props chart dijaga identik (swap data source, bukan redesign); loading + empty state (belum ada laporan terpetakan); neraca/cashflow disembunyikan kalau tak ada laporannya
+- ✅ Terverifikasi: 14/14 uji rumus sintetik (termasuk bug klasifikasi HPP-mengandung-"penjualan" yang tertangkap & diperbaiki); wiring endpoint vs Neon (monthly 2 bulan, KPI, top receipts, neraca). Cocok-angka-real via Gemini tertunda (503 high-demand) — rekonsiliasi detail→subtotal sudah terbukti di M1
+- ⏳ GET /api/analytics/[clientId]/ratios — financial health ratios (CR/QR/ROE/ROA/GPM/NPM/DSO/DIO/DPO/turnover/DER…) — **berikutnya**
 - ⏳ GET /api/reports/[clientId]/compare — period comparison
 
 ---

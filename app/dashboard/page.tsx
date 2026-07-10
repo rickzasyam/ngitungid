@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { RevenueTrendChart } from '@/components/dashboard/revenue-trend-chart'
@@ -13,118 +13,35 @@ import { formatRupiahShort } from '@/components/dashboard/dashboard-utils'
 
 import {
   TrendingUp, DollarSign, Monitor, Activity,
-  ArrowUpRight, ArrowDownRight, Trophy,
+  ArrowUpRight, ArrowDownRight, Trophy, Loader2, Inbox,
 } from 'lucide-react'
 
-// ============================================================
-// MOCK DATA
-// ============================================================
-
-const MONTHLY_DATA = [
-  { month: 'Jan', revenue: 485086931, netProfit: 127635672, grossProfit: 284632728, expenses: 153404036 },
-  { month: 'Feb', revenue: 512340000, netProfit: 141200000, grossProfit: 298500000, expenses: 157300000 },
-  { month: 'Mar', revenue: 498750000, netProfit: 118900000, grossProfit: 275600000, expenses: 156700000 },
-  { month: 'Apr', revenue: 567890000, netProfit: 165400000, grossProfit: 320100000, expenses: 154700000 },
-  { month: 'May', revenue: 601230000, netProfit: 178300000, grossProfit: 342800000, expenses: 164500000 },
-  { month: 'Jun', revenue: 589450000, netProfit: 169800000, grossProfit: 335200000, expenses: 165400000 },
-  { month: 'Jul', revenue: null, netProfit: null, grossProfit: null, expenses: null },
-  { month: 'Aug', revenue: null, netProfit: null, grossProfit: null, expenses: null },
-  { month: 'Sep', revenue: null, netProfit: null, grossProfit: null, expenses: null },
-  { month: 'Oct', revenue: null, netProfit: null, grossProfit: null, expenses: null },
-  { month: 'Nov', revenue: null, netProfit: null, grossProfit: null, expenses: null },
-  { month: 'Dec', revenue: null, netProfit: null, grossProfit: null, expenses: null },
-]
-
-const EXPENSE_BREAKDOWN = [
-  { name: 'HPP', value: 200454203, color: '#daf163' },
-  { name: 'Biaya Variabel', value: 124303362, color: '#bbb3f3' },
-  { name: 'Biaya Fixed', value: 29100674, color: '#fdba74' },
-  { name: 'Lain-lain', value: 3593020, color: '#7dd3fc' },
-]
-
-const PNL_OVERVIEW = MONTHLY_DATA.filter(d => d.revenue !== null).map(d => ({
-  month: d.month,
-  pendapatan: d.revenue,
-  biaya: d.expenses,
-}))
-
-const BALANCE_SHEET = {
-  totalAset: 1466658050,
-  aktivaLancar: 1397767344,
-  aktivaTetap: 63690706,
-  aktivaLainnya: 5200000,
-  totalHutang: 42142100,
-  totalModal: 1419315950,
+// ── Tipe respons GET /api/dashboard/[clientId] ──────────────
+type MonthPoint = { month: string; revenue: number; netProfit: number; grossProfit: number; expenses: number }
+type DashboardData = {
+  hasData: boolean
+  monthly?: MonthPoint[]
+  totals?: { revenue: number; netProfit: number; fixedCost: number; varCost: number }
+  expenseBreakdown?: { name: string; value: number; color: string }[]
+  balanceSheet?: { totalAset: number; aktivaLancar: number; aktivaTetap: number; aktivaLainnya: number; totalHutang: number; totalModal: number } | null
+  workingCapital?: { label: string; value: number; icon: string }[]
+  cashflow?: { month: string; operating: number; investing: number; funding: number }[]
+  topReceipts?: { name: string; amount: number }[]
 }
 
-const WORKING_CAPITAL_METRICS = [
-  { label: 'Kas & Setara Kas', value: 75254490, icon: 'cash' },
-  { label: 'Piutang Usaha', value: 66794049, icon: 'receivable' },
-  { label: 'Biaya Dibayar Dimuka', value: 28390782, icon: 'prepaid' },
-  { label: 'Persediaan', value: 1214633693, icon: 'inventory' },
-]
+const MONTHS_12 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-const CASHFLOW_DATA = [
-  { month: 'Jan', operating: 68680558, investing: -4700000, funding: 109500 },
-  { month: 'Feb', operating: 72100000, investing: -2100000, funding: 0 },
-  { month: 'Mar', operating: 61500000, investing: -1800000, funding: 5000000 },
-  { month: 'Apr', operating: 89200000, investing: -3200000, funding: 0 },
-  { month: 'May', operating: 95600000, investing: -6500000, funding: 0 },
-  { month: 'Jun', operating: 87300000, investing: -2900000, funding: 0 },
-]
+const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-// Top 5 sumber penerimaan bulan berjalan — per channel penjualan
-const TOP_RECEIPTS = [
-  { name: 'Penjualan Shopee', amount: 245000000 },
-  { name: 'Penjualan Tiktok', amount: 156000000 },
-  { name: 'Penjualan Offline', amount: 98000000 },
-  { name: 'Website Sendiri', amount: 62000000 },
-  { name: 'Marketplace Lain', amount: 28000000 },
-]
-
-// ============================================================
-// DERIVED CALCULATIONS
-// ============================================================
-
-const monthsWithData = MONTHLY_DATA.filter(d => d.revenue !== null)
-const totalRevenue = monthsWithData.reduce((sum, d) => sum + (d.revenue ?? 0), 0)
-const totalNetProfit = monthsWithData.reduce((sum, d) => sum + (d.netProfit ?? 0), 0)
-
-const totalOpExp = monthsWithData.reduce((sum, d) => sum + (d.expenses ?? 0), 0)
-const fixedCostTotal  = Math.round(totalOpExp * 0.185)
-const varCostTotal    = Math.round(totalOpExp * 0.792)
-const avgFixedCost    = Math.round(fixedCostTotal / monthsWithData.length)
-const avgVarCost      = Math.round(varCostTotal / monthsWithData.length)
-
-const lastMonth = monthsWithData[monthsWithData.length - 1]
-const prevMonth = monthsWithData[monthsWithData.length - 2]
-const revenueChange = ((lastMonth.revenue! - prevMonth.revenue!) / prevMonth.revenue!) * 100
-const profitChange = ((lastMonth.netProfit! - prevMonth.netProfit!) / prevMonth.netProfit!) * 100
-
-const totalExpenses = EXPENSE_BREAKDOWN.reduce((sum, e) => sum + e.value, 0)
-
-// ============================================================
-// KPI CARD — Inline (responsive grid)
-// ============================================================
-
+// ── KPI CARD ─────────────────────────────────────────────────
 function KPICard({
-  label,
-  value,
-  avgLabel,
-  changePercent,
-  variant,
-  icon: Icon,
+  label, value, avgLabel, changePercent, variant, icon: Icon,
 }: {
-  label: string
-  value: string
-  avgLabel?: string
-  changePercent?: number
-  variant: 'lime' | 'lilac'
-  icon: React.ElementType
+  label: string; value: string; avgLabel?: string; changePercent?: number
+  variant: 'lime' | 'lilac'; icon: React.ElementType
 }) {
   const bg = variant === 'lime' ? 'var(--color-accent-primary)' : 'var(--color-accent-secondary)'
   const isPositive = changePercent !== undefined && changePercent >= 0
-
   const circles = variant === 'lime' ? [
     { size: 140, top: -50, right: -40, bg: 'rgba(26,26,26,0.12)', blend: 'multiply' as const },
     { size: 95, top: -15, right: 15, bg: 'rgba(255,255,255,0.5)', blend: 'overlay' as const },
@@ -134,7 +51,6 @@ function KPICard({
     { size: 95, top: -15, right: 15, bg: 'rgba(26,26,26,0.1)', blend: 'multiply' as const },
     { size: 55, top: 25, right: -15, bg: 'rgba(255,255,255,0.45)', blend: 'overlay' as const },
   ]
-
   return (
     <div className="ng-card-lift relative overflow-hidden rounded-3xl p-5" style={{ background: bg }}>
       {circles.map((c, i) => (
@@ -150,9 +66,7 @@ function KPICard({
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '6px' }}>
           <p className="text-2xl font-bold" style={{ color: 'var(--color-accent-primary-fg)', margin: 0 }}>{value}</p>
           {avgLabel && (
-            <p style={{ fontSize: '10px', color: 'rgba(26,26,26,0.45)', marginBottom: '3px' }}>
-              avg {avgLabel}/bln
-            </p>
+            <p style={{ fontSize: '10px', color: 'rgba(26,26,26,0.45)', marginBottom: '3px' }}>avg {avgLabel}/bln</p>
           )}
         </div>
         {changePercent !== undefined && (
@@ -167,18 +81,77 @@ function KPICard({
   )
 }
 
-// ============================================================
-// MAIN PAGE
-// ============================================================
-
+// ── MAIN PAGE ────────────────────────────────────────────────
 export default function DashboardPage() {
   const { activeClient, isLoaded } = useRequireClient()
+  const clientId = activeClient?.id ?? null
   const [dashboardDateRange, setDashboardDateRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>({
     from: new Date(2026, 0, 1),
-    to: new Date(2026, 5, 30),
+    to: new Date(2026, 11, 31),
   })
 
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const from = dashboardDateRange?.from
+  const to = dashboardDateRange?.to
+  const fromKey = from ? toYMD(from) : ''
+  const toKey = to ? toYMD(to) : ''
+
+  const load = useCallback(async () => {
+    if (!clientId || !fromKey || !toKey) return
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const res = await fetch(`/api/dashboard/${clientId}?periodStart=${fromKey}&periodEnd=${toKey}`)
+      if (!res.ok) throw new Error()
+      setData(await res.json())
+    } catch {
+      setLoadError('Gagal memuat data dashboard.')
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [clientId, fromKey, toKey])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
   if (!isLoaded || !activeClient) return null
+
+  // ── Turunan dari data API (bentuk sama seperti props chart) ──
+  const monthly = data?.monthly ?? []
+  const monthsCount = monthly.length
+  const totalRevenue = data?.totals?.revenue ?? 0
+  const totalNetProfit = data?.totals?.netProfit ?? 0
+  const fixedCostTotal = data?.totals?.fixedCost ?? 0
+  const varCostTotal = data?.totals?.varCost ?? 0
+  const avg = (v: number) => (monthsCount > 0 ? Math.round(v / monthsCount) : 0)
+
+  // 12-bulan template (null untuk bulan tanpa data) — bentuk yang diharapkan chart
+  const monthly12 = MONTHS_12.map(m => {
+    const found = monthly.find(d => d.month === m)
+    return found
+      ? { month: m, revenue: found.revenue, netProfit: found.netProfit, grossProfit: found.grossProfit, expenses: found.expenses }
+      : { month: m, revenue: null, netProfit: null, grossProfit: null, expenses: null }
+  })
+
+  const pnlOverview = monthly.map(d => ({ month: d.month, pendapatan: d.revenue, biaya: d.expenses }))
+  const expenseBreakdown = data?.expenseBreakdown ?? []
+  const totalExpenses = expenseBreakdown.reduce((s, e) => s + e.value, 0)
+  const balanceSheet = data?.balanceSheet ?? null
+  const workingCapital = data?.workingCapital ?? []
+  const cashflow = data?.cashflow ?? []
+  const topReceipts = data?.topReceipts ?? []
+
+  const last = monthly[monthly.length - 1]
+  const prev = monthly[monthly.length - 2]
+  const revenueChange = last && prev && prev.revenue ? ((last.revenue - prev.revenue) / prev.revenue) * 100 : undefined
+  const profitChange = last && prev && prev.netProfit ? ((last.netProfit - prev.netProfit) / prev.netProfit) * 100 : undefined
+
+  const empty = !loading && (!data?.hasData || monthsCount === 0)
 
   return (
     <div className="flex-1 p-3 min-w-0 overflow-hidden">
@@ -188,9 +161,7 @@ export default function DashboardPage() {
           <div className="flex-shrink-0 px-4 sm:px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: '#f0f0f0' }}>
             <div>
               <h1 className="text-xl font-bold" style={{ color: '#2d2d2d' }}>Dashboard</h1>
-              <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
-                {activeClient.name} · Ringkasan performa keuangan
-              </p>
+              <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>{activeClient.name} · Ringkasan performa keuangan</p>
             </div>
             <div style={{ width: '280px' }} className="hidden sm:block">
               <DateRangePicker value={dashboardDateRange} onChange={setDashboardDateRange} placeholder="Pilih periode" />
@@ -199,66 +170,93 @@ export default function DashboardPage() {
 
           {/* Scrollable content */}
           <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
-            <div className="p-4 sm:p-6 w-full mx-auto space-y-5">
-
-              {/* 1. KPI Cards — responsive: 1 → 2 → 4 columns, stagger entrance */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {[
-                  { label: 'Total Revenue (YTD)', value: formatRupiahShort(totalRevenue), avgLabel: formatRupiahShort(Math.round(totalRevenue / monthsWithData.length)), changePercent: revenueChange, variant: 'lime' as const, icon: DollarSign },
-                  { label: 'Net Profit (YTD)', value: formatRupiahShort(totalNetProfit), avgLabel: formatRupiahShort(Math.round(totalNetProfit / monthsWithData.length)), changePercent: profitChange, variant: 'lilac' as const, icon: TrendingUp },
-                  { label: 'Fixed Cost (YTD)', value: formatRupiahShort(fixedCostTotal), avgLabel: formatRupiahShort(avgFixedCost), variant: 'lilac' as const, icon: Monitor },
-                  { label: 'Variable Cost (YTD)', value: formatRupiahShort(varCostTotal), avgLabel: formatRupiahShort(avgVarCost), variant: 'lime' as const, icon: Activity },
-                ].map((kpi, i) => (
-                  <div key={kpi.label} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
-                    <KPICard {...kpi} />
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 h-full" style={{ color: '#9ca3af' }}>
+                <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Memuat data…</span>
+              </div>
+            ) : loadError ? (
+              <div className="flex items-center justify-center h-full"><p className="text-sm" style={{ color: '#dc2626' }}>{loadError}</p></div>
+            ) : empty ? (
+              <div className="flex items-center justify-center h-full p-6">
+                <div className="text-center max-w-sm">
+                  <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ border: '1.5px dashed rgba(218,241,99,0.9)', background: '#fbfef2' }}>
+                    <Inbox className="w-6 h-6" style={{ color: '#8aa32e' }} />
                   </div>
-                ))}
-              </div>
-
-              {/* 2. Revenue Trend */}
-              <div className="ng-rise" style={{ animationDelay: '150ms' }}>
-                <RevenueTrendChart data={MONTHLY_DATA} totalRevenue={totalRevenue} monthsCount={monthsWithData.length} />
-              </div>
-
-              {/* 3. P&L Overview */}
-              <div className="ng-rise" style={{ animationDelay: '220ms' }}>
-                <PnlOverviewChart data={PNL_OVERVIEW} />
-              </div>
-
-              {/* 4. Expense Breakdown + Top Receipts — dua kartu komposisi/ranking berbobot visual serupa, berdampingan */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 ng-rise" style={{ animationDelay: '290ms' }}>
-                <ExpenseBreakdownDonut data={EXPENSE_BREAKDOWN} totalExpenses={totalExpenses} />
-                <div
-                  className="ng-card-lift rounded-3xl p-6"
-                  style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)' }}
-                    >
-                      <Trophy className="w-4 h-4" style={{ color: '#1a1a1a' }} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Top 5 Sumber Penerimaan</h3>
-                      <p className="text-xs" style={{ color: '#6b7280' }}>Kontribusi terbesar bulan berjalan</p>
-                    </div>
-                  </div>
-                  <TopReceiptsBubble items={TOP_RECEIPTS} compact />
+                  <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Belum ada data untuk periode ini</p>
+                  <p className="text-xs" style={{ color: '#6b7280' }}>
+                    Upload & petakan laporan {activeClient.name} lebih dulu — angka dashboard dihitung dari laporan yang sudah dipetakan ke COA.
+                  </p>
                 </div>
               </div>
+            ) : (
+              <div className="p-4 sm:p-6 w-full mx-auto space-y-5">
 
-              {/* 5. Balance Sheet Health — kontennya padat (2 progress bar + 4 metric), diberi baris penuh sendiri */}
-              <div className="ng-rise" style={{ animationDelay: '360ms' }}>
-                <BalanceSheetHealth balanceSheet={BALANCE_SHEET} workingCapitalMetrics={WORKING_CAPITAL_METRICS} />
+                {/* 1. KPI Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Total Revenue', value: formatRupiahShort(totalRevenue), avgLabel: formatRupiahShort(avg(totalRevenue)), changePercent: revenueChange, variant: 'lime' as const, icon: DollarSign },
+                    { label: 'Net Profit', value: formatRupiahShort(totalNetProfit), avgLabel: formatRupiahShort(avg(totalNetProfit)), changePercent: profitChange, variant: 'lilac' as const, icon: TrendingUp },
+                    { label: 'Fixed Cost', value: formatRupiahShort(fixedCostTotal), avgLabel: formatRupiahShort(avg(fixedCostTotal)), variant: 'lilac' as const, icon: Monitor },
+                    { label: 'Variable Cost', value: formatRupiahShort(varCostTotal), avgLabel: formatRupiahShort(avg(varCostTotal)), variant: 'lime' as const, icon: Activity },
+                  ].map((kpi, i) => (
+                    <div key={kpi.label} className="animate-slide-up" style={{ animationDelay: `${i * 75}ms` }}>
+                      <KPICard {...kpi} />
+                    </div>
+                  ))}
+                </div>
+
+                {/* 2. Revenue Trend */}
+                <div className="ng-rise" style={{ animationDelay: '150ms' }}>
+                  <RevenueTrendChart data={monthly12} totalRevenue={totalRevenue} monthsCount={monthsCount} />
+                </div>
+
+                {/* 3. P&L Overview */}
+                <div className="ng-rise" style={{ animationDelay: '220ms' }}>
+                  <PnlOverviewChart data={pnlOverview} />
+                </div>
+
+                {/* 4. Expense Breakdown + Top Receipts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 ng-rise" style={{ animationDelay: '290ms' }}>
+                  <ExpenseBreakdownDonut data={expenseBreakdown} totalExpenses={totalExpenses} />
+                  <div className="ng-card-lift rounded-3xl p-6" style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)' }}>
+                        <Trophy className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Top 5 Sumber Penerimaan</h3>
+                        <p className="text-xs" style={{ color: '#6b7280' }}>Kontribusi terbesar pada periode ini</p>
+                      </div>
+                    </div>
+                    {topReceipts.length > 0 ? (
+                      <TopReceiptsBubble items={topReceipts} compact />
+                    ) : (
+                      <p className="text-xs py-8 text-center" style={{ color: '#9ca3af' }}>Belum ada baris pendapatan terpetakan.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 5. Balance Sheet Health */}
+                {balanceSheet ? (
+                  <div className="ng-rise" style={{ animationDelay: '360ms' }}>
+                    <BalanceSheetHealth balanceSheet={balanceSheet} workingCapitalMetrics={workingCapital} />
+                  </div>
+                ) : (
+                  <div className="ng-rise rounded-3xl p-6" style={{ animationDelay: '360ms', background: 'white', border: '1px solid #f0f0f0' }}>
+                    <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Kesehatan Neraca</p>
+                    <p className="text-xs" style={{ color: '#9ca3af' }}>Belum ada laporan Neraca terpetakan untuk periode ini.</p>
+                  </div>
+                )}
+
+                {/* 6. Cash Flow Waterfall */}
+                {cashflow.length > 0 && (
+                  <div className="ng-rise" style={{ animationDelay: '430ms' }}>
+                    <CashflowWaterfallChart data={cashflow} />
+                  </div>
+                )}
+
               </div>
-
-              {/* 6. Cash Flow Waterfall */}
-              <div className="ng-rise" style={{ animationDelay: '430ms' }}>
-                <CashflowWaterfallChart data={CASHFLOW_DATA} />
-              </div>
-
-            </div>
+            )}
           </main>
         </div>
       </div>
