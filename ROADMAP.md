@@ -168,7 +168,7 @@
 - ✅ GET/PUT /api/clients/[id]/metrics — persist client_metric_visibility (2026-07-10)
 - ✅ /coa-mapping lepas dari mock: dropdown COA (dikelompokkan per subKelompok) + line item + period selector dari API; simpan per-laporan lalu re-read dari server
 - ✅ `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) — fixture dev: Master COA + line item berbeda per klien (verifikasi client switcher)
-- ⏳ Persist review actions (edit/reject/confirm) di `extraction-review` — masih state lokal
+- ✅ Persist review actions (edit/reject/undo/confirm) di `extraction-review` (2026-07-10) — `PATCH /api/reports/[id]/line-items/[lineItemId]` (status + editedName, guard IDOR: baris harus milik laporan di URL) + `POST …/line-items/confirm-all` (non-rejected → matched). Frontend: optimistic update + rollback saat gagal. **Report status TIDAK disentuh di sini** — transisi review→mapped tetap milik route /mapping (berbasis masterCoaId), tidak konflik. Terverifikasi vs Neon: edit/reject/undo persist, IDOR ditolak 404 tanpa perubahan diam-diam, confirm-all melewati rejected
 
 ### 2.6 Financial Data API
 - ⏳ GET /api/dashboard/[clientId] — aggregated metrics

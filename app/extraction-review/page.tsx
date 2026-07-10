@@ -31,6 +31,7 @@ type ExtractedLine = {
   rawName: string
   suggestedCOA: string | null
   masterCOACode: string | null
+  masterCoaId: string | null
   amount: number
   isSubtotal: boolean
   confidence: number
@@ -110,6 +111,7 @@ function ExtractionReviewInner() {
   const [showSubtotals, setShowSubtotals] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'unmatched' | 'matched'>('all')
   const [activeTab, setActiveTab] = useState<TabId>('pnl')
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoaded || !activeClient || !start || !end) {
@@ -162,8 +164,32 @@ function ExtractionReviewInner() {
   const lines = linesByTab[activeTab]
   const activeReport = reports[activeTab]
 
-  const updateActiveLines = (fn: (l: ExtractedLine) => ExtractedLine) =>
-    setLinesByTab(prev => ({ ...prev, [activeTab]: prev[activeTab].map(fn) }))
+  // Optimistic update + rollback: UI berubah instan, lalu di-PATCH ke server.
+  // Kalau request gagal, kembalikan snapshot tab tsb (bukan tab yang mungkin
+  // sudah dipindah user) dan tampilkan error.
+  const persistLine = async (
+    lineId: string,
+    body: { status: LineStatus; editedName?: string | null },
+    optimistic: (l: ExtractedLine) => ExtractedLine
+  ) => {
+    const reportId = reports[activeTab]?.id
+    if (!reportId) return
+    const tab = activeTab
+    const snapshot = linesByTab[tab]
+    setActionError(null)
+    setLinesByTab(prev => ({ ...prev, [tab]: prev[tab].map(optimistic) }))
+    try {
+      const res = await fetch(`/api/reports/${reportId}/line-items/${lineId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setLinesByTab(prev => ({ ...prev, [tab]: snapshot }))
+      setActionError('Gagal menyimpan perubahan — coba lagi.')
+    }
+  }
 
   const visibleLines = lines.filter(line => {
     if (!showSubtotals && line.isSubtotal) return false
@@ -177,7 +203,7 @@ function ExtractionReviewInner() {
   const rejectedCount = lines.filter(l => l.status === 'rejected').length
 
   const handleReject = (id: string) =>
-    updateActiveLines(l => (l.id === id ? { ...l, status: 'rejected' } : l))
+    persistLine(id, { status: 'rejected' }, l => (l.id === id ? { ...l, status: 'rejected' } : l))
 
   const handleEdit = (line: ExtractedLine) => {
     setEditingId(line.id)
@@ -185,20 +211,40 @@ function ExtractionReviewInner() {
   }
 
   const handleSaveEdit = (id: string) => {
-    updateActiveLines(l =>
-      l.id === id ? { ...l, suggestedCOA: editValue, editedName: editValue, status: 'edited' } : l
-    )
+    const value = editValue
     setEditingId(null)
+    persistLine(id, { status: 'edited', editedName: value }, l =>
+      l.id === id ? { ...l, suggestedCOA: value, editedName: value, status: 'edited' } : l
+    )
   }
 
-  const handleReset = (id: string) =>
-    updateActiveLines(l =>
-      l.id === id ? { ...l, status: l.confidence >= 70 ? 'matched' : 'unmatched', editedName: undefined } : l
+  const handleReset = (id: string) => {
+    // Undo reject → status natural: 'matched' kalau baris punya COA, else 'unmatched'.
+    const restored: LineStatus = linesByTab[activeTab].find(l => l.id === id)?.masterCoaId
+      ? 'matched'
+      : 'unmatched'
+    persistLine(id, { status: restored, editedName: null }, l =>
+      l.id === id ? { ...l, status: restored, editedName: undefined } : l
     )
+  }
 
-  const handleConfirmAll = () => {
-    updateActiveLines(l => (l.status !== 'rejected' ? { ...l, status: 'matched' } : l))
-    // TODO(2.5): persist review + POST /api/reports/[id]/confirm lalu ke COA Mapping.
+  const handleConfirmAll = async () => {
+    const reportId = reports[activeTab]?.id
+    if (!reportId) return
+    const tab = activeTab
+    const snapshot = linesByTab[tab]
+    setActionError(null)
+    setLinesByTab(prev => ({
+      ...prev,
+      [tab]: prev[tab].map(l => (l.status !== 'rejected' ? { ...l, status: 'matched' } : l)),
+    }))
+    try {
+      const res = await fetch(`/api/reports/${reportId}/line-items/confirm-all`, { method: 'POST' })
+      if (!res.ok) throw new Error()
+    } catch {
+      setLinesByTab(prev => ({ ...prev, [tab]: snapshot }))
+      setActionError('Gagal mengonfirmasi — coba lagi.')
+    }
   }
 
   const tabs = TAB_ORDER.map(id => ({
@@ -391,6 +437,17 @@ function ExtractionReviewInner() {
                     {showSubtotals ? 'Sembunyikan subtotal' : 'Tampilkan subtotal'}
                   </button>
                 </div>
+
+                {/* Action error (persist gagal → sudah di-rollback) */}
+                {actionError && (
+                  <div
+                    className="flex items-center gap-2 mt-3 px-3 py-2 rounded-xl animate-fade-in"
+                    style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#dc2626' }} />
+                    <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{actionError}</span>
+                  </div>
+                )}
               </div>
 
               {/* Table header */}
