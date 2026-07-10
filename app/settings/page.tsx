@@ -611,13 +611,76 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
 
 // ── Tab: Analytics Display (scoped ke klien aktif) ───────────
 
-function AnalyticsDisplayTab({ clientName, visibility, onToggleMetric, onToggleCategory }: {
+function AnalyticsDisplayTab({ clientId, clientName }: {
+  clientId: string
   clientName: string
-  visibility: Record<string, boolean>
-  onToggleMetric: (metricId: string) => void
-  onToggleCategory: (catId: string) => void
 }) {
+  // Di-mount ulang tiap ganti klien (key={activeClient.id} di pemanggil),
+  // jadi state di bawah selalu milik satu klien saja.
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(defaultVisibility)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/clients/${clientId}/metrics`)
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error('Gagal memuat pengaturan metrik.'))))
+      .then((data: { visibility: Record<string, boolean> }) => {
+        if (cancelled) return
+        // Baris yang belum pernah disimpan jatuh ke default — backend hanya
+        // menyimpan yang pernah di-toggle.
+        setVisibility({ ...defaultVisibility(), ...data.visibility })
+      })
+      .catch(err => !cancelled && setError(err.message))
+      .finally(() => !cancelled && setLoading(false))
+    return () => { cancelled = true }
+  }, [clientId])
+
+  // Kirim map lengkap tiap toggle: upsert-nya idempotent, jadi dua toggle
+  // beruntun tidak bisa saling meninggalkan state setengah jadi.
+  const persist = async (next: Record<string, boolean>) => {
+    const previous = visibility
+    setVisibility(next)
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/metrics`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibility: next }),
+      })
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error ?? 'Gagal menyimpan pengaturan metrik.')
+      }
+    } catch (err) {
+      setVisibility(previous) // rollback supaya UI tidak berbohong
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const onToggleMetric = (metricId: string) =>
+    persist({ ...visibility, [metricId]: !visibility[metricId] })
+
+  const onToggleCategory = (catId: string) => {
+    const cat = METRIC_CATEGORIES.find(c => c.id === catId)!
+    const allOn = cat.metrics.every(m => visibility[m.id])
+    persist({ ...visibility, ...Object.fromEntries(cat.metrics.map(m => [m.id, !allOn])) })
+  }
+
   const visibleCount = ALL_METRIC_IDS.filter(id => visibility[id]).length
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl px-5 py-8 text-center" style={{ background: 'white', border: '1px solid #f0f0f0' }}>
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Memuat pengaturan metrik…</p>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -629,11 +692,17 @@ function AnalyticsDisplayTab({ clientName, visibility, onToggleMetric, onToggleC
         <div>
           <p className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>Metrik Analytics — {clientName}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            Metrik yang dimatikan tidak muncul di halaman Analytics klien ini
+            {error ? (
+              <span role="alert" style={{ color: '#dc2626' }}>{error}</span>
+            ) : saving ? (
+              <span data-testid="metrics-saving">Menyimpan…</span>
+            ) : (
+              'Metrik yang dimatikan tidak muncul di halaman Analytics klien ini'
+            )}
           </p>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-2xl font-bold" style={{ color: '#8aa32e' }}>
+          <p className="text-2xl font-bold" style={{ color: '#8aa32e' }} data-testid="visible-count">
             {visibleCount}<span className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>/{ALL_METRIC_IDS.length}</span>
           </p>
           <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>metrik tampil</p>
@@ -735,31 +804,8 @@ export default function SettingsPage() {
   const { activeClient } = useClient()
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
-  // Metrics visibility — keyed per klien, tiap klien punya state independen.
-  // Init kosong; default di-resolve lazy per klien via `?? defaultVisibility()`
-  // (tab ini masih mock sampai client_metric_visibility disambungkan — Phase 2.3 note).
-  const [metricsByClient, setMetricsByClient] = useState<Record<string, Record<string, boolean>>>({})
-
-  const toggleMetric = (clientId: string, metricId: string) =>
-    setMetricsByClient(prev => {
-      const current = prev[clientId] ?? defaultVisibility()
-      return { ...prev, [clientId]: { ...current, [metricId]: !current[metricId] } }
-    })
-
-  const toggleCategory = (clientId: string, catId: string) => {
-    const cat = METRIC_CATEGORIES.find(c => c.id === catId)!
-    setMetricsByClient(prev => {
-      const current = prev[clientId] ?? defaultVisibility()
-      const allOn = cat.metrics.every(m => current[m.id])
-      return {
-        ...prev,
-        [clientId]: {
-          ...current,
-          ...Object.fromEntries(cat.metrics.map(m => [m.id, !allOn])),
-        },
-      }
-    })
-  }
+  // Visibility metrik sekarang dimiliki AnalyticsDisplayTab (persisted ke
+  // client_metric_visibility), bukan lagi state lokal di page ini.
 
   const activeNav = NAV_ITEMS.find(n => n.id === activeTab)!
   const needsClient = activeNav.scoped && !activeClient
@@ -850,10 +896,8 @@ export default function SettingsPage() {
               {activeTab === 'analytics' && activeClient && (
                 <AnalyticsDisplayTab
                   key={activeClient.id}
+                  clientId={activeClient.id}
                   clientName={activeClient.name}
-                  visibility={metricsByClient[activeClient.id] ?? defaultVisibility()}
-                  onToggleMetric={id => toggleMetric(activeClient.id, id)}
-                  onToggleCategory={id => toggleCategory(activeClient.id, id)}
                 />
               )}
 
