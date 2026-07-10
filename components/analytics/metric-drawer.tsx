@@ -195,6 +195,10 @@ function buildRegistry(c: ComputedMetrics, t: TrendArrays): Record<string, Metri
 }
 
 // ── Bar chart (trend per periode dalam drawer, dinamis) ──────
+// Tinggi maksimum sebuah bar (lihat rumus `h` di bawah: 8 + 38). Dipakai
+// sebagai tinggi slot bar supaya semua bar punya garis dasar yang sama.
+const BAR_MAX_H = 46
+
 function TrendBars({ values, color, months }: { values: number[]; color: string; months: string[] }) {
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -202,7 +206,10 @@ function TrendBars({ values, color, months }: { values: number[]; color: string;
   const scroll = values.length > 6
   return (
     <div style={{ background: '#fafafa', borderRadius: 11, ...(scroll ? { overflowX: 'auto', paddingBottom: 4 } : {}) }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 54, padding: '10px 12px', ...(scroll ? { minWidth: 'max-content' } : {}) }}>
+      {/* Tanpa tinggi tetap: label nilai + bar + label bulan menentukan tingginya
+          sendiri. Sebelumnya `height: 54` lebih pendek dari isinya, dan karena
+          alignItems flex-end kelebihannya meluber ke ATAS menimpa tabel di atas. */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, padding: '10px 12px', ...(scroll ? { minWidth: 'max-content' } : {}) }}>
         {values.map((v, i) => {
           const h = 8 + ((v - min) / range) * 38
           const isLast = i === values.length - 1
@@ -212,7 +219,9 @@ function TrendBars({ values, color, months }: { values: number[]; color: string;
           return (
             <div key={i} style={{ ...(scroll ? { width: 40 } : { flex: 1 }), display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: '#475569', whiteSpace: 'nowrap' }}>{fmtVal}</span>
-              <div style={{ width: scroll ? 22 : '62%', height: h, borderRadius: '4px 4px 0 0', background: isLast ? color : color + '66', minHeight: 8 }} />
+              <div style={{ height: BAR_MAX_H, width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                <div style={{ width: scroll ? 22 : '62%', height: h, borderRadius: '4px 4px 0 0', background: isLast ? color : color + '66', minHeight: 8 }} />
+              </div>
               <span style={{ fontSize: 8.5, color: '#9ca3af', whiteSpace: 'nowrap' }}>{months[i]}</span>
             </div>
           )

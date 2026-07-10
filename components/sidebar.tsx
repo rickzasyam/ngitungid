@@ -132,7 +132,11 @@ export function Sidebar() {
     <>
       {/* Mobile hamburger — only visible on small screens */}
       <button
-        className="md:hidden fixed z-40 flex items-center justify-center rounded-xl"
+        type="button"
+        aria-label="Buka menu navigasi"
+        aria-expanded={isMobileOpen}
+        aria-controls="app-sidebar"
+        className="md:hidden fixed z-40 flex items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
         style={{ top: '12px', left: '12px', width: '36px', height: '36px', background: 'var(--color-bg-sidebar)' }}
         onClick={() => setIsMobileOpen(true)}
       >
@@ -149,9 +153,10 @@ export function Sidebar() {
       )}
 
       <aside
+        id="app-sidebar"
         className={`
-          h-screen flex flex-col flex-shrink-0 relative transition-all duration-300 ease-in-out
-          fixed md:relative z-50 md:z-auto
+          h-screen flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out
+          fixed inset-y-0 left-0 md:relative md:inset-auto z-50 md:z-auto
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
         style={{
@@ -161,29 +166,42 @@ export function Sidebar() {
       >
         {/* Mobile close button */}
         <button
-          className="md:hidden absolute z-10 flex items-center justify-center rounded-xl"
-          style={{ top: '12px', right: '12px', width: '28px', height: '28px', background: 'rgba(255,255,255,0.1)' }}
+          type="button"
+          aria-label="Tutup menu navigasi"
+          className="md:hidden absolute z-10 flex items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+          style={{ top: '12px', right: '12px', width: '32px', height: '32px', background: 'rgba(255,255,255,0.1)' }}
           onClick={() => setIsMobileOpen(false)}
         >
           <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.6)' }} />
         </button>
 
-        {/* Toggle button — overlapping right edge, hidden on mobile */}
+        {/* Toggle button — overlapping right edge, hidden on mobile.
+            Hit area 32px (minimum touch target); lingkaran visual tetap 22px
+            lewat <span> di dalamnya, jadi tampilannya tidak berubah. */}
         <button
+          type="button"
           onClick={toggleCollapsed}
-          className="hidden md:flex absolute z-10 items-center justify-center transition-all duration-200"
+          aria-label={isCollapsed ? 'Perlebar sidebar' : 'Perkecil sidebar'}
+          aria-expanded={!isCollapsed}
+          className="ng-edge-toggle hidden md:flex absolute z-10 items-center justify-center focus-visible:outline-none"
           style={{
-            width: '22px', height: '22px', borderRadius: '50%',
-            background: 'var(--color-bg-sidebar)', border: '1.5px solid rgba(255,255,255,0.15)',
-            top: '50%', right: '-11px', transform: 'translateY(-50%)',
+            width: '32px', height: '32px', background: 'transparent', border: 'none', padding: 0,
+            top: '50%', right: '-16px', transform: 'translateY(-50%)',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#2d2d2d'; e.currentTarget.style.borderColor = 'var(--color-accent-primary)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-bg-sidebar)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
         >
-          {isCollapsed
-            ? <ChevronRight className="w-3 h-3" style={{ color: 'var(--color-accent-primary)' }} />
-            : <ChevronLeft className="w-3 h-3" style={{ color: 'var(--color-accent-primary)' }} />
-          }
+          <span
+            aria-hidden="true"
+            className="ng-edge-toggle-dot flex items-center justify-center transition-all duration-200"
+            style={{
+              width: '22px', height: '22px', borderRadius: '50%',
+              background: 'var(--color-bg-sidebar)', border: '1.5px solid rgba(255,255,255,0.15)',
+            }}
+          >
+            {isCollapsed
+              ? <ChevronRight className="w-3 h-3" style={{ color: 'var(--color-accent-primary)' }} />
+              : <ChevronLeft className="w-3 h-3" style={{ color: 'var(--color-accent-primary)' }} />
+            }
+          </span>
         </button>
 
         {/* Logo */}
@@ -209,11 +227,14 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 space-y-0.5 relative">
-          {/* Sliding active-item capsule — measured/positioned imperatively, see positionCapsule */}
+          {/* Sliding active-item capsule — measured/positioned imperatively, see positionCapsule.
+              left-3/right-3 menyamakan lebarnya dengan nav item: kapsul ini absolute,
+              jadi left-0 akan mengacu ke padding box <nav> dan melebar 12px di tiap
+              sisi melewati highlight hover yang ada di dalam content box (px-3). */}
           <div
             ref={capsuleRef}
             aria-hidden="true"
-            className="absolute left-0 right-0 top-0 z-0 pointer-events-none ng-nav-capsule"
+            className="absolute left-3 right-3 top-0 z-0 pointer-events-none ng-nav-capsule"
             style={{
               borderRadius: 18,
               background: 'var(--color-accent-primary)',
@@ -243,27 +264,18 @@ export function Sidebar() {
                 <Link
                   href={isComingSoon ? '#' : `/${item.id}`}
                   onClick={isComingSoon ? (e) => e.preventDefault() : undefined}
+                  // Tooltip saat sidebar collapsed: focus/blur ikut dipasang supaya
+                  // pengguna keyboard mendapat tooltip yang sama seperti pengguna mouse.
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
-                  className="flex items-center gap-3 px-3 py-2.5 text-sm rounded-2xl transition-all duration-200 relative"
-                  style={{
-                    justifyContent: isCollapsed ? 'center' : 'flex-start',
-                    color: isActive ? 'var(--color-bg-sidebar)' : isComingSoon ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.6)',
-                    fontWeight: isActive ? 600 : 400,
-                    cursor: isComingSoon ? 'not-allowed' : 'pointer',
-                  }}
-                  onMouseOver={e => {
-                    if (!isActive && !isComingSoon) {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-                      e.currentTarget.style.color = 'white'
-                    }
-                  }}
-                  onMouseOut={e => {
-                    if (!isActive && !isComingSoon) {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = 'rgba(255,255,255,0.6)'
-                    }
-                  }}
+                  onFocus={() => setHoveredItem(item.id)}
+                  onBlur={() => setHoveredItem(null)}
+                  data-active={isActive}
+                  data-soon={isComingSoon}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-disabled={isComingSoon || undefined}
+                  className="ng-nav-link flex items-center gap-3 px-3 py-2.5 text-sm rounded-2xl relative"
+                  style={{ justifyContent: isCollapsed ? 'center' : 'flex-start' }}
                 >
                   <div className="relative flex-shrink-0">
                     <Icon className="w-[17px] h-[17px]" />
@@ -319,7 +331,12 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => canSwitch && setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
-              className="w-full rounded-2xl transition-all duration-300 text-left"
+              aria-haspopup={canSwitch ? 'listbox' : undefined}
+              aria-expanded={canSwitch ? isWorkspaceDropdownOpen : undefined}
+              aria-label={
+                activeClient ? `Ganti klien — sekarang ${activeClient.name}` : 'Pilih klien untuk mulai mengelola'
+              }
+              className="w-full rounded-2xl transition-all duration-300 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
               style={{
                 background: 'rgba(255,255,255,0.05)',
                 padding: isCollapsed ? '8px' : '12px',
@@ -414,13 +431,9 @@ export function Sidebar() {
                 <button
                   type="button"
                   onClick={() => handleSelectClient(null)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
-                  style={{
-                    background: !activeClient ? 'rgba(218,241,99,0.1)' : 'transparent',
-                    borderBottom: '1px solid rgba(255,255,255,0.06)',
-                  }}
-                  onMouseEnter={e => { if (activeClient) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                  onMouseLeave={e => { if (activeClient) e.currentTarget.style.background = 'transparent' }}
+                  data-selected={!activeClient}
+                  className="ng-switch-row w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
                 >
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -442,10 +455,8 @@ export function Sidebar() {
                       key={client.id}
                       type="button"
                       onClick={() => handleSelectClient(client)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
-                      style={{ background: activeClient?.id === client.id ? 'rgba(218,241,99,0.1)' : 'transparent' }}
-                      onMouseEnter={e => { if (activeClient?.id !== client.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                      onMouseLeave={e => { if (activeClient?.id !== client.id) e.currentTarget.style.background = 'transparent' }}
+                      data-selected={activeClient?.id === client.id}
+                      className="ng-switch-row w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
                     >
                       <div
                         className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"

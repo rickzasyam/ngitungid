@@ -360,6 +360,82 @@ html {
 .ng-drag-pulse { animation: ngDragPulse 1.1s ease-in-out infinite; }
 .ng-rise     { animation: ngRise .5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* Sidebar: item navigasi. Warna & hover pindah ke CSS (dulu di-set lewat
+   onMouseOver/onMouseOut inline) supaya focus keyboard dapat state yang sama.
+   State dibaca dari data-active / data-soon. */
+.ng-nav-link {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 400;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.ng-nav-link[data-soon='true'] {
+  color: rgba(255, 255, 255, 0.25);
+  cursor: not-allowed;
+}
+
+.ng-nav-link[data-active='true'] {
+  color: var(--color-bg-sidebar);
+  font-weight: 600;
+}
+
+.ng-nav-link:not([data-active='true']):not([data-soon='true']):hover,
+.ng-nav-link:not([data-active='true']):not([data-soon='true']):focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.ng-nav-link:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent-primary);
+}
+
+/* Sidebar: baris dropdown client switcher. Hover DAN focus-visible dapat
+   perlakuan sama — sebelumnya pakai onMouseEnter/onMouseLeave inline sehingga
+   navigasi keyboard tidak pernah memicu highlight apa pun. */
+.ng-switch-row {
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.ng-switch-row:hover,
+.ng-switch-row:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ng-switch-row[data-selected='true'],
+.ng-switch-row[data-selected='true']:hover,
+.ng-switch-row[data-selected='true']:focus-visible {
+  background: rgba(218, 241, 99, 0.1);
+}
+
+.ng-switch-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent-primary);
+}
+
+/* Sidebar: tombol collapse di tepi kanan. Hit area 32px transparan, lingkaran
+   visual 22px ada di <span> anaknya — hover/focus mewarnai lingkarannya. */
+.ng-edge-toggle-dot {
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.ng-edge-toggle:hover .ng-edge-toggle-dot,
+.ng-edge-toggle:focus-visible .ng-edge-toggle-dot {
+  background: #2d2d2d;
+  border-color: var(--color-accent-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ng-nav-link,
+  .ng-switch-row,
+  .ng-edge-toggle-dot {
+    transition: none;
+  }
+}
+
 /* Chart/section card lift — CSS-driven hover elevation untuk card putih */
 .ng-card-lift {
   transition: box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);

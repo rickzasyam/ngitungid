@@ -19,7 +19,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : (
           <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--color-bg-main)' }}>
             <Sidebar />
-            {children}
+            {/* pl-12 di mobile menyisakan ruang untuk tombol hamburger yang
+                `fixed` di pojok kiri-atas — tanpa ini ia menutupi judul halaman.
+                Di md+ sidebar tampil normal dan hamburger hilang, jadi pl-0. */}
+            <div className="flex-1 min-w-0 flex pl-12 md:pl-0">
+              {children}
+            </div>
           </div>
         )}
       </ClientProvider>

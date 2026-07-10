@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 import { NewClientModal } from '@/components/new-client-modal'
 import { ArrowRight, Plus, Building2, Loader2 } from 'lucide-react'
@@ -8,6 +9,14 @@ import { ArrowRight, Plus, Building2, Loader2 } from 'lucide-react'
 export default function AdminOverviewPage() {
   const { clients, setActiveClient, refreshClients, isLoaded } = useClient()
   const [showNewClient, setShowNewClient] = useState(false)
+  const router = useRouter()
+
+  // "Buka workspace" harus benar-benar membuka workspace. setActiveClient
+  // sinkron (dan menulis localStorage), jadi aman langsung navigasi.
+  const openWorkspace = (client: Parameters<typeof setActiveClient>[0]) => {
+    setActiveClient(client)
+    router.push('/dashboard')
+  }
 
   return (
     <div className="flex-1 p-3 min-w-0 overflow-hidden">
@@ -85,7 +94,8 @@ export default function AdminOverviewPage() {
                     <button
                       key={client.id}
                       type="button"
-                      onClick={() => setActiveClient(client)}
+                      onClick={() => openWorkspace(client)}
+                      aria-label={`Buka workspace ${client.name}`}
                       className="text-left rounded-3xl overflow-hidden animate-slide-up ng-card-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                       style={{
                         background: 'white',
