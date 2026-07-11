@@ -137,6 +137,12 @@ export interface HealthResult {
 
 const dimTone = (score: number): ToneKey => (score >= DIM_TONE.sehat ? 'sehat' : score >= DIM_TONE.perhatian ? 'perhatian' : 'risiko')
 
+// Verdict ringkas dari skor keseluruhan (dipakai exec-panel & drawer overview).
+// Ambang sama dgn DIM_TONE supaya label konsisten dgn warna dimensi.
+export function healthVerdict(overall: number): string {
+  return overall >= DIM_TONE.sehat ? 'Keuangan Sehat' : overall >= DIM_TONE.perhatian ? 'Perlu Perhatian' : 'Berisiko'
+}
+
 export function assessHealth(r: RatioValues, t: TrendSubset): HealthResult {
   const tones: Record<string, ToneKey> = {
     cr: toneCR(r.cr), qr: toneQR(r.qr), cashR: toneCashR(r.cashR), der: toneDER(r.der), wc: 'info',

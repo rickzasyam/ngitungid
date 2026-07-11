@@ -12,6 +12,41 @@ export const TONES: Record<ToneKey, { fg: string; bg: string; dot: string; bar: 
   info:      { fg: '#0369a1', bg: '#f0f9ff', dot: '#0284c7', bar: '#7dd3fc' },
 }
 
+// Label status generik dari tone (satu sumber). Dipilih supaya pill SELALU
+// jujur & konsisten dgn warna dot — tanpa nuansa arah editorial lama
+// ("Terlalu Tinggi"/"Konservatif") yang di-tune ke angka mock.
+export const STATUS_LABEL: Record<ToneKey, string> = {
+  sehat: 'Sehat',
+  perhatian: 'Perlu Perhatian',
+  risiko: 'Berisiko',
+  netral: 'Stabil',
+  info: 'Info',
+}
+export const statusFromTone = (t: ToneKey): string => STATUS_LABEL[t]
+
+// Teks benchmark JUJUR sesuai model penilaian final (satu sumber, dipakai
+// RatioCard di halaman & registry drawer). Absolut → nilai ambang THRESHOLDS;
+// trend-based → arah ("Tren naik"/"Semakin pendek"); info-only → referensi.
+// Keys = namespace kartu/drawer (cash/invturn/assetturn, bukan camelCase).
+export const BENCHMARK: Record<string, string> = {
+  cr: '1,2 – 2,0',
+  qr: '> 1,0',
+  cash: '> 0,3',
+  der: '≤ 0,7',
+  wc: 'Positif',
+  ccc: 'Semakin pendek',
+  roe: '> 15%',
+  roa: '> 7%',
+  gpm: 'Tren naik',
+  npm: '> 10%',
+  opm: 'Tren naik',
+  dso: 'Semakin pendek',
+  dio: 'Semakin pendek',
+  dpo: '30 – 60 hari',
+  invturn: '8 – 12×',
+  assetturn: 'Tren naik',
+}
+
 export function Pill({ tone, label }: { tone: ToneKey; label: string }) {
   const t = TONES[tone]
   return (

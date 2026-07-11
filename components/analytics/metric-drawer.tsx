@@ -3,7 +3,8 @@
 import { useEffect } from 'react'
 import { X, ChevronRight } from 'lucide-react'
 import { Sparkline } from './sparkline'
-import { TONES, Pill, type ToneKey } from './ratio-card'
+import { TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from './ratio-card'
+import { healthVerdict } from '@/lib/financial-health'
 
 // ── Format helpers ────────────────────────────────────────────
 const fmtRp = (v: number) => {
@@ -40,6 +41,23 @@ export interface TrendArrays {
   cr: number[]; qr: number[]; cashR: number[]; der: number[]; wc: number[]
 }
 
+// Hasil penilaian nyata (assessHealth) yang dialirkan dari halaman → override
+// tone/status/skor mock di drawer supaya konsisten dgn kartu & panel halaman.
+// Opsional: tanpa ini drawer jatuh ke default lama (backward-compatible).
+export interface DrawerHealth {
+  tones: Record<string, ToneKey> // namespace assessHealth: cr,qr,cashR,der,wc,npm,roa,roe,invTurn,gpm,opm,assetTurn,dso,dio,ccc,dpo
+  overall: number
+  dims: Record<string, { score: number; tone: ToneKey; status: string; reason: string }> // likuiditas/profitabilitas/leverage/efisiensi
+}
+
+// Peta key registry drawer (cash/invturn/assetturn) → key tone assessHealth.
+// rev/gp/np sengaja absen (metrik performa, tidak dinilai health).
+const TONE_KEY_OF: Record<string, string> = {
+  cr: 'cr', qr: 'qr', cash: 'cashR', der: 'der', wc: 'wc',
+  roe: 'roe', roa: 'roa', gpm: 'gpm', npm: 'npm', opm: 'opm',
+  dso: 'dso', dio: 'dio', dpo: 'dpo', invturn: 'invTurn', assetturn: 'assetTurn', ccc: 'ccc',
+}
+
 interface MetricEntry {
   grp: string; label: string; value: string; tone: ToneKey; status: string
   benchmark: string; formula: string; comp: [string, string][]
@@ -56,8 +74,8 @@ const DIMS: Record<string, { label: string; score: number; tone: ToneKey; status
 }
 
 // ── Metric registry builder ───────────────────────────────────
-function buildRegistry(c: ComputedMetrics, t: TrendArrays): Record<string, MetricEntry> {
-  return {
+function buildRegistry(c: ComputedMetrics, t: TrendArrays, health?: DrawerHealth): Record<string, MetricEntry> {
+  const reg: Record<string, MetricEntry> = {
     rev: {
       grp: 'Performa', label: 'Pendapatan', value: fmtRp(c.totRev), tone: 'info', status: 'Tumbuh',
       benchmark: 'Tren positif', formula: 'Σ Penjualan periode', tUnit: 'money',
@@ -192,6 +210,17 @@ function buildRegistry(c: ComputedMetrics, t: TrendArrays): Record<string, Metri
       recos: ['Fokus utama: pangkas DIO', 'Perpanjang DPO via negosiasi termin', 'Target CCC < 45 hari'],
     },
   }
+
+  // Benchmark → teks jujur (selalu). Tone/status → hasil assessHealth (bila ada).
+  for (const k of Object.keys(reg)) {
+    if (BENCHMARK[k]) reg[k].benchmark = BENCHMARK[k]
+    const tk = health ? TONE_KEY_OF[k] : undefined
+    if (tk && health!.tones[tk]) {
+      reg[k].tone = health!.tones[tk]
+      reg[k].status = statusFromTone(reg[k].tone)
+    }
+  }
+  return reg
 }
 
 // ── Bar chart (trend per periode dalam drawer, dinamis) ──────
@@ -233,7 +262,7 @@ function TrendBars({ values, color, months }: { values: number[]; color: string;
 
 // ── Drawer panel ─────────────────────────────────────────────
 export function MetricDrawer({
-  drawerKey, onClose, onNavigate, computed, trends, months,
+  drawerKey, onClose, onNavigate, computed, trends, months, health,
 }: {
   drawerKey: string
   onClose: () => void
@@ -241,9 +270,19 @@ export function MetricDrawer({
   computed: ComputedMetrics
   trends: TrendArrays
   months: string[]
+  health?: DrawerHealth
 }) {
-  const registry = buildRegistry(computed, trends)
-  const OVERALL_SCORE = 82
+  const registry = buildRegistry(computed, trends, health)
+  const OVERALL_SCORE = health?.overall ?? 82
+
+  // DIMS = label + keanggotaan metrik (UI). Skor/tone/status/reason di-override
+  // dari health nyata bila ada; kalau tidak, pakai default lama.
+  const dims = Object.fromEntries(
+    Object.entries(DIMS).map(([k, d]) => {
+      const h = health?.dims[k]
+      return [k, h ? { ...d, score: h.score, tone: h.tone, status: h.status, reason: h.reason } : d]
+    })
+  ) as typeof DIMS
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -281,14 +320,14 @@ export function MetricDrawer({
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', marginBottom: 2 }}>SKOR KESEHATAN KEUANGAN</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>Keuangan Sehat</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>{healthVerdict(score)}</div>
               <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>4 dimensi dianalisis · 19 rasio keuangan</div>
             </div>
           </div>
 
           {/* Dimension blocks */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {Object.entries(DIMS).map(([key, dim]) => {
+            {Object.entries(dims).map(([key, dim]) => {
               const t = TONES[dim.tone]
               return (
                 <button
@@ -320,8 +359,8 @@ export function MetricDrawer({
     }
 
     // ── View B: One dimension ─────────────────────────────────
-    if (dimKey && DIMS[dimKey]) {
-      const dim = DIMS[dimKey]
+    if (dimKey && dims[dimKey]) {
+      const dim = dims[dimKey]
       const t = TONES[dim.tone]
       return (
         <div>

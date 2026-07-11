@@ -163,6 +163,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
 
   // trendArrays: satu titik per checkpoint Neraca dalam rentang (kumulatif).
   // Shape = TrendArrays (components/analytics/metric-drawer.tsx).
+  // trendMonths: label bulan tiap checkpoint (sejajar dgn tiap titik trendArrays)
+  // → dipakai sbg sumbu-x TrendBars di drawer supaya label akurat, tidak
+  // diasumsikan sama dgn `monthly` (jumlah laporan P&L vs Neraca bisa beda).
   const ta = {
     rev: [] as number[], gp: [] as number[], np: [] as number[],
     gpm: [] as number[], npm: [] as number[], opm: [] as number[],
@@ -170,9 +173,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
     dpo: [] as number[], invTurn: [] as number[], assetTurn: [] as number[], ccc: [] as number[],
     cr: [] as number[], qr: [] as number[], cashR: [] as number[], der: [] as number[], wc: [] as number[],
   }
+  const trendMonths: string[] = []
   for (const c of neracaReports) {
     const w = windowRatios(c.periodEnd)
     if (!w.ratios) continue
+    trendMonths.push(monthLabel(c.periodStart))
     ta.rev.push(w.totRev); ta.gp.push(w.totGP); ta.np.push(w.totNP)
     ta.gpm.push(w.ratios.gpm); ta.npm.push(w.ratios.npm); ta.opm.push(w.ratios.opm)
     ta.roe.push(w.ratios.roe); ta.roa.push(w.ratios.roa)
@@ -183,5 +188,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
     ta.der.push(w.ratios.der); ta.wc.push(w.ratios.wc)
   }
 
-  return NextResponse.json({ hasData: true, monthly, bs: main.bs, ratios: main.ratios, trendArrays: ta })
+  return NextResponse.json({ hasData: true, monthly, bs: main.bs, ratios: main.ratios, trendArrays: ta, trendMonths })
 }
