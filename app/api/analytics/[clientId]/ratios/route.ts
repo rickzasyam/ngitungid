@@ -12,9 +12,11 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
 
 const safeDiv = (a: number, b: number) => (b === 0 ? 0 : a / b)
 
+type BsAgg = ReturnType<typeof aggregateBalanceSheet>
+
 // GET /api/analytics/[clientId]/ratios?periodStart=&periodEnd=
-// Mengembalikan seri bulanan P&L + neraca (bentuk yang dipakai app/analytics),
-// PLUS rasio keuangan siap-pakai atas seluruh rentang. Semua diturunkan dari
+// Seri bulanan P&L + neraca + rasio siap-pakai + trendArrays (nilai rasio
+// KUMULATIF di tiap checkpoint Neraca dalam rentang). Semua diturunkan dari
 // report_line_items + master_coa (baris matched/edited, non-subtotal).
 export async function GET(req: Request, { params }: { params: Promise<{ clientId: string }> }) {
   const g = await requireUser()
@@ -36,7 +38,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
   }
 
   const reports = await db
-    .select({ id: financialReports.id, reportType: financialReports.reportType, periodStart: financialReports.periodStart })
+    .select({ id: financialReports.id, reportType: financialReports.reportType, periodStart: financialReports.periodStart, periodEnd: financialReports.periodEnd })
     .from(financialReports)
     .where(
       and(
@@ -72,107 +74,114 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
   }
   const linesOf = (id: string) => by.get(id) ?? []
 
+  const pnlReports = reports.filter(r => r.reportType === 'laba_rugi')
+  const neracaReports = reports.filter(r => r.reportType === 'neraca')
+  // Precompute agregat per laporan (dipakai berulang oleh windowRatios).
+  const pnlAggOf = new Map(pnlReports.map(r => [r.id, aggregatePnl(linesOf(r.id))]))
+  const bsAggOf = new Map(neracaReports.map(r => [r.id, aggregateBalanceSheet(linesOf(r.id))]))
+
   // Seri bulanan P&L — bentuk { m, rev, np, gp, exp } seperti analytics page.
-  const monthly = reports
-    .filter(r => r.reportType === 'laba_rugi')
-    .map(r => {
-      const a = aggregatePnl(linesOf(r.id))
-      return { m: monthLabel(r.periodStart), rev: a.revenue, np: a.netProfit, gp: a.grossProfit, exp: a.expenses }
-    })
+  const monthly = pnlReports.map(r => {
+    const a = pnlAggOf.get(r.id)!
+    return { m: monthLabel(r.periodStart), rev: a.revenue, np: a.netProfit, gp: a.grossProfit, exp: a.expenses }
+  })
 
-  const neraca = reports.filter(r => r.reportType === 'neraca')
-  const bsAgg = neraca.length ? aggregateBalanceSheet(linesOf(neraca[neraca.length - 1].id)) : null
-  const bs = bsAgg
-    ? {
-        aktivaLancar: bsAgg.balanceSheet.aktivaLancar,
-        hutangLancar: bsAgg.hutangLancar,
-        persediaan: bsAgg.persediaan,
-        kas: bsAgg.kas,
-        piutang: bsAgg.piutang,
-        totalModal: bsAgg.balanceSheet.totalModal,
-        totalAset: bsAgg.balanceSheet.totalAset,
-        totalHutang: bsAgg.balanceSheet.totalHutang,
-      }
-    : null
-
-  // Beginning balance: laporan Neraca TERAKHIR sebelum neraca pertama dalam
-  // rentang (query terpisah, tanpa filter rentang). Dipakai untuk rata-rata
-  // (awal+akhir) di DPO/ROE/ROA. Kalau tidak ada (klien baru, belum ada periode
-  // sebelumnya) → fallback ke ending balance, jadi avg otomatis = ending.
-  let beginBsAgg = bsAgg
-  if (bsAgg && neraca.length > 0) {
-    const [prevNeraca] = await db
+  // Beginning balance = Neraca TERAKHIR SEBELUM rentang (query terpisah).
+  // SAMA untuk semua checkpoint (periodStart rentang tetap). null bila tak ada.
+  let beginBsAgg: BsAgg | null = null
+  if (neracaReports.length > 0) {
+    const [prev] = await db
       .select({ id: financialReports.id })
       .from(financialReports)
-      .where(
-        and(
-          eq(financialReports.clientId, clientId),
-          eq(financialReports.reportType, 'neraca'),
-          lt(financialReports.periodStart, neraca[0].periodStart)
-        )
-      )
+      .where(and(eq(financialReports.clientId, clientId), eq(financialReports.reportType, 'neraca'), lt(financialReports.periodStart, neracaReports[0].periodStart)))
       .orderBy(desc(financialReports.periodStart))
       .limit(1)
-    if (prevNeraca) {
+    if (prev) {
       const prevItems = await db
-        .select({
-          amount: reportLineItems.amount,
-          rawName: reportLineItems.rawName,
-          isSubtotal: reportLineItems.isSubtotal,
-          status: reportLineItems.status,
-          kelompok: masterCoa.kelompok,
-          subKelompok: masterCoa.subKelompok,
-          classCf: masterCoa.classCf,
-        })
+        .select({ amount: reportLineItems.amount, rawName: reportLineItems.rawName, isSubtotal: reportLineItems.isSubtotal, status: reportLineItems.status, kelompok: masterCoa.kelompok, subKelompok: masterCoa.subKelompok, classCf: masterCoa.classCf })
         .from(reportLineItems)
         .leftJoin(masterCoa, eq(reportLineItems.masterCoaId, masterCoa.id))
-        .where(eq(reportLineItems.reportId, prevNeraca.id))
-      const prevLines: AggLine[] = prevItems.map(it => ({
-        amount: Number(it.amount),
-        nama: it.rawName,
-        kelompok: it.kelompok ?? '',
-        subKelompok: it.subKelompok ?? '',
-        classCf: it.classCf,
-        isSubtotal: it.isSubtotal,
-        status: it.status,
-      }))
-      beginBsAgg = aggregateBalanceSheet(prevLines)
+        .where(eq(reportLineItems.reportId, prev.id))
+      beginBsAgg = aggregateBalanceSheet(prevItems.map(it => ({ amount: Number(it.amount), nama: it.rawName, kelompok: it.kelompok ?? '', subKelompok: it.subKelompok ?? '', classCf: it.classCf, isSubtotal: it.isSubtotal, status: it.status })))
     }
   }
 
-  // Rasio atas seluruh rentang (annualisasi pakai jumlah bulan × 30.4 hari).
-  const totRev = monthly.reduce((s, d) => s + d.rev, 0)
-  const totGP = monthly.reduce((s, d) => s + d.gp, 0)
-  const totNP = monthly.reduce((s, d) => s + d.np, 0)
-  const totExp = monthly.reduce((s, d) => s + d.exp, 0)
-  const totHPP = totRev - totGP
-  const totOI = totGP - totExp
-  const days = Math.max(1, monthly.length) * 30.4
+  // Rasio KUMULATIF dari awal rentang sampai `windowEnd`. Reuse persis rumus
+  // yang sama untuk main-ratios & tiap titik trend (menghindari algoritma paralel).
+  function windowRatios(windowEnd: string) {
+    const pnlW = pnlReports.filter(r => r.periodStart <= windowEnd)
+    const nerW = neracaReports.filter(r => r.periodStart <= windowEnd)
+    const endBs = nerW.length ? bsAggOf.get(nerW[nerW.length - 1].id)! : null
 
-  // Rata-rata (awal+akhir) untuk stok balance yang dibandingkan ke flow periode.
-  const avgTotalModal = bsAgg && beginBsAgg ? (beginBsAgg.balanceSheet.totalModal + bsAgg.balanceSheet.totalModal) / 2 : 0
-  const avgTotalAset = bsAgg && beginBsAgg ? (beginBsAgg.balanceSheet.totalAset + bsAgg.balanceSheet.totalAset) / 2 : 0
-  const avgHutangUsaha = bsAgg && beginBsAgg ? (beginBsAgg.hutangUsaha + bsAgg.hutangUsaha) / 2 : 0
+    const totRev = pnlW.reduce((s, r) => s + pnlAggOf.get(r.id)!.revenue, 0)
+    const totGP = pnlW.reduce((s, r) => s + pnlAggOf.get(r.id)!.grossProfit, 0)
+    const totNP = pnlW.reduce((s, r) => s + pnlAggOf.get(r.id)!.netProfit, 0)
+    const totExp = pnlW.reduce((s, r) => s + pnlAggOf.get(r.id)!.expenses, 0)
+    const totHPP = totRev - totGP
+    const totOI = totGP - totExp
+    const days = Math.max(1, pnlW.length) * 30.4
 
-  const ratios = bs
-    ? {
-        cr: safeDiv(bs.aktivaLancar, bs.hutangLancar),
-        qr: safeDiv(bs.aktivaLancar - bs.persediaan, bs.hutangLancar),
-        cashR: safeDiv(bs.kas, bs.hutangLancar),
-        der: safeDiv(bs.totalHutang, bs.totalModal),
-        wc: bs.aktivaLancar - bs.hutangLancar,
-        gpm: safeDiv(totGP, totRev) * 100,
-        npm: safeDiv(totNP, totRev) * 100,
-        opm: safeDiv(totOI, totRev) * 100,
-        roe: safeDiv(totNP, avgTotalModal) * 100, // rata-rata ekuitas
-        roa: safeDiv(totNP, avgTotalAset) * 100, // rata-rata aset
-        dso: safeDiv(bs.piutang, totRev) * days,
-        dio: safeDiv(bs.persediaan * days, totHPP), // basis HPP, bukan pendapatan
-        dpo: safeDiv(avgHutangUsaha * days, totHPP), // rata-rata hutang usaha, basis HPP
-        invTurn: safeDiv(totHPP, bs.persediaan) * (365 / days), // basis HPP
-        assetTurn: safeDiv(totRev, bs.totalAset) * (365 / days),
-      }
-    : null
+    if (!endBs) return { ratios: null, bs: null, totRev, totGP, totNP }
 
-  return NextResponse.json({ hasData: true, monthly, bs, ratios })
+    const bs = {
+      aktivaLancar: endBs.balanceSheet.aktivaLancar,
+      hutangLancar: endBs.hutangLancar,
+      persediaan: endBs.persediaan,
+      kas: endBs.kas,
+      piutang: endBs.piutang,
+      totalModal: endBs.balanceSheet.totalModal,
+      totalAset: endBs.balanceSheet.totalAset,
+      totalHutang: endBs.balanceSheet.totalHutang,
+    }
+    // Beginning = opening rentang (atau ending window kalau tak ada) → avg.
+    const begin = beginBsAgg ?? endBs
+    const avgTotalModal = (begin.balanceSheet.totalModal + endBs.balanceSheet.totalModal) / 2
+    const avgTotalAset = (begin.balanceSheet.totalAset + endBs.balanceSheet.totalAset) / 2
+    const avgHutangUsaha = (begin.hutangUsaha + endBs.hutangUsaha) / 2
+
+    const ratios = {
+      cr: safeDiv(bs.aktivaLancar, bs.hutangLancar),
+      qr: safeDiv(bs.aktivaLancar - bs.persediaan, bs.hutangLancar),
+      cashR: safeDiv(bs.kas, bs.hutangLancar),
+      der: safeDiv(bs.totalHutang, bs.totalModal),
+      wc: bs.aktivaLancar - bs.hutangLancar,
+      gpm: safeDiv(totGP, totRev) * 100,
+      npm: safeDiv(totNP, totRev) * 100,
+      opm: safeDiv(totOI, totRev) * 100,
+      roe: safeDiv(totNP, avgTotalModal) * 100,
+      roa: safeDiv(totNP, avgTotalAset) * 100,
+      dso: safeDiv(bs.piutang, totRev) * days,
+      dio: safeDiv(bs.persediaan * days, totHPP),
+      dpo: safeDiv(avgHutangUsaha * days, totHPP),
+      invTurn: safeDiv(totHPP, bs.persediaan) * (365 / days),
+      assetTurn: safeDiv(totRev, bs.totalAset) * (365 / days),
+    }
+    return { ratios, bs, totRev, totGP, totNP }
+  }
+
+  const main = windowRatios(periodEnd)
+
+  // trendArrays: satu titik per checkpoint Neraca dalam rentang (kumulatif).
+  // Shape = TrendArrays (components/analytics/metric-drawer.tsx).
+  const ta = {
+    rev: [] as number[], gp: [] as number[], np: [] as number[],
+    gpm: [] as number[], npm: [] as number[], opm: [] as number[],
+    roe: [] as number[], roa: [] as number[], dso: [] as number[], dio: [] as number[],
+    dpo: [] as number[], invTurn: [] as number[], assetTurn: [] as number[], ccc: [] as number[],
+    cr: [] as number[], qr: [] as number[], cashR: [] as number[], der: [] as number[], wc: [] as number[],
+  }
+  for (const c of neracaReports) {
+    const w = windowRatios(c.periodEnd)
+    if (!w.ratios) continue
+    ta.rev.push(w.totRev); ta.gp.push(w.totGP); ta.np.push(w.totNP)
+    ta.gpm.push(w.ratios.gpm); ta.npm.push(w.ratios.npm); ta.opm.push(w.ratios.opm)
+    ta.roe.push(w.ratios.roe); ta.roa.push(w.ratios.roa)
+    ta.dso.push(w.ratios.dso); ta.dio.push(w.ratios.dio); ta.dpo.push(w.ratios.dpo)
+    ta.invTurn.push(w.ratios.invTurn); ta.assetTurn.push(w.ratios.assetTurn)
+    ta.ccc.push(w.ratios.dio + w.ratios.dso - w.ratios.dpo)
+    ta.cr.push(w.ratios.cr); ta.qr.push(w.ratios.qr); ta.cashR.push(w.ratios.cashR)
+    ta.der.push(w.ratios.der); ta.wc.push(w.ratios.wc)
+  }
+
+  return NextResponse.json({ hasData: true, monthly, bs: main.bs, ratios: main.ratios, trendArrays: ta })
 }
