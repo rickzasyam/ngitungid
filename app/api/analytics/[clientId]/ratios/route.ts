@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, lte } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireUser } from '@/lib/api/guards'
@@ -95,6 +95,51 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
       }
     : null
 
+  // Beginning balance: laporan Neraca TERAKHIR sebelum neraca pertama dalam
+  // rentang (query terpisah, tanpa filter rentang). Dipakai untuk rata-rata
+  // (awal+akhir) di DPO/ROE/ROA. Kalau tidak ada (klien baru, belum ada periode
+  // sebelumnya) → fallback ke ending balance, jadi avg otomatis = ending.
+  let beginBsAgg = bsAgg
+  if (bsAgg && neraca.length > 0) {
+    const [prevNeraca] = await db
+      .select({ id: financialReports.id })
+      .from(financialReports)
+      .where(
+        and(
+          eq(financialReports.clientId, clientId),
+          eq(financialReports.reportType, 'neraca'),
+          lt(financialReports.periodStart, neraca[0].periodStart)
+        )
+      )
+      .orderBy(desc(financialReports.periodStart))
+      .limit(1)
+    if (prevNeraca) {
+      const prevItems = await db
+        .select({
+          amount: reportLineItems.amount,
+          rawName: reportLineItems.rawName,
+          isSubtotal: reportLineItems.isSubtotal,
+          status: reportLineItems.status,
+          kelompok: masterCoa.kelompok,
+          subKelompok: masterCoa.subKelompok,
+          classCf: masterCoa.classCf,
+        })
+        .from(reportLineItems)
+        .leftJoin(masterCoa, eq(reportLineItems.masterCoaId, masterCoa.id))
+        .where(eq(reportLineItems.reportId, prevNeraca.id))
+      const prevLines: AggLine[] = prevItems.map(it => ({
+        amount: Number(it.amount),
+        nama: it.rawName,
+        kelompok: it.kelompok ?? '',
+        subKelompok: it.subKelompok ?? '',
+        classCf: it.classCf,
+        isSubtotal: it.isSubtotal,
+        status: it.status,
+      }))
+      beginBsAgg = aggregateBalanceSheet(prevLines)
+    }
+  }
+
   // Rasio atas seluruh rentang (annualisasi pakai jumlah bulan × 30.4 hari).
   const totRev = monthly.reduce((s, d) => s + d.rev, 0)
   const totGP = monthly.reduce((s, d) => s + d.gp, 0)
@@ -103,6 +148,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
   const totHPP = totRev - totGP
   const totOI = totGP - totExp
   const days = Math.max(1, monthly.length) * 30.4
+
+  // Rata-rata (awal+akhir) untuk stok balance yang dibandingkan ke flow periode.
+  const avgTotalModal = bsAgg && beginBsAgg ? (beginBsAgg.balanceSheet.totalModal + bsAgg.balanceSheet.totalModal) / 2 : 0
+  const avgTotalAset = bsAgg && beginBsAgg ? (beginBsAgg.balanceSheet.totalAset + bsAgg.balanceSheet.totalAset) / 2 : 0
+  const avgHutangUsaha = bsAgg && beginBsAgg ? (beginBsAgg.hutangUsaha + bsAgg.hutangUsaha) / 2 : 0
 
   const ratios = bs
     ? {
@@ -114,12 +164,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
         gpm: safeDiv(totGP, totRev) * 100,
         npm: safeDiv(totNP, totRev) * 100,
         opm: safeDiv(totOI, totRev) * 100,
-        roe: safeDiv(totNP, bs.totalModal) * 100,
-        roa: safeDiv(totNP, bs.totalAset) * 100,
+        roe: safeDiv(totNP, avgTotalModal) * 100, // rata-rata ekuitas
+        roa: safeDiv(totNP, avgTotalAset) * 100, // rata-rata aset
         dso: safeDiv(bs.piutang, totRev) * days,
-        dio: safeDiv(bs.persediaan * days, totRev),
-        dpo: safeDiv(bs.hutangLancar * days, totHPP),
-        invTurn: safeDiv(totRev, bs.persediaan) * (365 / days),
+        dio: safeDiv(bs.persediaan * days, totHPP), // basis HPP, bukan pendapatan
+        dpo: safeDiv(avgHutangUsaha * days, totHPP), // rata-rata hutang usaha, basis HPP
+        invTurn: safeDiv(totHPP, bs.persediaan) * (365 / days), // basis HPP
         assetTurn: safeDiv(totRev, bs.totalAset) * (365 / days),
       }
     : null

@@ -108,6 +108,7 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
   persediaan: number
   prepaid: number
   hutangLancar: number
+  hutangUsaha: number
 } {
   const c = contributing(lines).filter(l => norm(l.kelompok).includes('neraca'))
   const sumCat = (cat: BsCat) =>
@@ -130,6 +131,15 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
   const persediaan = sumNama(n => n.includes('persediaan'))
   const prepaid = sumNama(n => n.includes('dibayar dimuka') || n.includes('dibayar di muka'))
 
+  // Akun spesifik dalam sisi Hutang (match by nama). HANYA "Hutang Dagang"
+  // dihitung sebagai Hutang Usaha / accounts payable (dasar DPO). subKelompok
+  // "Hutang" di COA klien campur (Pihak Ketiga, Pajak, Gaji, dsb) — akun-akun
+  // itu tetap masuk totalHutang/hutangLancar, tapi BUKAN AP.
+  const inHutang = c.filter(l => classifyBs(l.subKelompok) === 'hutang')
+  const sumNamaHutang = (pred: (n: string) => boolean) =>
+    inHutang.filter(l => pred(norm(l.nama))).reduce((s, l) => s + Math.abs(l.amount), 0)
+  const hutangUsaha = sumNamaHutang(n => n.includes('dagang'))
+
   // Hutang lancar untuk rasio likuiditas. COA asli hanya punya subKelompok
   // "Hutang" (tanpa pisah lancar/jk-panjang) → pakai total hutang sebagai proxy.
   const hutangLancar = totalHutang
@@ -147,6 +157,7 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
     persediaan,
     prepaid,
     hutangLancar,
+    hutangUsaha,
   }
 }
 
