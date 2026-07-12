@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-07-06
-**Current Phase:** Phase 2 Backend (2.1–2.3 ✅) + Phase 3.1 Gemini PDF Extraction ✅ — Phase 1 Frontend 98%
+**Last Updated:** 2026-07-12
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6, kecuali `/compare` ditunda) · Phase 3.1 ✅ — Phase 3.2 & Phase 4 belum dimulai (sengaja, menunggu validasi manual loop inti)
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -290,35 +290,42 @@
 ---
 
 ## Current Status
-**Phase 1 Frontend: 98% Complete**
+**Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6, kecuali `/compare`) · Phase 3.1 ✅**
 
-✅ All 6 pages implemented (Upload, Extraction Review, COA Mapping, Dashboard, Analytics, Settings)
-✅ UI/UX polish pass menyeluruh selesai — 3-layer depth, hover CSS-based, keyboard accessibility, design system konsisten di semua halaman
+Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping → Dashboard real → Analytics real.** Fitur berikutnya (3.2, `/compare`, Phase 4) **sengaja belum dimulai** — fokus dulu validasi manual loop inti dengan data nyata.
 
-### Remaining Phase 1 Work
-- ⏳ Real file upload flow (connect stubs to API routes) — `POST /api/upload/{csv|excel|pdf}`
-- ⏳ API integration for financial data (replace mock data) — `GET /api/analytics/{clientId}/monthly`, `/balance-sheet`, `/coa-breakdown`
-- ✅ Settings — Master COA upload/preview/status sudah pakai backend nyata (`POST`/`GET /api/clients/[id]/coa`, selesai 2.3)
-- ✅ Settings — Analytics Metrics Visibility tersambung (`GET`/`PUT /api/clients/[id]/metrics`, upsert atomik, indikator "Menyimpan…") — 2026-07-10
+### Phase 1 — Frontend ✅
+6 halaman + polish menyeluruh selesai. "Remaining Phase 1 Work" lama (real upload flow, API integration untuk data finansial) sudah **tertutup** oleh Phase 2.4–2.6 (upload/extract/dashboard/analytics lepas dari mock).
 
-### Phase 2 Progress
-✅ 2.1 Database Schema — 7 tabel (termasuk `users` dari 2.2) + 4 enum ter-definisi di Drizzle, migration SQL ter-generate & tervalidasi, migrasi sudah dijalankan ke Neon project nyata milik user
-✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — selesai penuh; login manual end-to-end dikonfirmasi user di browser (kredensial asli mereka)
-✅ 2.3 Client Onboarding API — 4 route (`GET`/`POST /api/clients`, `GET`/`POST /api/clients/[id]/coa`) + parser Excel + guards; frontend lepas dari mock (`MOCK_CLIENTS` & bridge UUID dihapus). Parser di-harden vs Master COA asli Rasyuka (2026-07-06)
-✅ 3.1 Gemini PDF Extraction — `@google/genai` + `gemini-3.5-flash`, `POST /api/upload` (simpan PDF bytea + ekstrak paralel + line item), `GET /api/reports(+/[id]/pdf)`, upload page & extraction-review lepas dari mock. Divalidasi vs 3 PDF asli; pipeline DB terverifikasi. (2.4 CSV/Excel di-skip — laporan klien PDF)
-🟡 2.5 COA Matching — **persist mapping SUDAH jalan** (`POST /api/reports/[id]/mapping` → `coa_mapping_history` upsert + `report_line_items.status='matched'` + report `status='mapped'` kalau habis). Sisa: exact/fuzzy match engine + persist review actions extraction-review. `/coa-mapping` sudah full backend (2026-07-10)
-✅ Persistensi Analytics Metrics Visibility — `GET/PUT /api/clients/[id]/metrics`, `AnalyticsDisplayTab` pegang datanya sendiri (menutup TODO 2026-07-05). Backend hanya simpan metrik yang pernah di-toggle; daftar + default tetap di frontend (`METRIC_CATEGORIES`)
-⏳ 2.6 Financial Data API (`/dashboard` + `/analytics`) — belum dimulai, **butuh semantic layer** (lihat catatan di bawah)
+### Phase 2 — Backend ✅ (kecuali `/compare`)
+- ✅ 2.1 Database Schema — 7 tabel + 4 enum di Drizzle, migrasi ke Neon nyata
+- ✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — login end-to-end dikonfirmasi user di browser
+- ✅ 2.3 Client Onboarding API — clients + Master COA (`GET`/`POST /api/clients(+/[id]/coa)`); parser di-harden vs file asli Rasyuka
+- ✅ 2.4 Upload & Extraction — via Phase 3.1 (`POST /api/upload`, PDF). CSV/Excel di-skip (laporan klien PDF)
+- ✅ 2.5 COA Matching — engine deterministik (`lib/coa-match.ts`), auto-map/saran, persist mapping (`/api/reports/[id]/mapping`) + review actions (`extraction-review`)
+- ✅ 2.6 Financial Data API — Dashboard + Analytics lepas dari mock. `GET /api/dashboard/[clientId]` + `GET /api/analytics/[clientId]/ratios` (seri bulanan, neraca, rasio, **trendArrays**, **scoring `lib/financial-health.ts`**, **pnlBreakdown**). **Task #23 (analytics off-mock A–E) selesai 2026-07-12.** Semantic-layer yang dulu dianggap blocker ternyata TIDAK diperlukan — klasifikasi berbasis kata kunci `subKelompok`/`classCf` (`lib/financial-agg.ts`) cukup
+- ⏳ `GET /api/reports/[clientId]/compare` — period comparison, **sengaja ditunda** (bukan blocker loop inti)
+
+### Phase 3 — AI Integration
+- ✅ 3.1 Gemini PDF Extraction — `@google/genai` + `gemini-3.5-flash`, divalidasi vs 3 PDF asli
+- ⏳ 3.2 COA Auto-Mapping AI (Gemini fuzzy) — belum dimulai (sengaja; matching deterministik sudah cukup utk klien penamaan-identik)
+
+### Phase 4 — Operational Module
+- ⏳ Belum dimulai (sengaja) — menunggu loop inti tervalidasi manual dengan data nyata
 
 ### Next Sprint
-**1. Persist review actions di `extraction-review`.** Tombol "Konfirmasi Semua", edit COA inline, dan reject baris masih state lokal — hilang saat refresh. Butuh `PATCH /api/reports/[id]/line-items` (bulk: status, editedName) supaya keputusan admin tersimpan, lalu "Lanjut ke COA Mapping" jadi transisi status yang nyata.
+Loop inti (upload → OCR → review → mapping → dashboard → analytics) **sudah lepas dari mock sepenuhnya**. Dua item "Next Sprint" lama (1. persist review actions, 2. Financial Data API) **dua-duanya sudah selesai**. Fokus berikutnya bukan fitur baru, tapi **validasi manual end-to-end dengan data nyata** sebelum lanjut.
 
-**2. Kemudian 2.6 Financial Data API** — `GET /api/dashboard/[clientId]`, `/api/analytics/[clientId]/ratios`, `/api/reports/[clientId]/compare`. Semua bahannya sudah ada: `report_line_items` + `master_coa` (kelompok / subKelompok / classCf) cukup untuk menurunkan MONTHLY_DATA, neraca, dan rasio secara on-the-fly (lihat keputusan 2026-07-02 soal tabel snapshot yang sengaja tidak dibuat). Ini yang akhirnya melepas Dashboard & Analytics dari mock.
+**Sengaja ditunda sampai loop inti tervalidasi manual:**
+- `GET /api/reports/[clientId]/compare` — period comparison (Analytics)
+- 3.2 COA Auto-Mapping AI (Gemini fuzzy) — untuk klien yang penamaan akunnya berbeda dari Master COA
+- Phase 4 Operational Module (inventory / stock movement / COGS reconciliation)
 
-Catatan: setelah 2.5, upload pertama sebuah klien sudah **auto-map 100%** untuk Rasyuka (nama akun identik antara COA & PDF). Klien dgn penamaan berbeda akan jatuh ke fuzzy/saran — di situlah `coa_mapping_history` mulai belajar.
+**Catatan validasi (kondisi DB saat ini).** Ketiga klien baru punya laporan **Laba Rugi** — belum ada Neraca/Arus Kas ter-mapping. Konsekuensinya:
+- Dashboard: KPI/revenue/P&L/expense breakdown tampil; Balance-Sheet-Health butuh Neraca, Cashflow-Waterfall butuh Arus Kas.
+- Analytics: menampilkan **empty-state yang benar** sampai ada Neraca ter-mapping (rasio butuh neraca); trend & alert butuh **≥2 periode**.
+Untuk menguji Analytics penuh: upload + map ≥1 Neraca (idealnya 2+ periode) untuk satu klien.
 
-Catatan operasional: `GEMINI_API_KEY` saat ini **free tier (5 req/menit)** — cukup utk 1 upload (≤3 file), tapi pemakaian rutin butuh billing berbayar (lihat `.env.example`).
+**Catatan operasional:** `GEMINI_API_KEY` masih **free tier (5 req/menit)** — cukup 1 upload (≤3 file); pemakaian rutin butuh billing berbayar (lihat `.env.example`). Cocok-angka-real Dashboard/Analytics vs PDF asli masih tertunda karena 503 high-demand di free tier.
 
-**Blocker 2.6 (Financial Data API).** `/dashboard` & `/analytics` tidak bisa dihitung penuh dari schema sekarang. `master_coa.sub_kelompok` disimpan **verbatim dari Excel klien** (`lib/coa-import.ts` cuma menormalkan `posisi`), jadi tidak ada cara deterministik mengenali "Aktiva Lancar", "Persediaan", "Hutang Lancar", atau memisah Hutang vs Modal (dua-duanya `posisi='Kredit'` di `kelompok='Neraca'`). Rasio likuiditas/leverage/efisiensi, health score, dan benchmark semuanya bergantung ini. Butuh **semantic layer** (kolom `account_role` ternormalisasi atau tabel pemetaan `sub_kelompok → role` per klien) sebelum 2.6 bisa dimulai. Yang sudah bisa dihitung tanpa itu: revenue, total expenses, net profit, expense breakdown (label apa adanya), dan cashflow waterfall (pakai `master_coa.class_cf`).
-
-**Dev fixture.** `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) mengisi Master COA + 1–2 periode laporan + line item **berbeda per klien** (Rasyuka/Graphicook/Nusantara). Idempotent, tidak menyentuh `seed.ts`. Dipakai untuk memverifikasi reaktivitas client switcher — DB sebelumnya kosong sehingga semua klien tampak sama.
+**Dev fixture.** `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) mengisi Master COA + 1–2 periode laporan berbeda per klien; idempotent, tidak menyentuh `seed.ts`. ⚠️ **DESTRUKTIF** untuk 3 klien seed (menghapus reports/COA mereka) — jangan jalankan tanpa sengaja.

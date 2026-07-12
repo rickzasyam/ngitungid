@@ -3,7 +3,7 @@ import { and, asc, desc, eq, gte, inArray, lt, lte } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireUser } from '@/lib/api/guards'
-import { aggregateBalanceSheet, aggregatePnl, monthLabel, type AggLine } from '@/lib/financial-agg'
+import { aggregateBalanceSheet, aggregatePnl, classifyPnl, contributing, monthLabel, type AggLine } from '@/lib/financial-agg'
 
 export const runtime = 'nodejs'
 
@@ -161,6 +161,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
 
   const main = windowRatios(periodEnd)
 
+  // Breakdown akun P&L (kumulatif seluruh rentang) untuk tabel Detail Laba Rugi.
+  // Group by (subKelompok, nama akun) → jumlah lintas laporan P&L. Revenue
+  // signed (retur/potongan mengurangi), HPP/opex abs (searah dgn aggregatePnl).
+  type BdCat = 'revenue' | 'hpp' | 'opex'
+  const bdCatOf = (sub: string): BdCat | null => {
+    const c = classifyPnl(sub)
+    return c === 'revenue' ? 'revenue' : c === 'hpp' ? 'hpp' : (c === 'varCost' || c === 'fixedCost') ? 'opex' : null
+  }
+  const bdMap: Record<BdCat, Map<string, { name: string; subKelompok: string; amount: number }>> = { revenue: new Map(), hpp: new Map(), opex: new Map() }
+  for (const r of pnlReports) {
+    for (const l of contributing(linesOf(r.id))) {
+      if (!(l.kelompok ?? '').toLowerCase().includes('laba')) continue
+      const cat = bdCatOf(l.subKelompok)
+      if (!cat) continue
+      const key = `${l.subKelompok}||${l.nama}`
+      const cur = bdMap[cat].get(key) ?? { name: l.nama, subKelompok: l.subKelompok, amount: 0 }
+      cur.amount += l.amount
+      bdMap[cat].set(key, cur)
+    }
+  }
+  const bdArr = (cat: BdCat) => [...bdMap[cat].values()]
+    .map(v => ({ name: v.name, subKelompok: v.subKelompok, amount: cat === 'revenue' ? v.amount : Math.abs(v.amount) }))
+    .sort((a, b) => a.subKelompok.localeCompare(b.subKelompok) || b.amount - a.amount)
+  const pnlBreakdown = { revenue: bdArr('revenue'), hpp: bdArr('hpp'), opex: bdArr('opex') }
+
   // trendArrays: satu titik per checkpoint Neraca dalam rentang (kumulatif).
   // Shape = TrendArrays (components/analytics/metric-drawer.tsx).
   // trendMonths: label bulan tiap checkpoint (sejajar dgn tiap titik trendArrays)
@@ -188,5 +213,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
     ta.der.push(w.ratios.der); ta.wc.push(w.ratios.wc)
   }
 
-  return NextResponse.json({ hasData: true, monthly, bs: main.bs, ratios: main.ratios, trendArrays: ta, trendMonths })
+  return NextResponse.json({ hasData: true, monthly, bs: main.bs, ratios: main.ratios, trendArrays: ta, trendMonths, pnlBreakdown })
 }

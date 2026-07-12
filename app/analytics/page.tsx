@@ -21,6 +21,8 @@ type ApiRatios = {
   gpm: number; npm: number; opm: number; roe: number; roa: number
   dso: number; dio: number; dpo: number; invTurn: number; assetTurn: number
 }
+type BdItem = { name: string; subKelompok: string; amount: number }
+type PnlBreakdown = { revenue: BdItem[]; hpp: BdItem[]; opex: BdItem[] }
 type RatiosApi = {
   hasData: boolean
   monthly?: MonthPoint[]
@@ -28,6 +30,7 @@ type RatiosApi = {
   ratios?: ApiRatios | null
   trendArrays?: TrendArrays
   trendMonths?: string[]
+  pnlBreakdown?: PnlBreakdown
 }
 
 type Preset = '3m' | '6m' | 'all' | 'custom'
@@ -66,23 +69,21 @@ const getDimBarColor = (score: number): string => {
 type RowKey = 'rev' | 'hpp' | 'gp' | 'gpmr' | 'opex' | 'np' | 'npmr'
 interface RowDef {
   key: RowKey; label: string; accent?: string; bold?: boolean; pct?: boolean
-  muted?: boolean; neg?: boolean; divider?: boolean; expandable?: boolean; ofRev?: boolean
-  sub?: { label: string; portion: number }[]
+  muted?: boolean; neg?: boolean; divider?: boolean; ofRev?: boolean
   getVal: (c: Omit<ColData, 'label'>) => number
 }
-// NOTE: sub-baris (portion) masih mock — diganti breakdown akun asli di sub-task E.
+// Sub-baris (breakdown akun) tidak lagi hardcoded — diturunkan dari
+// pnlBreakdown API per baris (rev/hpp/opex) di buildView().
 const ROW_DEFS: RowDef[] = [
-  { key: 'rev',  label: 'Pendapatan',        bold: true, expandable: true, getVal: c => c.rev,
-    sub: [{ label: 'Produk', portion: 0.62 }, { label: 'Channel Online', portion: 0.26 }, { label: 'Customer B2B', portion: 0.12 }] },
-  { key: 'hpp',  label: 'HPP',               muted: true, neg: true, expandable: true, getVal: c => c.hpp,
-    sub: [{ label: 'Bahan Baku', portion: 0.58 }, { label: 'Tenaga Kerja Langsung', portion: 0.27 }, { label: 'Overhead Produksi', portion: 0.15 }] },
+  { key: 'rev',  label: 'Pendapatan',        bold: true, getVal: c => c.rev },
+  { key: 'hpp',  label: 'HPP',               muted: true, neg: true, getVal: c => c.hpp },
   { key: 'gp',   label: 'Laba Kotor',        bold: true, divider: true, getVal: c => c.gp },
   { key: 'gpmr', label: 'Gross Margin',      pct: true, ofRev: true, getVal: c => c.gp },
-  { key: 'opex', label: 'Beban Operasional', muted: true, neg: true, expandable: true, getVal: c => c.exp,
-    sub: [{ label: 'Marketing', portion: 0.34 }, { label: 'Gaji & SDM', portion: 0.46 }, { label: 'Operasional', portion: 0.20 }] },
+  { key: 'opex', label: 'Beban Operasional', muted: true, neg: true, getVal: c => c.exp },
   { key: 'np',   label: 'Laba Bersih',       accent: '#16a34a', bold: true, getVal: c => c.np },
   { key: 'npmr', label: 'Net Margin',        pct: true, ofRev: true, getVal: c => c.np },
 ]
+type SubRow = { label: string; portion: number }
 
 interface ColData { label: string; rev: number; gp: number; np: number; exp: number; hpp: number }
 const rowOf = (d: MonthPoint): Omit<ColData, 'label'> => ({ rev: d.rev, gp: d.gp, np: d.np, exp: d.exp, hpp: d.rev - d.gp })
@@ -366,6 +367,16 @@ export default function AnalyticsPage() {
     const pnlCols = buildPnlCols(monthly, stmtView)
     const pnlTotal: ColData = { label: 'Total ' + rangeLabel, ...sumRows(monthly) }
 
+    // Sub-baris breakdown akun asli (portion = akun ÷ subtotal induk kumulatif).
+    const bd = data!.pnlBreakdown
+    const subFrom = (items: BdItem[] | undefined, parentTotal: number): SubRow[] =>
+      (items ?? []).filter(a => a.amount !== 0).map(a => ({ label: a.name, portion: parentTotal ? a.amount / parentTotal : 0 }))
+    const subRows: Record<string, SubRow[]> = {
+      rev: subFrom(bd?.revenue, pnlTotal.rev),
+      hpp: subFrom(bd?.hpp, pnlTotal.hpp),
+      opex: subFrom(bd?.opex, pnlTotal.exp),
+    }
+
     // Props RatioCard: tone dari health, status generik, benchmark jujur, trend asli.
     const rc = (key: keyof TrendArrays & string, drawerK: string) => {
       const tone = (health.tones[key] ?? 'netral') as ToneKey
@@ -375,7 +386,7 @@ export default function AnalyticsPage() {
     return {
       monthly, bs, ratios, ta, totRev, totGP, totNP, totExp, rangeLabel,
       health, computed, dimsPanel, drawerHealth, alerts,
-      pRevArr, pGPArr, pNPArr, pGPMArr, pNPMArr, pnlCols, pnlTotal, drawerMonths, rc,
+      pRevArr, pGPArr, pNPArr, pGPMArr, pNPMArr, pnlCols, pnlTotal, subRows, drawerMonths, rc,
     }
   }
 
@@ -779,7 +790,9 @@ export default function AnalyticsPage() {
                         </thead>
                         <tbody>
                           {ROW_DEFS.map(row => {
-                            const isExp = !!expanded[row.key]
+                            const rowSub = view.subRows[row.key] ?? []
+                            const isExpandable = rowSub.length > 0
+                            const isExp = !!expanded[row.key] && isExpandable
                             const rowBg = (row.bold && !row.pct) ? '#fcfcfd' : 'white'
                             const color = row.pct ? '#6b7280' : row.muted ? '#9ca3af' : '#1f2430'
                             const fw = row.pct ? 500 : row.bold ? 700 : 400
@@ -795,13 +808,13 @@ export default function AnalyticsPage() {
                                   style={{
                                     background: rowBg,
                                     borderBottom: row.divider ? '2px solid #eee' : '1px solid #f5f5f5',
-                                    cursor: row.expandable ? 'pointer' : 'default',
+                                    cursor: isExpandable ? 'pointer' : 'default',
                                   }}
-                                  onClick={row.expandable ? () => setExpanded(p => ({ ...p, [row.key]: !p[row.key] })) : undefined}
+                                  onClick={isExpandable ? () => setExpanded(p => ({ ...p, [row.key]: !p[row.key] })) : undefined}
                                 >
                                   <td style={{ padding: '9px 12px', borderLeft: bl }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      {row.expandable && (
+                                      {isExpandable && (
                                         <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
                                       )}
                                       <span style={{ fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>{row.neg && '−'}{row.label}</span>
@@ -826,8 +839,8 @@ export default function AnalyticsPage() {
                                   </td>
                                 </tr>
 
-                                {isExp && row.sub?.map(sub => (
-                                  <tr key={sub.label} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
+                                {isExp && rowSub.map((sub, si) => (
+                                  <tr key={row.key + '-' + si} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
                                     <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280', borderLeft: '3px solid transparent' }}>
                                       └ {sub.label} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{(sub.portion * 100).toFixed(0)}%</span>
                                     </td>
