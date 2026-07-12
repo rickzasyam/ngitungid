@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { clients, masterCoa } from '@/lib/db/schema'
+import { clients, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireAdmin, requireUser } from '@/lib/api/guards'
 import { parseCoaWorkbook } from '@/lib/coa-import'
+import { dbWriteErrorResponse, isFkViolation } from '@/lib/api/db-errors'
 
 // xlsx parsing + neon-http butuh Node runtime (bukan edge).
 export const runtime = 'nodejs'
@@ -95,10 +96,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // neon-http tidak mendukung interactive transaction (db.transaction throw),
   // tapi db.batch() dieksekusi atomik sebagai satu Neon HTTP transaction.
-  await db.batch([
-    db.delete(masterCoa).where(eq(masterCoa.clientId, id)),
-    db.insert(masterCoa).values(values),
-  ])
+  // Replace-all menghapus SEMUA master_coa klien; kalau ada report_line_items
+  // yang masih memetakan ke salah satunya, FK onDelete:'restrict' menolak
+  // DELETE (SQLSTATE 23503). Tangkap → 409 yang jelas & bisa ditindaklanjuti,
+  // bukan 500 mentah tanpa body.
+  try {
+    await db.batch([
+      db.delete(masterCoa).where(eq(masterCoa.clientId, id)),
+      db.insert(masterCoa).values(values),
+    ])
+  } catch (e) {
+    if (isFkViolation(e)) {
+      const refs = await db
+        .select({ reportId: reportLineItems.reportId })
+        .from(reportLineItems)
+        .innerJoin(masterCoa, eq(reportLineItems.masterCoaId, masterCoa.id))
+        .where(eq(masterCoa.clientId, id))
+      const lineCount = refs.length
+      const reportCount = new Set(refs.map(r => r.reportId)).size
+      return NextResponse.json(
+        {
+          error: 'Master COA tidak bisa diganti karena masih dipakai laporan yang sudah dipetakan.',
+          details: [
+            `${lineCount} baris di ${reportCount} laporan masih memetakan ke Master COA lama.`,
+            'Kosongkan mapping atau hapus laporan tersebut lebih dulu, lalu ganti Master COA.',
+          ],
+        },
+        { status: 409 }
+      )
+    }
+    return dbWriteErrorResponse(e, 'Gagal menyimpan Master COA. Coba lagi.')
+  }
 
   return NextResponse.json(
     { inserted: values.length, count: values.length, warnings: warnings ?? [] },

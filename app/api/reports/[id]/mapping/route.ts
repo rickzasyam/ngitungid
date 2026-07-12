@@ -4,6 +4,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { financialReports, masterCoa, reportLineItems, coaMappingHistory } from '@/lib/db/schema'
 import { requireAdmin } from '@/lib/api/guards'
+import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
 
@@ -160,7 +161,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // neon-http tidak mendukung interactive transaction; db.batch() dieksekusi
   // atomik sebagai satu Neon HTTP transaction (pola sama dgn COA import).
-  await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+  try {
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+  } catch (e) {
+    return dbWriteErrorResponse(e, 'Gagal menyimpan mapping. Coba lagi.')
+  }
 
   return NextResponse.json({
     reportId,

@@ -4,6 +4,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { clients, clientMetricVisibility } from '@/lib/db/schema'
 import { requireAdmin, requireUser } from '@/lib/api/guards'
+import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
 
@@ -95,7 +96,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   )
 
   // neon-http: db.batch() = satu Neon HTTP transaction (atomik).
-  await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+  try {
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+  } catch (e) {
+    return dbWriteErrorResponse(e, 'Gagal menyimpan visibilitas metrik. Coba lagi.')
+  }
 
   return NextResponse.json({ clientId: id, saved: entries.length })
 }

@@ -4,6 +4,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireAdmin } from '@/lib/api/guards'
+import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { isAutoMappable, normalizeName, suggestCoa } from '@/lib/coa-match'
 
 export const runtime = 'nodejs'
@@ -103,7 +104,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   // neon-http: db.batch() = satu Neon HTTP transaction (atomik).
-  await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+  try {
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+  } catch (e) {
+    return dbWriteErrorResponse(e, 'Gagal menyimpan saran mapping. Coba lagi.')
+  }
 
   return NextResponse.json({ reportId, autoMapped, suggested, changed: statements.length })
 }
