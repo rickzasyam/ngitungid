@@ -168,6 +168,7 @@
 - ✅ GET/PUT /api/clients/[id]/metrics — persist client_metric_visibility (2026-07-10)
 - ✅ /coa-mapping lepas dari mock: dropdown COA (dikelompokkan per subKelompok) + line item + period selector dari API; simpan per-laporan lalu re-read dari server
 - ✅ `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) — fixture dev: Master COA + line item berbeda per klien (verifikasi client switcher)
+- ✅ **Auto-backfill saran saat /coa-mapping dimuat (2026-07-13)** — root cause "auto-map 0": matching hanya berjalan saat upload, jadi laporan yang diunggah SEBELUM Master COA di-import/di-replace tidak pernah di-match ulang (endpoint /suggest ada tapi tak pernah dipanggil UI). Fix: loadData /coa-mapping menjalankan POST /suggest utk laporan yang masih punya baris unmapped (idempoten, tanpa Gemini), reload bila ada perubahan. Kasus nyata Maret Rasyuka: 0 → 90/90 (100%) auto-mapped setelah COA 106 terpasang
 - ✅ Persist review actions (edit/reject/undo/confirm) di `extraction-review` (2026-07-10) — `PATCH /api/reports/[id]/line-items/[lineItemId]` (status + editedName, guard IDOR: baris harus milik laporan di URL) + `POST …/line-items/confirm-all` (non-rejected → matched). Frontend: optimistic update + rollback saat gagal. **Report status TIDAK disentuh di sini** — transisi review→mapped tetap milik route /mapping (berbasis masterCoaId), tidak konflik. Terverifikasi vs Neon: edit/reject/undo persist, IDOR ditolak 404 tanpa perubahan diam-diam, confirm-all melewati rejected
 
 ### 2.6 Financial Data API — **Dashboard selesai 2026-07-10; Analytics ratios menyusul**

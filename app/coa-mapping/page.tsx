@@ -58,6 +58,7 @@ type ApiLineItem = {
   masterCoaId: string | null
   suggestedCoaId: string | null
   isSubtotal: boolean
+  status: string
 }
 
 type ApiReport = {
@@ -784,8 +785,35 @@ export default function COAMappingPage() {
             r.ok ? r.json() : Promise.reject(new Error('Gagal memuat line item laporan.'))
           ),
         ])
+
+      // Matching hanya berjalan saat upload — kalau Master COA di-import/di-
+      // replace SETELAH laporan diunggah, hasil upload-time basi (0 match).
+      // Backfill di sini: jalankan ulang engine (POST /suggest — idempoten,
+      // tanpa Gemini, skip baris mapped/rejected/subtotal) untuk laporan yang
+      // masih punya baris belum dipetakan, lalu muat ulang bila ada perubahan.
+      let reports = reportRes.reports
+      const needsSuggest = coaRes.accounts.length > 0
+        ? reports.filter(r => r.lineItems.some(l => !l.isSubtotal && l.masterCoaId === null && l.status !== 'rejected'))
+        : []
+      if (needsSuggest.length > 0) {
+        const results = await Promise.all(
+          needsSuggest.map(r =>
+            fetch(`/api/reports/${r.id}/suggest`, { method: 'POST' })
+              .then(res => (res.ok ? (res.json() as Promise<{ changed: number }>) : null))
+              .catch(() => null) // backfill gagal ≠ halaman gagal — lanjut dgn data awal
+          )
+        )
+        const changed = results.reduce((s, x) => s + (x?.changed ?? 0), 0)
+        if (changed > 0) {
+          const again: { reports: ApiReport[] } = await fetch(`/api/reports?${qs}`).then(r =>
+            r.ok ? r.json() : Promise.reject(new Error('Gagal memuat line item laporan.'))
+          )
+          reports = again.reports
+        }
+      }
+
       setAccounts(coaRes.accounts)
-      setReports(reportRes.reports)
+      setReports(reports)
       setMappings({})
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Gagal memuat data.')
