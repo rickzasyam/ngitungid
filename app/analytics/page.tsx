@@ -33,6 +33,21 @@ type RatiosApi = {
   pnlBreakdown?: PnlBreakdown
 }
 
+// ── API response shape (GET /api/analytics/[clientId]/neraca-compare) ─
+type CmpAccount = { kode: string; name: string; a: number; b: number }
+type CmpSection = { key: string; label: string; accounts: CmpAccount[]; totalA: number; totalB: number }
+type CompareApi = {
+  hasData: boolean
+  checkpoints: { periodStart: string; label: string }[]
+  a: string | null
+  b: string | null
+  labelA?: string
+  labelB?: string
+  sections?: CmpSection[]
+  totalAktiva?: { a: number; b: number }
+  totalPasiva?: { a: number; b: number }
+}
+
 type Preset = '3m' | '6m' | 'all' | 'custom'
 
 // ── Format helpers ────────────────────────────────────────────
@@ -47,6 +62,24 @@ const fmtPct   = (v: number, d = 1) => v.toFixed(d).replace('.', ',') + '%'
 const fmtRatio = (v: number) => v.toFixed(2).replace('.', ',')
 const fmtDays  = (v: number) => Math.round(v) + ' hari'
 const fmtX     = (v: number) => v.toFixed(2).replace('.', ',') + '×'
+
+// ── Compare Neraca helpers ────────────────────────────────────
+// Angka PENUH (bukan singkatan jt/M) — tabel ini dipakai mencocokkan ke
+// laporan manual klien; identitas AKTIVA = PASIVA harus terlihat persis.
+// Negatif pakai kurung, mengikuti konvensi laporan akuntansi.
+const fmtFull = (v: number) => {
+  const s = Math.round(Math.abs(v)).toLocaleString('id-ID')
+  return v < 0 ? `(${s})` : s
+}
+const pctOf = (v: number, total: number) => (total === 0 ? null : (v / total) * 100)
+// Growth% = (B−A)/A dengan TANDA ASLI A (bukan abs) — konvensi laporan
+// compare klien: akun bernilai negatif yang makin negatif = growth positif.
+const growthPctOf = (a: number, b: number) => (a === 0 ? null : ((b - a) / a) * 100)
+const fmtPct0 = (v: number | null) => (v === null ? '—' : Math.round(v) + '%')
+const fmtGrowthPct = (v: number | null) => (v === null ? '—' : v.toFixed(1).replace('.', ',') + '%')
+const growthColor = (d: number) => (d > 0 ? '#15803d' : d < 0 ? '#b91c1c' : '#9ca3af')
+const CMP_AKTIVA_KEYS = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
+const CMP_PASIVA_KEYS = ['hutang', 'modal']
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -213,6 +246,17 @@ export default function AnalyticsPage() {
   const [stmtMode, setStmtMode] = useState<'nominal' | 'pct'>('nominal')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
+  // Compare Neraca — checkpoint pilihan sendiri (independen dari rentang
+  // halaman): komparasi = operasi 2 titik, mengikat ke filter rentang bikin
+  // pasangan berubah diam-diam saat user ganti preset. null = default server
+  // (dua checkpoint ter-mapping terbaru).
+  const [cmp, setCmp] = useState<CompareApi | null>(null)
+  const [cmpLoading, setCmpLoading] = useState(true)
+  const [cmpError, setCmpError] = useState(false)
+  const [cmpA, setCmpA] = useState<string | null>(null)
+  const [cmpB, setCmpB] = useState<string | null>(null)
+  const [cmpExpanded, setCmpExpanded] = useState<Record<string, boolean>>({})
+
   const periodsAsc = useMemo(
     () => [...periods].sort((a, b) => a.periodStart.localeCompare(b.periodStart)),
     [periods]
@@ -246,7 +290,26 @@ export default function AnalyticsPage() {
     setCustomRange(undefined)
     setData(null)
     setLoading(true)
+    setCmp(null)
+    setCmpA(null)
+    setCmpB(null)
+    setCmpExpanded({})
   }, [clientId])
+
+  // Fetch komparasi neraca (default server: 2 checkpoint terbaru).
+  useEffect(() => {
+    if (!clientId) return
+    let alive = true
+    setCmpLoading(true)
+    setCmpError(false)
+    const q = cmpA && cmpB ? `?a=${cmpA}&b=${cmpB}` : ''
+    fetch(`/api/analytics/${clientId}/neraca-compare${q}`)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(d => { if (alive) setCmp(d) })
+      .catch(() => { if (alive) { setCmpError(true); setCmp(null) } })
+      .finally(() => { if (alive) setCmpLoading(false) })
+    return () => { alive = false }
+  }, [clientId, cmpA, cmpB])
 
   // Daftar periode → preset adaptif.
   useEffect(() => {
@@ -868,6 +931,188 @@ export default function AnalyticsPage() {
                         </tbody>
                       </table>
                     </div>
+                  </SectionCard>
+                </div>
+
+                {/* ═══ 8. COMPARE NERACA ═════════════════════════════ */}
+                <div id="sec-compare">
+                  <SectionCard>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 16, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #7dd3fc, #38bdf8)' }} />
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Compare Neraca</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                            {cmp?.labelA && cmp?.labelB
+                              ? `${cmp.labelA} vs ${cmp.labelB} · komposisi & pertumbuhan per akun · Klik section untuk detail`
+                              : 'Komparasi posisi neraca antar dua periode'}
+                          </div>
+                        </div>
+                      </div>
+                      {(cmp?.checkpoints.length ?? 0) >= 2 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <select
+                            value={cmp?.a ?? ''}
+                            aria-label="Periode pembanding (awal)"
+                            onChange={e => { setCmpA(e.target.value); setCmpB(cmp?.b ?? null) }}
+                            style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid #e5e7eb', fontSize: 12, color: '#1f2430', background: '#f9fafb', cursor: 'pointer' }}
+                          >
+                            {cmp!.checkpoints.map(c => <option key={c.periodStart} value={c.periodStart}>{c.label}</option>)}
+                          </select>
+                          <span style={{ fontSize: 11, color: '#9ca3af' }}>vs</span>
+                          <select
+                            value={cmp?.b ?? ''}
+                            aria-label="Periode pembanding (akhir)"
+                            onChange={e => { setCmpB(e.target.value); setCmpA(cmp?.a ?? null) }}
+                            style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid #e5e7eb', fontSize: 12, color: '#1f2430', background: '#f9fafb', cursor: 'pointer' }}
+                          >
+                            {cmp!.checkpoints.map(c => <option key={c.periodStart} value={c.periodStart}>{c.label}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {cmpLoading ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9ca3af', fontSize: 12, padding: '14px 0' }}>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat komparasi…
+                      </div>
+                    ) : cmpError ? (
+                      <p style={{ fontSize: 12, color: '#dc2626', padding: '10px 0' }}>Gagal memuat komparasi neraca. Coba muat ulang halaman.</p>
+                    ) : !cmp?.hasData ? (
+                      <p style={{ fontSize: 12, color: '#6b7280', padding: '10px 0' }}>
+                        Belum ada laporan Neraca yang ter-mapping ke COA — upload & petakan Neraca untuk melihat komparasi antar periode.
+                      </p>
+                    ) : (cmp.checkpoints.length < 2 || !cmp.sections || !cmp.totalAktiva || !cmp.totalPasiva) ? (
+                      <p style={{ fontSize: 12, color: '#6b7280', padding: '10px 0' }}>
+                        Baru ada {cmp.checkpoints.length} periode Neraca ter-mapping ({cmp.checkpoints.map(c => c.label).join(', ')}).
+                        Komparasi butuh minimal 2 periode — upload & petakan Neraca bulan lain dulu.
+                      </p>
+                    ) : (() => {
+                      const TA = cmp.totalAktiva
+                      const TP = cmp.totalPasiva
+                      const aktivaSecs = cmp.sections.filter(s => CMP_AKTIVA_KEYS.includes(s.key))
+                      const pasivaSecs = cmp.sections.filter(s => CMP_PASIVA_KEYS.includes(s.key))
+                      const otherSec = cmp.sections.find(s => s.key === 'other')
+                      // Toleransi Rp 100: angka cetak PDF dibulatkan ke rupiah, jadi
+                      // identitas bisa meleset beberapa rupiah tanpa ada salah mapping.
+                      // Salah mapping/klasifikasi riil selalu jauh di atas ini.
+                      const unbalanced = Math.abs(TA.a - TP.a) > 100 || Math.abs(TA.b - TP.b) > 100
+
+                      const numTd = (fw: number): React.CSSProperties => ({ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, color: '#1f2430', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' })
+                      const pctTd: React.CSSProperties = { padding: '9px 8px', textAlign: 'right', fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }
+                      const accTd: React.CSSProperties = { padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
+                      const accPctTd: React.CSSProperties = { padding: '7px 8px', textAlign: 'right', fontSize: 10.5, color: '#9ca3af', whiteSpace: 'nowrap' }
+
+                      const toggleSec = (key: string) => setCmpExpanded(p => ({ ...p, [key]: !p[key] }))
+
+                      const sectionBlock = (sec: CmpSection, side: { a: number; b: number } | null) => {
+                        const isExp = !!cmpExpanded[sec.key]
+                        const g = sec.totalB - sec.totalA
+                        return (
+                          <Fragment key={sec.key}>
+                            <tr
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={isExp}
+                              aria-label={`${sec.label}: ${sec.accounts.length} akun. ${isExp ? 'Tutup' : 'Buka'} detail akun.`}
+                              onClick={() => toggleSec(sec.key)}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSec(sec.key) } }}
+                              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                              style={{ background: '#fcfcfd', borderBottom: '1px solid #f0f0f0', cursor: 'pointer' }}
+                            >
+                              <td style={{ padding: '9px 12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2430', textTransform: 'uppercase', letterSpacing: 0.3 }}>{sec.label}</span>
+                                  <span style={{ fontSize: 10, color: '#9ca3af' }}>{sec.accounts.length} akun</span>
+                                </div>
+                              </td>
+                              <td style={numTd(700)}>{fmtFull(sec.totalA)}</td>
+                              <td style={pctTd}>{fmtPct0(side ? pctOf(sec.totalA, side.a) : null)}</td>
+                              <td style={numTd(700)}>{fmtFull(sec.totalB)}</td>
+                              <td style={pctTd}>{fmtPct0(side ? pctOf(sec.totalB, side.b) : null)}</td>
+                              <td style={{ ...numTd(600), color: growthColor(g) }}>{fmtFull(g)}</td>
+                              <td style={{ ...numTd(600), color: growthColor(g) }}>{fmtGrowthPct(growthPctOf(sec.totalA, sec.totalB))}</td>
+                            </tr>
+                            {isExp && sec.accounts.map(a => {
+                              const ag = a.b - a.a
+                              return (
+                                <tr key={a.kode} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
+                                  <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280' }}>└ {a.name}</td>
+                                  <td style={accTd}>{fmtFull(a.a)}</td>
+                                  <td style={accPctTd}>{fmtPct0(pctOf(a.a, sec.totalA))}</td>
+                                  <td style={accTd}>{fmtFull(a.b)}</td>
+                                  <td style={accPctTd}>{fmtPct0(pctOf(a.b, sec.totalB))}</td>
+                                  <td style={{ ...accTd, color: growthColor(ag) }}>{fmtFull(ag)}</td>
+                                  <td style={{ ...accTd, color: growthColor(ag) }}>{fmtGrowthPct(growthPctOf(a.a, a.b))}</td>
+                                </tr>
+                              )
+                            })}
+                          </Fragment>
+                        )
+                      }
+
+                      const totalRow = (label: string, t: { a: number; b: number }, accent: string) => {
+                        const g = t.b - t.a
+                        return (
+                          <tr style={{ background: '#f3f4f6', borderTop: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb' }}>
+                            <td style={{ padding: '10px 12px', borderLeft: `3px solid ${accent}`, fontSize: 12, fontWeight: 700, color: '#1f2430' }}>{label}</td>
+                            <td style={numTd(700)}>{fmtFull(t.a)}</td>
+                            <td style={pctTd}>100%</td>
+                            <td style={numTd(700)}>{fmtFull(t.b)}</td>
+                            <td style={pctTd}>100%</td>
+                            <td style={{ ...numTd(700), color: growthColor(g) }}>{fmtFull(g)}</td>
+                            <td style={{ ...numTd(700), color: growthColor(g) }}>{fmtGrowthPct(growthPctOf(t.a, t.b))}</td>
+                          </tr>
+                        )
+                      }
+
+                      return (
+                        <>
+                          {unbalanced && (
+                            <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
+                              <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
+                              <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                <span style={{ fontWeight: 700, color: '#b45309' }}>TOTAL AKTIVA ≠ TOTAL PASIVA.</span>
+                                {' '}Selisih {cmp.labelA}: {fmtFull(TA.a - TP.a)} · {cmp.labelB}: {fmtFull(TA.b - TP.b)}.
+                                {' '}Periksa mapping / subKelompok COA — kemungkinan ada akun neraca yang belum terpetakan atau salah klasifikasi.
+                              </span>
+                            </div>
+                          )}
+                          {otherSec && (
+                            <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
+                              <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
+                              <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                <span style={{ fontWeight: 700, color: '#b45309' }}>{otherSec.accounts.length} akun tidak terklasifikasi</span>
+                                {' '}— subKelompok COA-nya tidak dikenali sebagai Aktiva/Hutang/Modal, ditampilkan terpisah di bawah dan TIDAK ikut TOTAL.
+                              </span>
+                            </div>
+                          )}
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+                              <thead>
+                                <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
+                                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 200 }}>Akun</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{cmp.labelA}</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 8px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>%</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{cmp.labelB}</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 8px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>%</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>Growth (Rp)</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>Growth (%)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {aktivaSecs.map(s => sectionBlock(s, TA))}
+                                {totalRow('TOTAL AKTIVA', TA, '#0284c7')}
+                                {pasivaSecs.map(s => sectionBlock(s, TP))}
+                                {totalRow('TOTAL PASIVA', TP, '#8b5cf6')}
+                                {otherSec && sectionBlock(otherSec, null)}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )
+                    })()}
                   </SectionCard>
                 </div>
 

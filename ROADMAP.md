@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-07-12
-**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6, kecuali `/compare` ditunda) · Phase 3.1 ✅ — Phase 3.2 & Phase 4 belum dimulai (sengaja, menunggu validasi manual loop inti)
+**Last Updated:** 2026-07-13
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` = Compare Neraca ✅ 2026-07-13, compare P&L belum diminta) · Phase 3.1 ✅ — Phase 3.2 & Phase 4 belum dimulai (sengaja, menunggu validasi manual loop inti)
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -179,7 +179,7 @@
 - ✅ **trendArrays (task #23 sub-A, 2026-07-10)** — di-refactor jadi core `windowRatios(windowEnd)`; `trendArrays` (shape `TrendArrays` metric-drawer, 19 key) = 1 titik per checkpoint Neraca dalam rentang, rasio KUMULATIF sampai `periodEnd` checkpoint (bukan bulan terisolasi), pakai `windowRatios` yang sama (bukan algoritma paralel). Ganti `synth()` fake trend di analytics page. Verifikasi vs Neon: `trendArrays.cr[last]` == `ratios.cr`, rev/npm kumulatif naik, cr berubah antar checkpoint, 1-checkpoint → array 1 elemen
 - ✅ **`lib/financial-health.ts` (task #23 sub-B, 2026-07-10)** — modul scoring murni (terpisah dari agg). Threshold ABSOLUT (konstanta `THRESHOLDS`, tunable): DER/NPM/ROA/ROE (Permenkop UKM 06/2006), CR/QR/CashR (UMKM dagang umum), InvTurn (retail). Tone TREN (`TREND_EPS=2%` relatif, tunable): OPM/AssetTurn/GPM higher-better, DSO/DIO/CCC lower-better, DPO **selalu info** (arah ambigu), WC info-only. `scoreFromTone` (sehat100/perhatian60/netral50/risiko20/info=exclude), `dimensionScore` (rata-rata non-info; CCC di Likuiditas & Efisiensi), `overallScore` (equal weight 4 dimensi), `generateAlerts` (maks 3, risiko dulu lalu perhatian by dimensi terlemah, fallback pesan positif). 17/17 uji sintetik lulus (semua-sehat/semua-risiko/campuran/1-checkpoint→netral/DPO-info)
 - ⏳ **Wiring `app/analytics/page.tsx` lepas dari mock — belum.** BUKAN swap mekanis seperti dashboard: page ini di-hardcode **tepat 6 bulan** (tab H1/Q1/Q2 meng-index `MONTHLY_DATA[0..5]`) → klien dgn ≠6 bulan meng-index `undefined` dan CRASH. Perlu: (1) period selector adaptif ke bulan yang benar-benar ada, (2) pindahkan derivasi trend module-level (`DRAWER_TRENDS`, `dsoAll`…) ke dalam komponen dari data fetched, (3) tangani konten editorial (ALERTS/DIMS_PANEL/OVERALL_SCORE — skor kesehatan & alert saat ini hardcoded ke angka mock; perlu diturunkan dari rasio vs benchmark atau disederhanakan). Endpoint sudah siap dikonsumsi
-- ⏳ GET /api/reports/[clientId]/compare — period comparison
+- ✅ **Compare Neraca (2026-07-13)** — realisasi item "/compare", partial (hanya Neraca, sesuai request): `GET /api/analytics/[clientId]/neraca-compare?a=&b=` (endpoint terpisah dari /ratios — pasangan checkpoint pilihan user, bukan turunan rentang) + `lib/neraca-compare.ts` (murni: section per subKelompok via classifyBs, penjumlahan BERTANDA — kontra akun negatif, identitas TOTAL AKTIVA=PASIVA) + section "Compare Neraca" di /analytics (2 dropdown checkpoint, expand/collapse akun per section ala tabel P&L, kolom Rp/%/Growth(Rp)/Growth(%), banner kalau tidak seimbang >Rp100 / ada subKelompok tak terklasifikasi). Diverifikasi vs angka asli PDF "Compare Neraca Feb–Mar 2026" Rasyuka: 19/19 assert (semua subtotal, TOTAL, growth, identitas ±Rp1 artefak pembulatan cetak). Compare P&L: belum diminta, belum dibangun
 
 ---
 
@@ -286,25 +286,26 @@
 | 2026-07-10 | Ambang fuzzy 0.55; di bawah itu **tidak menyarankan apa pun** | Saran yang salah lebih mahal daripada tidak ada saran — admin cenderung menerima saran yang tampil. Terbukti: "Biaya Langganan Zoom Pro" (tak ada di COA) benar-benar tidak disarankan |
 | 2026-07-10 | `POST /api/reports/[id]/suggest` terpisah dari upload, tanpa panggil Gemini | Backfill laporan lama & re-run setelah Master COA / history berubah, tanpa membakar kuota free-tier (5 req/menit) dan tanpa ekstraksi ulang. Idempoten: subtotal, baris yang sudah dipetakan, dan `rejected` dilewati |
 | 2026-07-10 | **Fix rumus rasio** (`lib/financial-agg.ts` + ratios route): (1) `hutangUsaha` = HANYA akun ber-nama "dagang" (Hutang Dagang), bukan seluruh subKelompok "Hutang" yang campur (Pihak Ketiga, Pajak, Gaji, Biaya YMH Dibayar). (2) DIO & InvTurn basis **HPP** (bukan Pendapatan). (3) DPO pakai **rata-rata Hutang Usaha** (bukan total hutang lancar). (4) ROE/ROA pakai **rata-rata (awal+akhir)** ekuitas/aset — beginning balance dari query neraca terakhir SEBELUM rentang, fallback ke ending kalau tak ada | Rasio stok-vs-flow harus pakai rata-rata neraca & basis biaya yang benar (DIO/DPO vs HPP). "Hutang" generik di COA klien mencampur AP dgn akrual/pajak → DPO overstated kalau semua dihitung. Verifikasi vs Neon: hutangUsaha benar (dagang saja), beginning ambil periode sebelum rentang, DPO turun & DIO naik sesuai ekspektasi |
+| 2026-07-13 | Compare Neraca = **endpoint terpisah** `GET /api/analytics/[clientId]/neraca-compare?a=&b=` + lib murni `lib/neraca-compare.ts`, BUKAN extend /ratios; checkpoint pilihan user **independen dari filter rentang halaman**; agregasi **BERTANDA** (bukan abs ala aggregateBalanceSheet) supaya kontra akun (Akumulasi Penyusutan, Prive) mengurangi & identitas AKTIVA=PASIVA terjaga; Growth% = (B−A)/A tanda-asli (konvensi laporan manual klien); % akun = porsi subtotal section (template lama punya denominator rusak — sengaja diperbaiki); angka tampil PENUH (bukan singkatan jt/M); toleransi banner tidak-seimbang Rp 100 (artefak pembulatan cetak PDF ±beberapa rupiah, salah mapping riil ≥ ribuan) | Komparasi = operasi 2 titik pilihan user: extend /ratios memaksa re-agregasi payload penuh tiap ganti pasangan & mengikat pasangan ke rentang halaman (berubah diam-diam saat ganti preset). Lib murni = testable: 19/19 assert vs angka asli PDF Compare Neraca Feb–Mar 2026 Rasyuka |
 
 ---
 
 ## Current Status
-**Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6, kecuali `/compare`) · Phase 3.1 ✅**
+**Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6) · Phase 3.1 ✅**
 
-Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping → Dashboard real → Analytics real.** Fitur berikutnya (3.2, `/compare`, Phase 4) **sengaja belum dimulai** — fokus dulu validasi manual loop inti dengan data nyata.
+Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping → Dashboard real → Analytics real.** Compare Neraca (realisasi `/compare`, sisi Neraca) selesai 2026-07-13. Fitur berikutnya (3.2, Phase 4) **sengaja belum dimulai** — fokus dulu validasi manual loop inti dengan data nyata.
 
 ### Phase 1 — Frontend ✅
 6 halaman + polish menyeluruh selesai. "Remaining Phase 1 Work" lama (real upload flow, API integration untuk data finansial) sudah **tertutup** oleh Phase 2.4–2.6 (upload/extract/dashboard/analytics lepas dari mock).
 
-### Phase 2 — Backend ✅ (kecuali `/compare`)
+### Phase 2 — Backend ✅
 - ✅ 2.1 Database Schema — 7 tabel + 4 enum di Drizzle, migrasi ke Neon nyata
 - ✅ 2.2 Authentication (NextAuth v5, RBAC, `proxy.ts`) — login end-to-end dikonfirmasi user di browser
 - ✅ 2.3 Client Onboarding API — clients + Master COA (`GET`/`POST /api/clients(+/[id]/coa)`); parser di-harden vs file asli Rasyuka
 - ✅ 2.4 Upload & Extraction — via Phase 3.1 (`POST /api/upload`, PDF). CSV/Excel di-skip (laporan klien PDF)
 - ✅ 2.5 COA Matching — engine deterministik (`lib/coa-match.ts`), auto-map/saran, persist mapping (`/api/reports/[id]/mapping`) + review actions (`extraction-review`)
 - ✅ 2.6 Financial Data API — Dashboard + Analytics lepas dari mock. `GET /api/dashboard/[clientId]` + `GET /api/analytics/[clientId]/ratios` (seri bulanan, neraca, rasio, **trendArrays**, **scoring `lib/financial-health.ts`**, **pnlBreakdown**). **Task #23 (analytics off-mock A–E) selesai 2026-07-12.** Semantic-layer yang dulu dianggap blocker ternyata TIDAK diperlukan — klasifikasi berbasis kata kunci `subKelompok`/`classCf` (`lib/financial-agg.ts`) cukup
-- ⏳ `GET /api/reports/[clientId]/compare` — period comparison, **sengaja ditunda** (bukan blocker loop inti)
+- ✅ Compare Neraca (`GET /api/analytics/[clientId]/neraca-compare` + section di /analytics) — realisasi partial item `/compare` (2026-07-13); compare P&L belum diminta
 
 ### Phase 3 — AI Integration
 - ✅ 3.1 Gemini PDF Extraction — `@google/genai` + `gemini-3.5-flash`, divalidasi vs 3 PDF asli
@@ -317,7 +318,7 @@ Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → revi
 Loop inti (upload → OCR → review → mapping → dashboard → analytics) **sudah lepas dari mock sepenuhnya**. Dua item "Next Sprint" lama (1. persist review actions, 2. Financial Data API) **dua-duanya sudah selesai**. Fokus berikutnya bukan fitur baru, tapi **validasi manual end-to-end dengan data nyata** sebelum lanjut.
 
 **Sengaja ditunda sampai loop inti tervalidasi manual:**
-- `GET /api/reports/[clientId]/compare` — period comparison (Analytics)
+- Compare P&L (padanan Compare Neraca untuk Laba Rugi) — belum diminta; Compare Neraca sendiri sudah ✅ 2026-07-13
 - 3.2 COA Auto-Mapping AI (Gemini fuzzy) — untuk klien yang penamaan akunnya berbeda dari Master COA
 - Phase 4 Operational Module (inventory / stock movement / COGS reconciliation)
 
