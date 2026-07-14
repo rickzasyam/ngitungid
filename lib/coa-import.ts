@@ -79,6 +79,12 @@ const HEADER_ALIASES: Record<string, Field> = {
 
 const MAX_ERRORS = 25
 
+// Nama sheet yang menandakan "ini Master COA" — dipakai sbg tiebreak saat >1
+// sheet punya header COA lengkap (workbook akuntansi klien bisa punya beberapa
+// sheet ber-kolom COA: master, neraca saldo, olah data). Hanya jadi bobot,
+// bukan syarat — sheet tetap harus benar-benar punya kolom COA.
+const COA_SHEET_NAME_RE = /master\s*(coa|data|akun)|\bcoa\b|daftar\s+akun|bagan\s+akun|chart\s+of\s+account|kode\s+akun/i
+
 // Lowercase, trim, buang tanda baca umum, ratakan spasi ganda.
 function normalizeHeader(raw: unknown): string {
   return String(raw ?? '')
@@ -86,6 +92,34 @@ function normalizeHeader(raw: unknown): string {
     .replace(/[._\-/]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+// Baca hanya N baris pertama sebuah sheet (buat scan header lintas-sheet tanpa
+// mem-parse ribuan baris di tiap sheet workbook besar).
+function readHead(sheet: XLSX.WorkSheet, maxRows: number): unknown[][] {
+  const ref = sheet['!ref']
+  if (!ref) return []
+  const r = XLSX.utils.decode_range(ref)
+  const range = { s: { r: r.s.r, c: r.s.c }, e: { r: Math.min(r.e.r, r.s.r + maxRows - 1), c: r.e.c } }
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: '', range })
+}
+
+// Deteksi baris header dalam satu matrix: baris (di ~20 baris pertama) dengan
+// field COA-dikenal terbanyak. Melewati baris banner/judul/preamble.
+function detectHeader(matrix: unknown[][]): { headerRowIdx: number; colIndex: Partial<Record<Field, number>>; requiredMatched: number } | null {
+  const scanLimit = Math.min(matrix.length, 20)
+  let best: { headerRowIdx: number; colIndex: Partial<Record<Field, number>>; requiredMatched: number } | null = null
+  for (let i = 0; i < scanLimit; i++) {
+    const colIndex: Partial<Record<Field, number>> = {}
+    matrix[i].forEach((cell, idx) => {
+      const field = HEADER_ALIASES[normalizeHeader(cell)]
+      if (field && colIndex[field] === undefined) colIndex[field] = idx
+    })
+    const requiredMatched = REQUIRED_FIELDS.filter(f => colIndex[f] !== undefined).length
+    if (requiredMatched === 0) continue
+    if (!best || requiredMatched > best.requiredMatched) best = { headerRowIdx: i, colIndex, requiredMatched }
+  }
+  return best
 }
 
 function cellToString(value: unknown): string {
@@ -114,54 +148,49 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
     return { rows: [], errors: ['File tidak bisa dibaca sebagai Excel yang valid.'] }
   }
 
-  const sheetName = wb.SheetNames[0]
-  if (!sheetName) return { rows: [], errors: ['Workbook tidak punya sheet apa pun.'] }
+  if (wb.SheetNames.length === 0) return { rows: [], errors: ['Workbook tidak punya sheet apa pun.'] }
 
-  const sheet = wb.Sheets[sheetName]
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+  // Pilih sheet COA: workbook klien bisa punya puluhan sheet (buku kas, jurnal,
+  // neraca, dst) dan Master COA-nya BUKAN selalu sheet pertama. Skor tiap sheet
+  // dari header COA terbaiknya (jumlah field wajib yang cocok) + bobot kalau nama
+  // sheet menandakan COA. Baca hanya kepala tiap sheet dulu (hemat, workbook bisa
+  // ribuan baris/sheet); sheet pemenang baru dibaca penuh.
+  let bestSheet: string | null = null
+  let bestScore = -1
+  for (const name of wb.SheetNames) {
+    const det = detectHeader(readHead(wb.Sheets[name], 20))
+    if (!det) continue
+    const score = det.requiredMatched + (COA_SHEET_NAME_RE.test(name) ? 10 : 0)
+    if (score > bestScore) {
+      bestScore = score
+      bestSheet = name
+    }
+  }
+  if (!bestSheet) {
+    return {
+      rows: [],
+      errors: [
+        `Tidak ada sheet yang berisi kolom Master COA yang dikenali (dicek ${wb.SheetNames.length} sheet). ` +
+          `Pastikan ada sheet dengan baris header: Kode, Nama Akun, Posisi, Kelompok, Sub Kelompok (Class CF opsional).`,
+      ],
+    }
+  }
+
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[bestSheet], {
     header: 1,
     blankrows: false,
     defval: '',
   })
-
-  if (matrix.length === 0) return { rows: [], errors: ['Sheet kosong.'] }
-
-  // Deteksi baris header: baris (dalam ~15 baris pertama) dengan cell paling
-  // banyak cocok ke alias yang dikenal. Ini melewati baris banner/judul seperti
-  // "DATA MASTER COA" & preamble — "baris non-kosong pertama" tidak cukup karena
-  // template klien sering diawali judul.
-  const scanLimit = Math.min(matrix.length, 15)
-  let headerRowIdx = -1
-  let bestScore = 0
-  for (let i = 0; i < scanLimit; i++) {
-    const score = matrix[i].reduce<number>(
-      (n, cell) => n + (HEADER_ALIASES[normalizeHeader(cell)] ? 1 : 0),
-      0
-    )
-    if (score > bestScore) {
-      bestScore = score
-      headerRowIdx = i
-    }
-  }
-  if (headerRowIdx === -1) {
-    return { rows: [], errors: ['Baris header tidak terdeteksi (tidak ada kolom yang dikenali).'] }
-  }
-
-  const headerRow = matrix[headerRowIdx]
-
-  // Petakan field → index kolom.
-  const colIndex: Partial<Record<Field, number>> = {}
-  headerRow.forEach((cell, idx) => {
-    const field = HEADER_ALIASES[normalizeHeader(cell)]
-    if (field && colIndex[field] === undefined) colIndex[field] = idx
-  })
+  const det = detectHeader(matrix)
+  if (!det) return { rows: [], errors: [`Sheet "${bestSheet}" kosong saat dibaca ulang.`] }
+  const { headerRowIdx, colIndex } = det
 
   const missingCols = REQUIRED_FIELDS.filter(f => colIndex[f] === undefined)
   if (missingCols.length > 0) {
     return {
       rows: [],
       errors: [
-        `Kolom wajib tidak ditemukan: ${missingCols.map(f => FIELD_LABEL[f]).join(', ')}. ` +
+        `Kolom wajib tidak ditemukan di sheet "${bestSheet}": ${missingCols.map(f => FIELD_LABEL[f]).join(', ')}. ` +
           `Pastikan baris header memuat: Kode, Nama Akun, Posisi, Kelompok, Sub Kelompok (Class CF opsional).`,
       ],
     }
@@ -227,6 +256,11 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
   }
 
   const warnings: string[] = []
+  // Kalau workbook multi-sheet, beri tahu sheet mana yang dipakai — supaya admin
+  // bisa sadar kalau auto-pick memilih sheet yang salah.
+  if (wb.SheetNames.length > 1) {
+    warnings.push(`COA dibaca dari sheet "${bestSheet}" (dari ${wb.SheetNames.length} sheet).`)
+  }
   if (suffixedKode.length > 0) {
     warnings.push(
       `${suffixedKode.length} kode dobel disesuaikan otomatis agar unik: ${suffixedKode.join(', ')}`
