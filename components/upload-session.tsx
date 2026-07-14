@@ -76,11 +76,16 @@ type UploadState = {
   cashflow: ReportFile | null
 }
 
-export function UploadSession() {
+export function UploadSession({
+  isProcessing,
+  setIsProcessing,
+}: {
+  isProcessing: boolean
+  setIsProcessing: (v: boolean) => void
+}) {
   const { activeClient, role } = useClient()
   const router = useRouter()
 
-  const [isProcessing, setIsProcessing] = useState(false)
   const [processError, setProcessError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({

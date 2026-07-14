@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { Files } from 'lucide-react'
 import { Header } from '@/components/header'
@@ -9,6 +10,9 @@ import { useRequireClient } from '@/lib/use-require-client'
 
 export default function Page() {
   const { activeClient, isLoaded } = useRequireClient()
+  // Diangkat ke sini supaya StatusSection (rail kanan) bisa mencerminkan state
+  // ekstraksi nyata dari UploadSession (kolom kiri).
+  const [isProcessing, setIsProcessing] = useState(false)
 
   if (!isLoaded || !activeClient) return null
 
@@ -32,23 +36,16 @@ export default function Page() {
                     border: '1px solid #f0f0f0',
                   }}
                 >
-                  <UploadSession />
+                  <UploadSession isProcessing={isProcessing} setIsProcessing={setIsProcessing} />
                 </div>
 
                 {/* Right column — rail: Status ekstraksi + pintasan Laporan.
                     Kelola laporan (hapus/ganti/ubah periode) kini di halaman
-                    /laporan sendiri, bukan lagi panel sempit di sini. */}
+                    /laporan sendiri, bukan lagi panel sempit di sini.
+                    StatusSection punya kartunya sendiri (soft-black), jadi tak
+                    dibungkus kartu putih lagi. */}
                 <div className="flex flex-col gap-6 ng-rise" style={{ animationDelay: '0.1s' }}>
-                  <div
-                    className="rounded-3xl p-4 sm:p-8"
-                    style={{
-                      background: 'white',
-                      boxShadow: '0 4px 20px rgb(0,0,0,0.06)',
-                      border: '1px solid #f0f0f0',
-                    }}
-                  >
-                    <StatusSection />
-                  </div>
+                  <StatusSection active={isProcessing} />
 
                   {/* Pintasan ke halaman Laporan */}
                   <Link

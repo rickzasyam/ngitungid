@@ -2,19 +2,22 @@
 
 import { Activity, Check, Loader2 } from 'lucide-react'
 
-export function StatusSection() {
-  const progress = 64
+// Status ekstraksi — mencerminkan state upload NYATA (prop `active` dari
+// UploadSession), bukan lagi progress 64% hardcoded. Upload sinkron (satu POST
+// /api/upload, ~10–30s) tak punya progress granular, jadi saat aktif tampilkan
+// bar indeterminate (segmen bergerak), bukan angka palsu 0→100. Kartu berlatar
+// soft-black untuk variasi warna di halaman upload.
+const STEPS = [
+  'Membaca PDF',
+  'Deteksi tabel & baris',
+  'Ekstraksi angka (Gemini AI)',
+  'Skor keyakinan & auto-map COA',
+]
 
-  const tasks = [
-    { label: 'OCR text extraction', completed: true },
-    { label: 'Table detection', completed: true },
-    { label: 'Financial statement parsing', completed: false },
-    { label: 'Confidence scoring', completed: false },
-  ]
-
+export function StatusSection({ active = false }: { active?: boolean }) {
   return (
-    <div className="space-y-6">
-      {/* Section header — icon container + title + subtitle */}
+    <div className="space-y-6 rounded-3xl p-6" style={{ background: '#222124' }}>
+      {/* Header */}
       <div className="flex items-center gap-3">
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -23,66 +26,59 @@ export function StatusSection() {
           <Activity className="w-4 h-4" style={{ color: '#1a1a1a' }} />
         </div>
         <div>
-          <h3 className="text-sm font-bold" style={{ color: '#2d2d2d' }}>State: PDF Sedang Diekstrak</h3>
-          <p className="text-xs" style={{ color: '#6b7280' }}>
-            AI menjalankan OCR, table detection, dan parsing
+          <h3 className="text-sm font-bold" style={{ color: 'white' }}>
+            {active ? 'Mengekstrak dengan AI…' : 'Status Ekstraksi'}
+          </h3>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            {active ? 'AI menjalankan OCR, deteksi tabel, dan parsing' : 'Menunggu laporan diproses'}
           </p>
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="space-y-3 animate-fade-in-up animation-delay-200">
+      {/* Progress bar — indeterminate saat aktif, track kosong saat idle */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-(--color-text-primary)">Progress</span>
-          <span className="text-2xl font-bold text-(--color-accent-primary)">{progress}%</span>
+          <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>Progress</span>
+          <span className="text-xs font-semibold" style={{ color: active ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.35)' }}>
+            {active ? 'Memproses…' : 'Idle'}
+          </span>
         </div>
-        <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: '#f0f0f0' }}>
-          <div
-            className="h-full animate-shimmer rounded-full transition-all duration-700 ease-out"
-            style={{ width: `${progress}%` }}
-          ></div>
+        <div className="relative w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          {active && <div className="ng-indeterminate-bar" style={{ background: 'var(--color-accent-primary)' }} />}
         </div>
       </div>
 
-      {/* Task Checklist */}
+      {/* Pipeline steps */}
       <div className="space-y-1">
-        {tasks.map((task, index) => (
+        {STEPS.map((label, index) => (
           <div
-            key={index}
-            className="flex items-center gap-3 py-3 border-b last:border-0 animate-slide-up"
-            style={{
-              borderColor: '#f5f5f5',
-              animationDelay: `${index * 60}ms`,
-            }}
+            key={label}
+            className="flex items-center gap-3 py-2.5 border-b last:border-0"
+            style={{ borderColor: 'rgba(255,255,255,0.08)' }}
           >
             <div
-              className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300"
+              className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
               style={{
-                background: task.completed ? 'var(--color-accent-primary)' : 'transparent',
-                border: task.completed ? 'none' : '2px solid var(--color-border-subtle)',
+                background: active ? 'rgba(218,241,99,0.15)' : 'transparent',
+                border: active ? 'none' : '2px solid rgba(255,255,255,0.2)',
               }}
             >
-              {task.completed
-                ? <Check className="w-2.5 h-2.5" style={{ color: '#1a1a1a' }} />
-                : <Loader2 className="w-3 h-3 animate-spin" style={{ color: '#9ca3af' }} />}
+              {active
+                ? <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--color-accent-primary)' }} />
+                : <Check className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.25)' }} />}
             </div>
-            <span
-              className="text-sm transition-colors duration-200"
-              style={{
-                color: task.completed ? '#2d2d2d' : '#9ca3af',
-                fontWeight: task.completed ? 500 : 400,
-              }}
-            >
-              {task.label}
+            <span className="text-sm" style={{ color: active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)' }}>
+              {label}
             </span>
-            {task.completed && (
-              <span className="ml-auto text-xs font-medium" style={{ color: '#bbb3f3' }}>
-                Selesai
-              </span>
-            )}
           </div>
         ))}
       </div>
+
+      {!active && (
+        <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Pilih klien &amp; periode, unggah PDF, lalu tekan &ldquo;Proses Laporan&rdquo; untuk memulai ekstraksi.
+        </p>
+      )}
     </div>
   )
 }

@@ -40,6 +40,11 @@ export function Sidebar() {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  // Jumlah laporan klien aktif yang belum selesai dipetakan (status bukan
+  // mapped/confirmed) → badge di item "COA Mapping". Menggantikan badge "1"
+  // yang dulu hardcoded di item Upload. Re-fetch saat klien/route berubah
+  // supaya badge menyusut setelah admin menyelesaikan mapping.
+  const [pendingMapping, setPendingMapping] = useState(0)
   const workspaceRef = useRef<HTMLDivElement>(null)
 
   const capsuleRef = useRef<HTMLDivElement>(null)
@@ -64,6 +69,18 @@ export function Sidebar() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!activeClient) { setPendingMapping(0); return }
+    let alive = true
+    fetch(`/api/reports/list?clientId=${activeClient.id}`)
+      .then(r => (r.ok ? r.json() : { reports: [] }))
+      .then((d: { reports?: { status: string }[] }) => {
+        if (alive) setPendingMapping((d.reports ?? []).filter(r => r.status !== 'mapped' && r.status !== 'confirmed').length)
+      })
+      .catch(() => { if (alive) setPendingMapping(0) })
+    return () => { alive = false }
+  }, [activeClient, pathname])
 
   // Slides the nav capsule to the active item. `snap` skips the transition
   // (first paint, and window resize where an animated chase would lag/jitter).
@@ -115,9 +132,9 @@ export function Sidebar() {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
-    { id: 'upload', label: 'Upload', icon: Upload, badge: '1' },
+    { id: 'upload', label: 'Upload', icon: Upload },
     { id: 'laporan', label: 'Laporan', icon: Files },
-    { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft },
+    { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined },
     { id: 'operational', label: 'Operational', icon: Package, comingSoon: true },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]

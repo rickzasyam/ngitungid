@@ -525,6 +525,22 @@ html {
   transform: translate(-50%, 0);
 }
 
+/* Bar progress INDETERMINATE — upload sinkron (satu POST ~10–30s) tak punya %
+   granular, jadi tampilkan segmen yang bergerak, bukan angka palsu. Keyframe
+   di top level (gotcha Tailwind v4). */
+@keyframes ng-indeterminate {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+.ng-indeterminate-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 40%;
+  border-radius: 999px;
+  animation: ng-indeterminate 1.3s ease-in-out infinite;
+}
+
 /* Upload card depth-on-hover — CSS-driven (replaces removed JS onMouseEnter/Leave).
    --hover-accent is set per-card inline so each report type lifts in its own color. */
 .upload-card-hover:hover {
@@ -549,6 +565,10 @@ html {
   }
   .ng-seg-tooltip {
     transition: none !important;
+  }
+  .ng-indeterminate-bar {
+    animation: none !important;
+    left: 30% !important;
   }
 }
 
