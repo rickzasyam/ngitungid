@@ -62,20 +62,26 @@ function KPICard({
             <Icon className="w-4 h-4" style={{ color: 'var(--color-accent-primary-fg)' }} />
           </div>
         </div>
-        <p className="text-xs font-medium mb-1" style={{ color: 'rgba(26,26,26,0.65)' }}>{label}</p>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '6px' }}>
-          <p className="text-2xl font-bold" style={{ color: 'var(--color-accent-primary-fg)', margin: 0 }}>{value}</p>
-          {avgLabel && (
-            <p style={{ fontSize: '10px', color: 'rgba(26,26,26,0.45)', marginBottom: '3px' }}>avg {avgLabel}/bln</p>
+        <p className="text-xs font-medium mb-1" style={{ color: 'rgba(26,26,26,0.7)' }}>{label}</p>
+        <p className="text-2xl font-bold" style={{ color: 'var(--color-accent-primary-fg)', margin: '0 0 12px' }}>{value}</p>
+        {/* Baris bawah SELALU ada (avg kiri + MoM kanan) → keempat card tinggi
+            sama walau Fixed/Variable Cost tak punya perbandingan bulan lalu. */}
+        <div className="flex items-center justify-between gap-2">
+          {avgLabel ? (
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, background: 'rgba(26,26,26,0.1)', color: 'rgba(26,26,26,0.72)' }}>
+              avg {avgLabel}/bln
+            </span>
+          ) : <span />}
+          {changePercent !== undefined && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {isPositive
+                ? <ArrowUpRight className="w-3.5 h-3.5" style={{ color: 'var(--color-accent-primary-fg)' }} />
+                : <ArrowDownRight className="w-3.5 h-3.5" style={{ color: 'var(--color-accent-primary-fg)' }} />}
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-accent-primary-fg)' }}>{Math.abs(changePercent).toFixed(1)}%</span>
+              <span style={{ fontSize: 10, color: 'rgba(26,26,26,0.55)' }}>vs bln lalu</span>
+            </div>
           )}
         </div>
-        {changePercent !== undefined && (
-          <div className="flex items-center gap-1">
-            {isPositive ? <ArrowUpRight className="w-3 h-3" style={{ color: 'var(--color-accent-primary-fg)' }} /> : <ArrowDownRight className="w-3 h-3" style={{ color: 'var(--color-accent-primary-fg)' }} />}
-            <span className="text-xs font-semibold" style={{ color: 'var(--color-accent-primary-fg)' }}>{Math.abs(changePercent).toFixed(1)}%</span>
-            <span className="text-xs" style={{ color: 'rgba(26,26,26,0.55)' }}>vs bulan lalu</span>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -229,7 +235,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     {topReceipts.length > 0 ? (
-                      <TopReceiptsBubble items={topReceipts} compact />
+                      <TopReceiptsBubble items={topReceipts} total={totalRevenue} compact />
                     ) : (
                       <p className="text-xs py-8 text-center" style={{ color: '#9ca3af' }}>Belum ada baris pendapatan terpetakan.</p>
                     )}

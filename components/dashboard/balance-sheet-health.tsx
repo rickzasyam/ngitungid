@@ -39,10 +39,13 @@ function BarSegment({
     >
       <div
         className="ng-seg-tooltip rounded-xl px-3 py-2"
-        style={{ background: '#222124', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}
+        style={{ background: '#222124', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', borderTop: `2px solid ${color}` }}
       >
-        <p className="text-[10px] font-medium mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</p>
-        <p className="text-xs font-semibold" style={{ color: 'white' }}>{formatRupiahFull(value)}</p>
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="rounded-full flex-shrink-0" style={{ width: 7, height: 7, background: color }} />
+          <p className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.6)' }}>{label}</p>
+        </div>
+        <p className="text-xs font-bold" style={{ color }}>{formatRupiahFull(value)}</p>
       </div>
     </div>
   )
@@ -154,9 +157,16 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               return (
                 <div
                   key={metric.label}
-                  className="flex items-center gap-3 p-3 rounded-2xl"
+                  className="ng-seg-tooltip-wrap flex items-center gap-3 p-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  tabIndex={0}
+                  aria-label={`${metric.label}: ${formatRupiahFull(metric.value)}`}
                   style={{ background: '#f8f8f8', border: '1px solid #f0f0f0' }}
                 >
+                  {/* Tooltip nominal penuh (nilai di kartu disingkat jt/M) */}
+                  <div className="ng-seg-tooltip rounded-xl px-3 py-2" style={{ background: '#222124', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+                    <p className="text-[10px] font-medium mb-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{metric.label}</p>
+                    <p className="text-xs font-bold" style={{ color: 'white' }}>{formatRupiahFull(metric.value)}</p>
+                  </div>
                   <div
                     className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ background: '#f0f0f0' }}

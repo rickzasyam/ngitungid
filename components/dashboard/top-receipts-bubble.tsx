@@ -10,6 +10,10 @@ interface ReceiptItem {
 interface TopReceiptsBubbleProps {
   items: ReceiptItem[]
   compact?: boolean
+  // Total SEMUA pendapatan (net) — penyebut ratio %. Tanpa ini, fallback ke
+  // jumlah item positif. Ratio lama salah karena dibagi item terbesar (top-1
+  // selalu 100%); yang benar = nominal ÷ total pendapatan.
+  total?: number
 }
 
 const RANK_STYLES = [
@@ -34,7 +38,11 @@ const formatCompact = (amount: number) => {
   return amount.toLocaleString('id-ID')
 }
 
-export function TopReceiptsBubble({ items, compact = false }: TopReceiptsBubbleProps) {
+// Warna aksen tooltip = warna bubble, kecuali bubble netral (gelap / abu terang)
+// yang tidak terbaca di atas latar tooltip gelap → putih.
+const tooltipAccent = (bg: string) => (bg === '#222124' || bg === '#f3f4f6' ? '#ffffff' : bg)
+
+export function TopReceiptsBubble({ items, compact = false, total }: TopReceiptsBubbleProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   const positiveItems = items.filter(item => item.amount > 0)
@@ -49,7 +57,9 @@ export function TopReceiptsBubble({ items, compact = false }: TopReceiptsBubbleP
     )
   }
 
-  const maxAmount = top5[0].amount
+  // Penyebut ratio: total pendapatan (net) bila diberikan, kalau tidak jatuh ke
+  // jumlah semua item positif. Bar & label sama-sama pakai ini supaya konsisten.
+  const denom = total && total > 0 ? total : sorted.reduce((s, i) => s + i.amount, 0)
   const scale = compact ? 0.65 : 1
   const canvasWidth = compact ? 195 : 300
   const canvasHeight = compact ? 143 : 220
@@ -89,33 +99,44 @@ export function TopReceiptsBubble({ items, compact = false }: TopReceiptsBubbleP
           )
         })}
 
-        {/* Hover tooltip */}
-        {hoveredIndex !== null && (
-          <div
-            className="absolute rounded-xl px-3 py-2 pointer-events-none z-[100]"
-            style={{
-              top: `${RANK_STYLES[hoveredIndex].top * scale - 50}px`,
-              left: `${RANK_STYLES[hoveredIndex].left * scale}px`,
-              background: '#222124',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <p className="text-xs font-semibold" style={{ color: 'white' }}>
-              {top5[hoveredIndex].name}
-            </p>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Rp {top5[hoveredIndex].amount.toLocaleString('id-ID')}
-            </p>
-          </div>
-        )}
+        {/* Hover tooltip — aksen warna mengikuti bubble (konsisten dgn tooltip lain) */}
+        {hoveredIndex !== null && (() => {
+          const style = RANK_STYLES[hoveredIndex]
+          const accent = tooltipAccent(style.bg)
+          const item = top5[hoveredIndex]
+          const pct = denom > 0 ? (item.amount / denom) * 100 : 0
+          return (
+            <div
+              className="absolute rounded-xl px-3 py-2 pointer-events-none z-[100]"
+              style={{
+                top: `${style.top * scale - 58}px`,
+                left: `${style.left * scale}px`,
+                background: '#222124',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                whiteSpace: 'nowrap',
+                borderTop: `2px solid ${accent}`,
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="rounded-full flex-shrink-0" style={{ width: 7, height: 7, background: style.bg, border: style.border ? `1px solid ${style.border}` : 'none' }} />
+                <p className="text-xs font-semibold" style={{ color: 'white' }}>{item.name}</p>
+              </div>
+              <p className="text-sm font-bold" style={{ color: accent }}>
+                Rp {item.amount.toLocaleString('id-ID')}
+              </p>
+              <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {pct.toFixed(1)}% dari total pendapatan
+              </p>
+            </div>
+          )
+        })()}
       </div>
 
-      {/* Legend with percentage bars */}
+      {/* Legend with percentage bars — % = nominal ÷ total pendapatan */}
       <div className={compact ? 'space-y-2' : 'flex-1 min-w-0 space-y-3'}>
         {top5.map((item, index) => {
           const style = RANK_STYLES[index]
-          const percentOfTop = (item.amount / maxAmount) * 100
+          const pct = denom > 0 ? (item.amount / denom) * 100 : 0
           return (
             <div key={item.name} className="space-y-1">
               <div className="flex items-center justify-between gap-2">
@@ -132,13 +153,13 @@ export function TopReceiptsBubble({ items, compact = false }: TopReceiptsBubbleP
                   <span className="text-xs truncate" style={{ color: '#6b7280' }}>{item.name}</span>
                 </div>
                 <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#222124' }}>
-                  {percentOfTop.toFixed(0)}%
+                  {pct.toFixed(1)}%
                 </span>
               </div>
               <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: '#f0f0f0' }}>
                 <div
                   className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${percentOfTop}%`, background: style.bg }}
+                  style={{ width: `${Math.min(100, pct)}%`, background: style.bg }}
                 />
               </div>
             </div>
