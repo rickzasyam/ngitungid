@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
-import { Calendar, ChevronUp, ChevronDown, ChevronRight, AlertTriangle, Loader2, Inbox } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronRight, AlertTriangle, Loader2, Inbox } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { Sparkline } from '@/components/analytics/sparkline'
@@ -284,6 +284,13 @@ export default function AnalyticsPage() {
   const startKey = range?.start ?? ''
   const endKey = range?.end ?? ''
 
+  // Nilai DateRangePicker header: saat preset shortcut aktif, tampilkan rentang
+  // preset itu (biar user lihat tanggalnya); saat custom, tampilkan pilihannya.
+  const ymd2date = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+  const headerPickerValue = preset === 'custom'
+    ? customRange
+    : (range ? { from: ymd2date(range.start), to: ymd2date(range.end) } : undefined)
+
   // Reset saat klien berganti.
   useEffect(() => {
     setPreset('all')
@@ -469,17 +476,9 @@ export default function AnalyticsPage() {
               </p>
             </div>
 
-            {/* Period presets + custom date range */}
+            {/* Preset shortcut + date range picker langsung (seperti dashboard —
+                tak perlu klik "Custom" dulu; pilih tanggal langsung memfilter). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {preset === 'custom' && (
-                <div style={{ width: 248 }}>
-                  <DateRangePicker
-                    value={customRange}
-                    onChange={(r) => setCustomRange(r)}
-                    placeholder="Pilih periode custom"
-                  />
-                </div>
-              )}
               <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 11, padding: 3, gap: 2 }}>
                 {([
                   ...(show3m ? [{ label: '3 Bln', value: '3m' as Preset }] : []),
@@ -500,20 +499,13 @@ export default function AnalyticsPage() {
                     {p.label}
                   </button>
                 ))}
-                <button
-                  onClick={() => setPreset('custom')}
-                  style={{
-                    padding: '5px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12,
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    background: preset === 'custom' ? 'var(--color-accent-primary)' : 'transparent',
-                    fontWeight: preset === 'custom' ? 700 : 500,
-                    color: preset === 'custom' ? 'var(--color-accent-primary-fg)' : '#6b7280',
-                    boxShadow: preset === 'custom' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                  }}
-                >
-                  <Calendar style={{ width: 12, height: 12 }} />
-                  Custom
-                </button>
+              </div>
+              <div style={{ width: 248 }}>
+                <DateRangePicker
+                  value={headerPickerValue}
+                  onChange={(r) => { setCustomRange(r); setPreset('custom') }}
+                  placeholder="Filter tanggal"
+                />
               </div>
             </div>
           </div>
