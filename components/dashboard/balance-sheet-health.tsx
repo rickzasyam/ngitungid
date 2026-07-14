@@ -1,7 +1,7 @@
 'use client'
 
 import { Wallet, Users, Clock, Package, Layers } from 'lucide-react'
-import { formatRupiahShort } from './dashboard-utils'
+import { formatRupiahShort, formatRupiahFull } from './dashboard-utils'
 
 interface BalanceSheetData {
   totalAset: number
@@ -21,6 +21,31 @@ interface WorkingCapitalMetric {
 interface BalanceSheetHealthProps {
   balanceSheet: BalanceSheetData
   workingCapitalMetrics: WorkingCapitalMetric[]
+}
+
+// Satu segmen bar Komposisi Aset/Pasiva — nominal-nya tidak tertulis di mana
+// pun (legend cuma menampilkan %), jadi tooltip di sini menambah info baru
+// (beda dari Komponen Modal Kerja di kanan yang nominalnya sudah kasat mata).
+function BarSegment({
+  value, color, label, radius,
+}: { value: number; color: string; label: string; radius: string }) {
+  return (
+    <div
+      className="ng-seg-tooltip-wrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+      tabIndex={0}
+      role="img"
+      aria-label={`${label}: ${formatRupiahFull(value)}`}
+      style={{ flex: value, background: color, borderRadius: radius }}
+    >
+      <div
+        className="ng-seg-tooltip rounded-xl px-3 py-2"
+        style={{ background: '#222124', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}
+      >
+        <p className="text-[10px] font-medium mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</p>
+        <p className="text-xs font-semibold" style={{ color: 'white' }}>{formatRupiahFull(value)}</p>
+      </div>
+    </div>
+  )
 }
 
 export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: BalanceSheetHealthProps) {
@@ -52,30 +77,13 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               <p className="text-xs font-semibold" style={{ color: '#2d2d2d' }}>Komposisi Aset</p>
               <p className="text-xs font-bold" style={{ color: '#2d2d2d' }}>{formatRupiahShort(balanceSheet.totalAset)}</p>
             </div>
-            <div className="flex rounded-full overflow-hidden h-4" style={{ gap: '2px' }}>
-              <div
-                style={{
-                  flex: balanceSheet.aktivaLancar,
-                  background: '#daf163',
-                  borderRadius: '999px 0 0 999px',
-                }}
-                title={`Aktiva Lancar: ${formatRupiahShort(balanceSheet.aktivaLancar)}`}
-              />
-              <div
-                style={{
-                  flex: balanceSheet.aktivaTetap,
-                  background: '#bbb3f3',
-                }}
-                title={`Aktiva Tetap: ${formatRupiahShort(balanceSheet.aktivaTetap)}`}
-              />
-              <div
-                style={{
-                  flex: balanceSheet.aktivaLainnya,
-                  background: '#7dd3fc',
-                  borderRadius: '0 999px 999px 0',
-                }}
-                title={`Aktiva Lainnya: ${formatRupiahShort(balanceSheet.aktivaLainnya)}`}
-              />
+            {/* rounded-full TANPA overflow-hidden: tooltip segmen butuh ruang
+                mengambang di atas bar. Bentuk pil tetap terjaga karena tiap
+                segmen sudah punya border-radius per-sudut sendiri di bawah. */}
+            <div className="flex rounded-full h-4" style={{ gap: '2px' }}>
+              <BarSegment value={balanceSheet.aktivaLancar} color="#daf163" label="Aktiva Lancar" radius="999px 0 0 999px" />
+              <BarSegment value={balanceSheet.aktivaTetap} color="#bbb3f3" label="Aktiva Tetap" radius="0" />
+              <BarSegment value={balanceSheet.aktivaLainnya} color="#7dd3fc" label="Aktiva Lainnya" radius="0 999px 999px 0" />
             </div>
             <div className="flex items-center gap-4 mt-2 flex-wrap">
               {[
@@ -100,23 +108,9 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               <p className="text-xs font-semibold" style={{ color: '#2d2d2d' }}>Komposisi Pasiva</p>
               <p className="text-xs font-bold" style={{ color: '#2d2d2d' }}>{formatRupiahShort(balanceSheet.totalAset)}</p>
             </div>
-            <div className="flex rounded-full overflow-hidden h-4" style={{ gap: '2px' }}>
-              <div
-                style={{
-                  flex: balanceSheet.totalHutang,
-                  background: '#fdba74',
-                  borderRadius: '999px 0 0 999px',
-                }}
-                title={`Total Hutang: ${formatRupiahShort(balanceSheet.totalHutang)}`}
-              />
-              <div
-                style={{
-                  flex: balanceSheet.totalModal,
-                  background: '#6ee7b7',
-                  borderRadius: '0 999px 999px 0',
-                }}
-                title={`Total Modal: ${formatRupiahShort(balanceSheet.totalModal)}`}
-              />
+            <div className="flex rounded-full h-4" style={{ gap: '2px' }}>
+              <BarSegment value={balanceSheet.totalHutang} color="#fdba74" label="Total Hutang" radius="999px 0 0 999px" />
+              <BarSegment value={balanceSheet.totalModal} color="#6ee7b7" label="Total Modal" radius="0 999px 999px 0" />
             </div>
             <div className="flex items-center gap-4 mt-2 flex-wrap">
               {[

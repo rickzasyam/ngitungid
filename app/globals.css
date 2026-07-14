@@ -497,6 +497,34 @@ html {
   stroke-width: 2;
 }
 
+/* Tooltip nominal untuk segmen non-Recharts (mis. bar Komposisi Aset/Pasiva di
+   Kesehatan Neraca) — CSS-driven hover+focus, bukan onMouseEnter/Leave JS,
+   supaya tetap jalan untuk navigasi keyboard (lihat gotcha hover-state). */
+.ng-seg-tooltip-wrap {
+  position: relative;
+  cursor: default;
+}
+
+.ng-seg-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, 4px);
+  z-index: 20;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.ng-seg-tooltip-wrap:hover .ng-seg-tooltip,
+.ng-seg-tooltip-wrap:focus-visible .ng-seg-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
 /* Upload card depth-on-hover — CSS-driven (replaces removed JS onMouseEnter/Leave).
    --hover-accent is set per-card inline so each report type lifts in its own color. */
 .upload-card-hover:hover {
@@ -517,6 +545,9 @@ html {
     transform: none !important;
   }
   .ng-nav-capsule {
+    transition: none !important;
+  }
+  .ng-seg-tooltip {
     transition: none !important;
   }
 }
