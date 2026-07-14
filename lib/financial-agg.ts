@@ -111,8 +111,15 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
   hutangUsaha: number
 } {
   const c = contributing(lines).filter(l => norm(l.kelompok).includes('neraca'))
+  // Penjumlahan BERTANDA (bukan Math.abs). Akun KONTRA disimpan negatif dari
+  // ekstraksi (di PDF ditulis dalam kurung): Akumulasi Penyusutan & provisi
+  // (kontra-aset), Prive (kontra-modal), saldo kas overdraft. Math.abs dulu
+  // MEMBALIK tandanya → tiap kategori ber-kontra menggelembung 2×|nilai kontra|
+  // (mis. Aktiva Lancar Rasyuka Feb over 34.371.942 dari Kas Tiktok −177 +
+  // Cadangan Promosi −17.185.794), dan identitas TOTAL AKTIVA = TOTAL PASIVA
+  // pecah. Signed = cocok PDF & identitas terjaga (sama dgn lib/neraca-compare).
   const sumCat = (cat: BsCat) =>
-    c.filter(l => classifyBs(l.subKelompok) === cat).reduce((s, l) => s + Math.abs(l.amount), 0)
+    c.filter(l => classifyBs(l.subKelompok) === cat).reduce((s, l) => s + l.amount, 0)
 
   const aktivaLancar = sumCat('aktivaLancar')
   const aktivaTetap = sumCat('aktivaTetap')
@@ -124,7 +131,7 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
   // Akun spesifik dalam Aktiva Lancar (match by nama).
   const inLancar = c.filter(l => classifyBs(l.subKelompok) === 'aktivaLancar')
   const sumNama = (pred: (n: string) => boolean) =>
-    inLancar.filter(l => pred(norm(l.nama))).reduce((s, l) => s + Math.abs(l.amount), 0)
+    inLancar.filter(l => pred(norm(l.nama))).reduce((s, l) => s + l.amount, 0)
 
   const kas = sumNama(n => n.includes('kas') || n.includes('bank'))
   const piutang = sumNama(n => n.includes('piutang'))
@@ -137,7 +144,7 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
   // itu tetap masuk totalHutang/hutangLancar, tapi BUKAN AP.
   const inHutang = c.filter(l => classifyBs(l.subKelompok) === 'hutang')
   const sumNamaHutang = (pred: (n: string) => boolean) =>
-    inHutang.filter(l => pred(norm(l.nama))).reduce((s, l) => s + Math.abs(l.amount), 0)
+    inHutang.filter(l => pred(norm(l.nama))).reduce((s, l) => s + l.amount, 0)
   const hutangUsaha = sumNamaHutang(n => n.includes('dagang'))
 
   // Hutang lancar untuk rasio likuiditas. COA asli hanya punya subKelompok

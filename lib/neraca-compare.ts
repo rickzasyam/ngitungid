@@ -3,8 +3,8 @@
 // dgn financial-agg). Nilai BERTANDA (signed): akun kontra (Akumulasi
 // Penyusutan, Prive, dsb) tersimpan negatif dari ekstraksi → subtotal section
 // = penjumlahan bertanda biasa, dan identitas TOTAL AKTIVA = TOTAL PASIVA
-// (HUTANG + MODAL) harus terpenuhi. BUKAN Math.abs seperti
-// aggregateBalanceSheet (yang memang khusus input rasio).
+// (HUTANG + MODAL) harus terpenuhi. Sama seperti aggregateBalanceSheet yang
+// juga signed (sejak fix 2026-07-14 — dulu Math.abs, salah utk akun kontra).
 
 import { classifyBs } from './financial-agg'
 
