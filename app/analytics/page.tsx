@@ -33,19 +33,15 @@ type RatiosApi = {
   pnlBreakdown?: PnlBreakdown
 }
 
-// ── API response shape (GET /api/analytics/[clientId]/neraca-compare) ─
-type CmpAccount = { kode: string; name: string; a: number; b: number }
-type CmpSection = { key: string; label: string; accounts: CmpAccount[]; totalA: number; totalB: number }
-type CompareApi = {
+// ── API response shape (GET /api/analytics/[clientId]/neraca-detail) ─
+type NdAccount = { kode: string; name: string; values: number[] }
+type NdSection = { key: string; label: string; accounts: NdAccount[]; totals: number[] }
+type NeracaDetailApi = {
   hasData: boolean
-  checkpoints: { periodStart: string; label: string }[]
-  a: string | null
-  b: string | null
-  labelA?: string
-  labelB?: string
-  sections?: CmpSection[]
-  totalAktiva?: { a: number; b: number }
-  totalPasiva?: { a: number; b: number }
+  periods: { periodStart: string; label: string }[]
+  sections?: NdSection[]
+  totalAktiva?: number[]
+  totalPasiva?: number[]
 }
 
 type Preset = '3m' | '6m' | 'all' | 'custom'
@@ -63,7 +59,7 @@ const fmtRatio = (v: number) => v.toFixed(2).replace('.', ',')
 const fmtDays  = (v: number) => Math.round(v) + ' hari'
 const fmtX     = (v: number) => v.toFixed(2).replace('.', ',') + '×'
 
-// ── Compare Neraca helpers ────────────────────────────────────
+// ── Detail Neraca helpers ─────────────────────────────────────
 // Angka PENUH (bukan singkatan jt/M) — tabel ini dipakai mencocokkan ke
 // laporan manual klien; identitas AKTIVA = PASIVA harus terlihat persis.
 // Negatif pakai kurung, mengikuti konvensi laporan akuntansi.
@@ -72,17 +68,13 @@ const fmtFull = (v: number) => {
   return v < 0 ? `(${s})` : s
 }
 const pctOf = (v: number, total: number) => (total === 0 ? null : (v / total) * 100)
-// Growth% = (B−A)/A dengan TANDA ASLI A (bukan abs) — konvensi laporan
-// compare klien: akun bernilai negatif yang makin negatif = growth positif.
-const growthPctOf = (a: number, b: number) => (a === 0 ? null : ((b - a) / a) * 100)
 const fmtPct0 = (v: number | null) => (v === null ? '—' : Math.round(v) + '%')
-const fmtGrowthPct = (v: number | null) => (v === null ? '—' : v.toFixed(1).replace('.', ',') + '%')
-const growthColor = (d: number) => (d > 0 ? '#15803d' : d < 0 ? '#b91c1c' : '#9ca3af')
-const CMP_AKTIVA_KEYS = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
-const CMP_PASIVA_KEYS = ['hutang', 'modal']
+const ND_AKTIVA_KEYS = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
+const ND_PASIVA_KEYS = ['hutang', 'modal']
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const ymd2date = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
 
 // ── Color / severity ──────────────────────────────────────────
 const SEVERITY = {
@@ -150,6 +142,14 @@ function buildPnlCols(monthly: MonthPoint[], view: 'bulanan' | 'kuartalan' | 'yt
     return { label: d.m, rev, gp, np, exp, hpp: rev - gp }
   })
 }
+// Sub-baris breakdown akun P&L (portion = akun ÷ subtotal induk). Module-level
+// supaya dipakai view induk & Detail Laba Rugi (rentang terpisah).
+function buildSubRows(bd: PnlBreakdown | undefined, pnlTotal: ColData): Record<string, SubRow[]> {
+  const from = (items: BdItem[] | undefined, parentTotal: number): SubRow[] =>
+    (items ?? []).filter(a => a.amount !== 0).map(a => ({ label: a.name, portion: parentTotal ? a.amount / parentTotal : 0 }))
+  return { rev: from(bd?.revenue, pnlTotal.rev), hpp: from(bd?.hpp, pnlTotal.hpp), opex: from(bd?.opex, pnlTotal.exp) }
+}
+
 // assessHealth key → drawer registry key (untuk klik alert / kartu).
 const drawerKeyForMetric = (k: string): string =>
   k === 'cashR' ? 'cash' : k === 'invTurn' ? 'invturn' : k === 'assetTurn' ? 'assetturn'
@@ -246,16 +246,16 @@ export default function AnalyticsPage() {
   const [stmtMode, setStmtMode] = useState<'nominal' | 'pct'>('nominal')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
-  // Compare Neraca — checkpoint pilihan sendiri (independen dari rentang
-  // halaman): komparasi = operasi 2 titik, mengikat ke filter rentang bikin
-  // pasangan berubah diam-diam saat user ganti preset. null = default server
-  // (dua checkpoint ter-mapping terbaru).
-  const [cmp, setCmp] = useState<CompareApi | null>(null)
-  const [cmpLoading, setCmpLoading] = useState(true)
-  const [cmpError, setCmpError] = useState(false)
-  const [cmpA, setCmpA] = useState<string | null>(null)
-  const [cmpB, setCmpB] = useState<string | null>(null)
-  const [cmpExpanded, setCmpExpanded] = useState<Record<string, boolean>>({})
+  // Detail Laporan (Laba Rugi + Neraca) — punya filter rentang SENDIRI, terpisah
+  // dari filter induk (yang mengendalikan rasio/health/performa). Default =
+  // seluruh periode klien. `expanded`/`stmtView`/`stmtMode` di atas dipakai
+  // ulang oleh tabel Detail Laba Rugi.
+  const [detailRange, setDetailRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>(undefined)
+  const [detailPnl, setDetailPnl] = useState<RatiosApi | null>(null)
+  const [detailNeraca, setDetailNeraca] = useState<NeracaDetailApi | null>(null)
+  const [detailLoading, setDetailLoading] = useState(true)
+  const [detailError, setDetailError] = useState(false)
+  const [neracaExpanded, setNeracaExpanded] = useState<Record<string, boolean>>({})
 
   const periodsAsc = useMemo(
     () => [...periods].sort((a, b) => a.periodStart.localeCompare(b.periodStart)),
@@ -286,10 +286,17 @@ export default function AnalyticsPage() {
 
   // Nilai DateRangePicker header: saat preset shortcut aktif, tampilkan rentang
   // preset itu (biar user lihat tanggalnya); saat custom, tampilkan pilihannya.
-  const ymd2date = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
   const headerPickerValue = preset === 'custom'
     ? customRange
     : (range ? { from: ymd2date(range.start), to: ymd2date(range.end) } : undefined)
+
+  // Rentang Detail Laporan (filter terpisah). Default = seluruh periode klien.
+  const detailKeys = detailRange?.from && detailRange?.to
+    ? (() => { const a = toYMD(detailRange.from!), b = toYMD(detailRange.to!); return a <= b ? { start: a, end: b } : { start: b, end: a } })()
+    : (nP > 0 ? { start: periodsAsc[0].periodStart, end: periodsAsc[nP - 1].periodEnd } : null)
+  const detailStart = detailKeys?.start ?? ''
+  const detailEnd = detailKeys?.end ?? ''
+  const detailPickerValue = detailRange ?? (detailKeys ? { from: ymd2date(detailKeys.start), to: ymd2date(detailKeys.end) } : undefined)
 
   // Reset saat klien berganti.
   useEffect(() => {
@@ -297,26 +304,29 @@ export default function AnalyticsPage() {
     setCustomRange(undefined)
     setData(null)
     setLoading(true)
-    setCmp(null)
-    setCmpA(null)
-    setCmpB(null)
-    setCmpExpanded({})
+    setDetailRange(undefined)
+    setDetailPnl(null)
+    setDetailNeraca(null)
+    setDetailLoading(true)
+    setNeracaExpanded({})
   }, [clientId])
 
-  // Fetch komparasi neraca (default server: 2 checkpoint terbaru).
+  // Fetch data Detail Laporan (Laba Rugi via /ratios + Neraca via /neraca-detail)
+  // untuk rentang filter TERPISAH. Independen dari fetch rasio induk di atas.
   useEffect(() => {
-    if (!clientId) return
+    if (!clientId || !detailStart || !detailEnd) return
     let alive = true
-    setCmpLoading(true)
-    setCmpError(false)
-    const q = cmpA && cmpB ? `?a=${cmpA}&b=${cmpB}` : ''
-    fetch(`/api/analytics/${clientId}/neraca-compare${q}`)
-      .then(r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(d => { if (alive) setCmp(d) })
-      .catch(() => { if (alive) { setCmpError(true); setCmp(null) } })
-      .finally(() => { if (alive) setCmpLoading(false) })
+    setDetailLoading(true)
+    setDetailError(false)
+    Promise.all([
+      fetch(`/api/analytics/${clientId}/ratios?periodStart=${detailStart}&periodEnd=${detailEnd}`).then(r => (r.ok ? r.json() : null)),
+      fetch(`/api/analytics/${clientId}/neraca-detail?periodStart=${detailStart}&periodEnd=${detailEnd}`).then(r => (r.ok ? r.json() : null)),
+    ])
+      .then(([pnl, ner]) => { if (alive) { setDetailPnl(pnl); setDetailNeraca(ner) } })
+      .catch(() => { if (alive) setDetailError(true) })
+      .finally(() => { if (alive) setDetailLoading(false) })
     return () => { alive = false }
-  }, [clientId, cmpA, cmpB])
+  }, [clientId, detailStart, detailEnd])
 
   // Daftar periode → preset adaptif.
   useEffect(() => {
@@ -438,14 +448,7 @@ export default function AnalyticsPage() {
     const pnlTotal: ColData = { label: 'Total ' + rangeLabel, ...sumRows(monthly) }
 
     // Sub-baris breakdown akun asli (portion = akun ÷ subtotal induk kumulatif).
-    const bd = data!.pnlBreakdown
-    const subFrom = (items: BdItem[] | undefined, parentTotal: number): SubRow[] =>
-      (items ?? []).filter(a => a.amount !== 0).map(a => ({ label: a.name, portion: parentTotal ? a.amount / parentTotal : 0 }))
-    const subRows: Record<string, SubRow[]> = {
-      rev: subFrom(bd?.revenue, pnlTotal.rev),
-      hpp: subFrom(bd?.hpp, pnlTotal.hpp),
-      opex: subFrom(bd?.opex, pnlTotal.exp),
-    }
+    const subRows = buildSubRows(data!.pnlBreakdown, pnlTotal)
 
     // Props RatioCard: tone dari health, status generik, benchmark jujur, trend asli.
     const rc = (key: keyof TrendArrays & string, drawerK: string) => {
@@ -461,6 +464,23 @@ export default function AnalyticsPage() {
   }
 
   const view = (!busy && !loadError && !noRange && hasData) ? buildView() : null
+
+  // Detail Laba Rugi — data dari rentang filter TERPISAH (detailPnl), bukan view induk.
+  const detailPnlView = (() => {
+    const d = detailPnl
+    if (!d?.hasData || !d.monthly?.length) return null
+    const monthly = d.monthly
+    const monthsArr = monthly.map(m => m.m)
+    const rangeLabel = monthsArr.length === 1 ? monthsArr[0] : `${monthsArr[0]}–${monthsArr[monthsArr.length - 1]}`
+    const pnlCols = buildPnlCols(monthly, stmtView)
+    const pnlTotal: ColData = { label: 'Total ' + rangeLabel, ...sumRows(monthly) }
+    return {
+      pnlCols, pnlTotal, rangeLabel,
+      subRows: buildSubRows(d.pnlBreakdown, pnlTotal),
+      pRevArr: monthly.map(m => m.rev),
+      pNPArr: monthly.map(m => m.np),
+    }
+  })()
 
   return (
     <>
@@ -803,309 +823,289 @@ export default function AnalyticsPage() {
                   </SectionCard>
                 </div>
 
-                {/* ═══ 7. TABEL P&L ════════════════════════════════════ */}
-                <div id="sec-detail">
+                {/* ═══ 7. DETAIL LAPORAN — Laba Rugi + Neraca (filter rentang SENDIRI) ═══ */}
+                <div id="sec-detail" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* Filter rentang bersama — TERPISAH dari filter induk di atas */}
                   <SectionCard>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #daf163, #bef264)' }} />
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Laba Rugi</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{presetLabel} · {view.rangeLabel}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Laporan</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>Laba Rugi &amp; Neraca per periode · filter tanggalnya terpisah dari rasio di atas</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <SegCtrl
-                          options={[{ label: 'Bulanan', value: 'bulanan' as const }, { label: 'Kuartalan', value: 'kuartalan' as const }, { label: 'YTD', value: 'ytd' as const }]}
-                          value={stmtView}
-                          onChange={setStmtView}
-                        />
-                        <SegCtrl
-                          options={[{ label: 'Nominal', value: 'nominal' as const }, { label: '% Pendapatan', value: 'pct' as const }]}
-                          value={stmtMode}
-                          onChange={setStmtMode}
-                        />
+                      <div style={{ width: 248 }}>
+                        <DateRangePicker value={detailPickerValue} onChange={setDetailRange} placeholder="Filter tanggal detail" />
                       </div>
                     </div>
+                  </SectionCard>
 
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
-                        <thead>
-                          <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
-                            <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 180 }}>Akun</th>
-                            {view.pnlCols.map(col => (
-                              <th key={col.label} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{col.label}</th>
-                            ))}
-                            <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', borderLeft: '1px solid #f0f0f0' }}>Δ</th>
-                            <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', textAlign: 'center' }}>Tren</th>
-                            <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderLeft: '2px solid #efefef', whiteSpace: 'nowrap' }}>
-                              {view.pnlTotal.label}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ROW_DEFS.map(row => {
-                            const rowSub = view.subRows[row.key] ?? []
-                            const isExpandable = rowSub.length > 0
-                            const isExp = !!expanded[row.key] && isExpandable
-                            const rowBg = (row.bold && !row.pct) ? '#fcfcfd' : 'white'
-                            const color = row.pct ? '#6b7280' : row.muted ? '#9ca3af' : '#1f2430'
-                            const fw = row.pct ? 500 : row.bold ? 700 : 400
-                            const fi = row.pct ? 'italic' as const : 'normal' as const
-                            const bl = row.accent ? `3px solid ${row.accent}` : '3px solid transparent'
-                            const delta = rowDelta(row, view.pnlCols)
-                            const showTrend = row.key === 'rev' || row.key === 'np'
-                            const trendColor = row.key === 'rev' ? '#0284c7' : '#16a34a'
-                            const trendArr = row.key === 'rev' ? view.pRevArr : view.pNPArr
+                  {detailLoading ? (
+                    <SectionCard>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9ca3af', fontSize: 12, padding: '6px 0' }}>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat detail…
+                      </div>
+                    </SectionCard>
+                  ) : detailError ? (
+                    <SectionCard>
+                      <p style={{ fontSize: 12, color: '#dc2626', padding: '6px 0' }}>Gagal memuat detail. Coba ubah rentang atau muat ulang.</p>
+                    </SectionCard>
+                  ) : (
+                    <>
+                      {/* Detail Laba Rugi */}
+                      <SectionCard>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 16, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #daf163, #bef264)' }} />
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Laba Rugi</div>
+                              <div style={{ fontSize: 11, color: '#9ca3af' }}>{detailPnlView ? detailPnlView.rangeLabel : '—'}</div>
+                            </div>
+                          </div>
+                          {detailPnlView && (
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <SegCtrl
+                                options={[{ label: 'Bulanan', value: 'bulanan' as const }, { label: 'Kuartalan', value: 'kuartalan' as const }, { label: 'YTD', value: 'ytd' as const }]}
+                                value={stmtView}
+                                onChange={setStmtView}
+                              />
+                              <SegCtrl
+                                options={[{ label: 'Nominal', value: 'nominal' as const }, { label: '% Pendapatan', value: 'pct' as const }]}
+                                value={stmtMode}
+                                onChange={setStmtMode}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {!detailPnlView ? (
+                          <p style={{ fontSize: 12, color: '#6b7280', padding: '6px 0' }}>Belum ada laporan Laba Rugi ter-mapping untuk rentang ini.</p>
+                        ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+                            <thead>
+                              <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
+                                <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 180 }}>Akun</th>
+                                {detailPnlView.pnlCols.map(col => (
+                                  <th key={col.label} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{col.label}</th>
+                                ))}
+                                <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', borderLeft: '1px solid #f0f0f0' }}>Δ</th>
+                                <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', textAlign: 'center' }}>Tren</th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderLeft: '2px solid #efefef', whiteSpace: 'nowrap' }}>
+                                  {detailPnlView.pnlTotal.label}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ROW_DEFS.map(row => {
+                                const rowSub = detailPnlView.subRows[row.key] ?? []
+                                const isExpandable = rowSub.length > 0
+                                const isExp = !!expanded[row.key] && isExpandable
+                                const rowBg = (row.bold && !row.pct) ? '#fcfcfd' : 'white'
+                                const color = row.pct ? '#6b7280' : row.muted ? '#9ca3af' : '#1f2430'
+                                const fw = row.pct ? 500 : row.bold ? 700 : 400
+                                const fi = row.pct ? 'italic' as const : 'normal' as const
+                                const bl = row.accent ? `3px solid ${row.accent}` : '3px solid transparent'
+                                const delta = rowDelta(row, detailPnlView.pnlCols)
+                                const showTrend = row.key === 'rev' || row.key === 'np'
+                                const trendColor = row.key === 'rev' ? '#0284c7' : '#16a34a'
+                                const trendArr = row.key === 'rev' ? detailPnlView.pRevArr : detailPnlView.pNPArr
+                                return (
+                                  <Fragment key={row.key}>
+                                    <tr
+                                      style={{ background: rowBg, borderBottom: row.divider ? '2px solid #eee' : '1px solid #f5f5f5', cursor: isExpandable ? 'pointer' : 'default' }}
+                                      onClick={isExpandable ? () => setExpanded(p => ({ ...p, [row.key]: !p[row.key] })) : undefined}
+                                    >
+                                      <td style={{ padding: '9px 12px', borderLeft: bl }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          {isExpandable && (
+                                            <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                                          )}
+                                          <span style={{ fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>{row.neg && '−'}{row.label}</span>
+                                        </div>
+                                      </td>
+                                      {detailPnlView.pnlCols.map(col => (
+                                        <td key={col.label} style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>
+                                          {cellVal(row, col, stmtMode)}
+                                        </td>
+                                      ))}
+                                      <td style={{ padding: '9px 10px', textAlign: 'right', borderLeft: '1px solid #f0f0f0', fontSize: 11, fontWeight: 600, color: delta === null ? '#9ca3af' : delta.isGood ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                                        {delta === null ? '—' : (delta.isGood ? '+' : '') + delta.pct.toFixed(1).replace('.', ',') + '%'}
+                                      </td>
+                                      <td style={{ padding: '9px 6px', textAlign: 'center' }}>
+                                        {showTrend && trendArr.length >= 2
+                                          ? <Sparkline values={trendArr} color={trendColor} width={56} height={18} fill={false} />
+                                          : <span style={{ color: '#e5e7eb' }}>·</span>}
+                                      </td>
+                                      <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, fontStyle: fi, color, background: '#fafafa', borderLeft: '2px solid #efefef' }}>
+                                        {cellVal(row, detailPnlView.pnlTotal, stmtMode)}
+                                      </td>
+                                    </tr>
+                                    {isExp && rowSub.map((sub, si) => (
+                                      <tr key={row.key + '-' + si} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
+                                        <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280', borderLeft: '3px solid transparent' }}>
+                                          └ {sub.label} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{(sub.portion * 100).toFixed(0)}%</span>
+                                        </td>
+                                        {detailPnlView.pnlCols.map(col => {
+                                          const subVal = row.getVal(col) * sub.portion
+                                          return (
+                                            <td key={col.label} style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280' }}>
+                                              {stmtMode === 'pct' ? fmtPct(subVal / col.rev * 100) : fmtRp(subVal)}
+                                            </td>
+                                          )
+                                        })}
+                                        <td style={{ padding: '7px 10px', borderLeft: '1px solid #f0f0f0' }} />
+                                        <td />
+                                        <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280', background: '#fafafa', borderLeft: '2px solid #efefef' }}>
+                                          {stmtMode === 'pct'
+                                            ? fmtPct(row.getVal(detailPnlView.pnlTotal) * sub.portion / detailPnlView.pnlTotal.rev * 100)
+                                            : fmtRp(row.getVal(detailPnlView.pnlTotal) * sub.portion)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </Fragment>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        )}
+                      </SectionCard>
+
+                      {/* Detail Neraca — saldo akhir per periode (gaya P&L, tanpa akumulasi antar periode) */}
+                      <SectionCard>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                          <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #7dd3fc, #38bdf8)' }} />
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Neraca</div>
+                            <div style={{ fontSize: 11, color: '#9ca3af' }}>Saldo akhir per periode · % = porsi dari total section · klik kelompok untuk detail akun</div>
+                          </div>
+                        </div>
+
+                        {(() => {
+                          const nd = detailNeraca
+                          if (!nd?.hasData || !nd.sections?.length || !nd.periods.length || !nd.totalAktiva || !nd.totalPasiva) {
+                            return <p style={{ fontSize: 12, color: '#6b7280', padding: '6px 0' }}>Belum ada laporan Neraca ter-mapping untuk rentang ini.</p>
+                          }
+                          const periods = nd.periods
+                          const nPer = periods.length
+                          const TA = nd.totalAktiva, TP = nd.totalPasiva
+                          const aktivaSecs = nd.sections.filter(s => ND_AKTIVA_KEYS.includes(s.key))
+                          const pasivaSecs = nd.sections.filter(s => ND_PASIVA_KEYS.includes(s.key))
+                          const otherSec = nd.sections.find(s => s.key === 'other')
+                          const unbalanced = periods.some((_, i) => Math.abs(TA[i] - TP[i]) > 100)
+                          const toggle = (k: string) => setNeracaExpanded(p => ({ ...p, [k]: !p[k] }))
+
+                          const sectionBlock = (sec: NdSection, denom: number[] | null) => {
+                            const isExp = !!neracaExpanded[sec.key]
                             return (
-                              <Fragment key={row.key}>
+                              <Fragment key={sec.key}>
                                 <tr
-                                  style={{
-                                    background: rowBg,
-                                    borderBottom: row.divider ? '2px solid #eee' : '1px solid #f5f5f5',
-                                    cursor: isExpandable ? 'pointer' : 'default',
-                                  }}
-                                  onClick={isExpandable ? () => setExpanded(p => ({ ...p, [row.key]: !p[row.key] })) : undefined}
+                                  role="button" tabIndex={0} aria-expanded={isExp}
+                                  aria-label={`${sec.label}: ${sec.accounts.length} akun. ${isExp ? 'Tutup' : 'Buka'} detail.`}
+                                  onClick={() => toggle(sec.key)}
+                                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(sec.key) } }}
+                                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                  style={{ background: '#f3f4f6', borderBottom: '1px solid #e5e7eb', cursor: 'pointer' }}
                                 >
-                                  <td style={{ padding: '9px 12px', borderLeft: bl }}>
+                                  <td style={{ padding: '9px 12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      {isExpandable && (
-                                        <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
-                                      )}
-                                      <span style={{ fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>{row.neg && '−'}{row.label}</span>
+                                      <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2430' }}>{sec.label}</span>
+                                      <span style={{ fontSize: 10, color: '#9ca3af' }}>{sec.accounts.length} akun</span>
                                     </div>
                                   </td>
-                                  {view.pnlCols.map(col => (
-                                    <td key={col.label} style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>
-                                      {cellVal(row, col, stmtMode)}
+                                  {periods.map((_, i) => (
+                                    <td key={i} style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#fafafa', borderLeft: '2px solid #efefef' } : {}) }}>
+                                      <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2430', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(sec.totals[i])}</div>
+                                      {denom && <div style={{ fontSize: 9.5, color: '#9ca3af' }}>{fmtPct0(pctOf(sec.totals[i], denom[i]))}</div>}
                                     </td>
                                   ))}
-                                  <td style={{ padding: '9px 10px', textAlign: 'right', borderLeft: '1px solid #f0f0f0', fontSize: 11, fontWeight: 600, color: delta === null ? '#9ca3af' : delta.isGood ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
-                                    {delta === null ? '—' : (delta.isGood ? '+' : '') + delta.pct.toFixed(1).replace('.', ',') + '%'}
-                                  </td>
-                                  <td style={{ padding: '9px 6px', textAlign: 'center' }}>
-                                    {showTrend && trendArr.length >= 2
-                                      ? <Sparkline values={trendArr} color={trendColor} width={56} height={18} fill={false} />
-                                      : <span style={{ color: '#e5e7eb' }}>·</span>
-                                    }
-                                  </td>
-                                  <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, fontStyle: fi, color, background: '#fafafa', borderLeft: '2px solid #efefef' }}>
-                                    {cellVal(row, view.pnlTotal, stmtMode)}
+                                  <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                                    {sec.totals.length >= 2 ? <Sparkline values={sec.totals} color="#0284c7" width={56} height={18} fill={false} /> : <span style={{ color: '#e5e7eb' }}>·</span>}
                                   </td>
                                 </tr>
-
-                                {isExp && rowSub.map((sub, si) => (
-                                  <tr key={row.key + '-' + si} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
-                                    <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280', borderLeft: '3px solid transparent' }}>
-                                      └ {sub.label} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{(sub.portion * 100).toFixed(0)}%</span>
-                                    </td>
-                                    {view.pnlCols.map(col => {
-                                      const subVal = row.getVal(col) * sub.portion
-                                      return (
-                                        <td key={col.label} style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280' }}>
-                                          {stmtMode === 'pct' ? fmtPct(subVal / col.rev * 100) : fmtRp(subVal)}
-                                        </td>
-                                      )
-                                    })}
-                                    <td style={{ padding: '7px 10px', borderLeft: '1px solid #f0f0f0' }} />
-                                    <td />
-                                    <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280', background: '#fafafa', borderLeft: '2px solid #efefef' }}>
-                                      {stmtMode === 'pct'
-                                        ? fmtPct(row.getVal(view.pnlTotal) * sub.portion / view.pnlTotal.rev * 100)
-                                        : fmtRp(row.getVal(view.pnlTotal) * sub.portion)
-                                      }
+                                {isExp && sec.accounts.map(a => (
+                                  <tr key={a.kode} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
+                                    <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>└ {a.name}</td>
+                                    {periods.map((_, i) => (
+                                      <td key={i} style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#fafafa', borderLeft: '2px solid #efefef' } : {}) }}>
+                                        <div style={{ fontSize: 11, color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(a.values[i])}</div>
+                                        <div style={{ fontSize: 9, color: '#c0c4cc' }}>{fmtPct0(pctOf(a.values[i], sec.totals[i]))}</div>
+                                      </td>
+                                    ))}
+                                    <td style={{ padding: '6px 6px', textAlign: 'center' }}>
+                                      {a.values.length >= 2 ? <Sparkline values={a.values} color="#94a3b8" width={48} height={14} fill={false} /> : <span style={{ color: '#e5e7eb' }}>·</span>}
                                     </td>
                                   </tr>
                                 ))}
                               </Fragment>
                             )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </SectionCard>
-                </div>
+                          }
 
-                {/* ═══ 8. COMPARE NERACA ═════════════════════════════ */}
-                <div id="sec-compare">
-                  <SectionCard>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 16, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #7dd3fc, #38bdf8)' }} />
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Compare Neraca</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                            {cmp?.labelA && cmp?.labelB
-                              ? `${cmp.labelA} vs ${cmp.labelB} · komposisi & pertumbuhan per akun · Klik section untuk detail`
-                              : 'Komparasi posisi neraca antar dua periode'}
-                          </div>
-                        </div>
-                      </div>
-                      {(cmp?.checkpoints.length ?? 0) >= 2 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <select
-                            value={cmp?.a ?? ''}
-                            aria-label="Periode pembanding (awal)"
-                            onChange={e => { setCmpA(e.target.value); setCmpB(cmp?.b ?? null) }}
-                            style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid #e5e7eb', fontSize: 12, color: '#1f2430', background: '#f9fafb', cursor: 'pointer' }}
-                          >
-                            {cmp!.checkpoints.map(c => <option key={c.periodStart} value={c.periodStart}>{c.label}</option>)}
-                          </select>
-                          <span style={{ fontSize: 11, color: '#9ca3af' }}>vs</span>
-                          <select
-                            value={cmp?.b ?? ''}
-                            aria-label="Periode pembanding (akhir)"
-                            onChange={e => { setCmpB(e.target.value); setCmpA(cmp?.a ?? null) }}
-                            style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid #e5e7eb', fontSize: 12, color: '#1f2430', background: '#f9fafb', cursor: 'pointer' }}
-                          >
-                            {cmp!.checkpoints.map(c => <option key={c.periodStart} value={c.periodStart}>{c.label}</option>)}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-
-                    {cmpLoading ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9ca3af', fontSize: 12, padding: '14px 0' }}>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Memuat komparasi…
-                      </div>
-                    ) : cmpError ? (
-                      <p style={{ fontSize: 12, color: '#dc2626', padding: '10px 0' }}>Gagal memuat komparasi neraca. Coba muat ulang halaman.</p>
-                    ) : !cmp?.hasData ? (
-                      <p style={{ fontSize: 12, color: '#6b7280', padding: '10px 0' }}>
-                        Belum ada laporan Neraca yang ter-mapping ke COA — upload & petakan Neraca untuk melihat komparasi antar periode.
-                      </p>
-                    ) : (cmp.checkpoints.length < 2 || !cmp.sections || !cmp.totalAktiva || !cmp.totalPasiva) ? (
-                      <p style={{ fontSize: 12, color: '#6b7280', padding: '10px 0' }}>
-                        Baru ada {cmp.checkpoints.length} periode Neraca ter-mapping ({cmp.checkpoints.map(c => c.label).join(', ')}).
-                        Komparasi butuh minimal 2 periode — upload & petakan Neraca bulan lain dulu.
-                      </p>
-                    ) : (() => {
-                      const TA = cmp.totalAktiva
-                      const TP = cmp.totalPasiva
-                      const aktivaSecs = cmp.sections.filter(s => CMP_AKTIVA_KEYS.includes(s.key))
-                      const pasivaSecs = cmp.sections.filter(s => CMP_PASIVA_KEYS.includes(s.key))
-                      const otherSec = cmp.sections.find(s => s.key === 'other')
-                      // Toleransi Rp 100: angka cetak PDF dibulatkan ke rupiah, jadi
-                      // identitas bisa meleset beberapa rupiah tanpa ada salah mapping.
-                      // Salah mapping/klasifikasi riil selalu jauh di atas ini.
-                      const unbalanced = Math.abs(TA.a - TP.a) > 100 || Math.abs(TA.b - TP.b) > 100
-
-                      const numTd = (fw: number): React.CSSProperties => ({ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, color: '#1f2430', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' })
-                      const pctTd: React.CSSProperties = { padding: '9px 8px', textAlign: 'right', fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }
-                      const accTd: React.CSSProperties = { padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
-                      const accPctTd: React.CSSProperties = { padding: '7px 8px', textAlign: 'right', fontSize: 10.5, color: '#9ca3af', whiteSpace: 'nowrap' }
-
-                      const toggleSec = (key: string) => setCmpExpanded(p => ({ ...p, [key]: !p[key] }))
-
-                      const sectionBlock = (sec: CmpSection, side: { a: number; b: number } | null) => {
-                        const isExp = !!cmpExpanded[sec.key]
-                        const g = sec.totalB - sec.totalA
-                        return (
-                          <Fragment key={sec.key}>
-                            <tr
-                              role="button"
-                              tabIndex={0}
-                              aria-expanded={isExp}
-                              aria-label={`${sec.label}: ${sec.accounts.length} akun. ${isExp ? 'Tutup' : 'Buka'} detail akun.`}
-                              onClick={() => toggleSec(sec.key)}
-                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSec(sec.key) } }}
-                              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                              style={{ background: '#fcfcfd', borderBottom: '1px solid #f0f0f0', cursor: 'pointer' }}
-                            >
-                              <td style={{ padding: '9px 12px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2430', textTransform: 'uppercase', letterSpacing: 0.3 }}>{sec.label}</span>
-                                  <span style={{ fontSize: 10, color: '#9ca3af' }}>{sec.accounts.length} akun</span>
-                                </div>
+                          const grandRow = (label: string, arr: number[], accent: string) => (
+                            <tr style={{ background: '#e9edf2', borderTop: '2px solid #d7dde5', borderBottom: '2px solid #d7dde5' }}>
+                              <td style={{ padding: '10px 12px', borderLeft: `3px solid ${accent}`, fontSize: 12, fontWeight: 700, color: '#1f2430', whiteSpace: 'nowrap' }}>{label}</td>
+                              {arr.map((v, i) => (
+                                <td key={i} style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#dfe5ec' } : {}) }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2430', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(v)}</div>
+                                  <div style={{ fontSize: 9.5, color: '#9ca3af' }}>100%</div>
+                                </td>
+                              ))}
+                              <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                                {arr.length >= 2 ? <Sparkline values={arr} color={accent} width={56} height={18} fill={false} /> : <span style={{ color: '#e5e7eb' }}>·</span>}
                               </td>
-                              <td style={numTd(700)}>{fmtFull(sec.totalA)}</td>
-                              <td style={pctTd}>{fmtPct0(side ? pctOf(sec.totalA, side.a) : null)}</td>
-                              <td style={numTd(700)}>{fmtFull(sec.totalB)}</td>
-                              <td style={pctTd}>{fmtPct0(side ? pctOf(sec.totalB, side.b) : null)}</td>
-                              <td style={{ ...numTd(600), color: growthColor(g) }}>{fmtFull(g)}</td>
-                              <td style={{ ...numTd(600), color: growthColor(g) }}>{fmtGrowthPct(growthPctOf(sec.totalA, sec.totalB))}</td>
                             </tr>
-                            {isExp && sec.accounts.map(a => {
-                              const ag = a.b - a.a
-                              return (
-                                <tr key={a.kode} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
-                                  <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280' }}>└ {a.name}</td>
-                                  <td style={accTd}>{fmtFull(a.a)}</td>
-                                  <td style={accPctTd}>{fmtPct0(pctOf(a.a, sec.totalA))}</td>
-                                  <td style={accTd}>{fmtFull(a.b)}</td>
-                                  <td style={accPctTd}>{fmtPct0(pctOf(a.b, sec.totalB))}</td>
-                                  <td style={{ ...accTd, color: growthColor(ag) }}>{fmtFull(ag)}</td>
-                                  <td style={{ ...accTd, color: growthColor(ag) }}>{fmtGrowthPct(growthPctOf(a.a, a.b))}</td>
-                                </tr>
-                              )
-                            })}
-                          </Fragment>
-                        )
-                      }
+                          )
 
-                      const totalRow = (label: string, t: { a: number; b: number }, accent: string) => {
-                        const g = t.b - t.a
-                        return (
-                          <tr style={{ background: '#f3f4f6', borderTop: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb' }}>
-                            <td style={{ padding: '10px 12px', borderLeft: `3px solid ${accent}`, fontSize: 12, fontWeight: 700, color: '#1f2430' }}>{label}</td>
-                            <td style={numTd(700)}>{fmtFull(t.a)}</td>
-                            <td style={pctTd}>100%</td>
-                            <td style={numTd(700)}>{fmtFull(t.b)}</td>
-                            <td style={pctTd}>100%</td>
-                            <td style={{ ...numTd(700), color: growthColor(g) }}>{fmtFull(g)}</td>
-                            <td style={{ ...numTd(700), color: growthColor(g) }}>{fmtGrowthPct(growthPctOf(t.a, t.b))}</td>
-                          </tr>
-                        )
-                      }
-
-                      return (
-                        <>
-                          {unbalanced && (
-                            <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
-                              <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
-                              <span style={{ fontSize: 12, color: '#6b7280' }}>
-                                <span style={{ fontWeight: 700, color: '#b45309' }}>TOTAL AKTIVA ≠ TOTAL PASIVA.</span>
-                                {' '}Selisih {cmp.labelA}: {fmtFull(TA.a - TP.a)} · {cmp.labelB}: {fmtFull(TA.b - TP.b)}.
-                                {' '}Periksa mapping / subKelompok COA — kemungkinan ada akun neraca yang belum terpetakan atau salah klasifikasi.
-                              </span>
-                            </div>
-                          )}
-                          {otherSec && (
-                            <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
-                              <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
-                              <span style={{ fontSize: 12, color: '#6b7280' }}>
-                                <span style={{ fontWeight: 700, color: '#b45309' }}>{otherSec.accounts.length} akun tidak terklasifikasi</span>
-                                {' '}— subKelompok COA-nya tidak dikenali sebagai Aktiva/Hutang/Modal, ditampilkan terpisah di bawah dan TIDAK ikut TOTAL.
-                              </span>
-                            </div>
-                          )}
-                          <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
-                              <thead>
-                                <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
-                                  <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 200 }}>Akun</th>
-                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{cmp.labelA}</th>
-                                  <th style={{ textAlign: 'right', padding: '8px 8px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>%</th>
-                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{cmp.labelB}</th>
-                                  <th style={{ textAlign: 'right', padding: '8px 8px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>%</th>
-                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>Growth (Rp)</th>
-                                  <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>Growth (%)</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {aktivaSecs.map(s => sectionBlock(s, TA))}
-                                {totalRow('TOTAL AKTIVA', TA, '#0284c7')}
-                                {pasivaSecs.map(s => sectionBlock(s, TP))}
-                                {totalRow('TOTAL PASIVA', TP, '#8b5cf6')}
-                                {otherSec && sectionBlock(otherSec, null)}
-                              </tbody>
-                            </table>
-                          </div>
-                        </>
-                      )
-                    })()}
-                  </SectionCard>
+                          return (
+                            <>
+                              {unbalanced && (
+                                <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
+                                  <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
+                                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                    <span style={{ fontWeight: 700, color: '#b45309' }}>Total Aktiva ≠ Total Pasiva di sebagian periode.</span>{' '}
+                                    Periksa mapping / subKelompok COA — kemungkinan ada akun neraca yang belum terpetakan atau salah klasifikasi.
+                                  </span>
+                                </div>
+                              )}
+                              {otherSec && (
+                                <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
+                                  <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
+                                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                    <span style={{ fontWeight: 700, color: '#b45309' }}>{otherSec.accounts.length} akun tidak terklasifikasi</span>{' '}
+                                    — subKelompok COA-nya tidak dikenali sebagai Aktiva/Hutang/Modal, ditampilkan terpisah &amp; TIDAK ikut total.
+                                  </span>
+                                </div>
+                              )}
+                              <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 240 + nPer * 110 }}>
+                                  <thead>
+                                    <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
+                                      <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 180 }}>Akun</th>
+                                      {periods.map((p, i) => (
+                                        <th key={p.periodStart} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#f3f4f6', borderLeft: '2px solid #efefef' } : {}) }}>{p.label}</th>
+                                      ))}
+                                      <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', textAlign: 'center' }}>Tren</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {aktivaSecs.map(s => sectionBlock(s, TA))}
+                                    {grandRow('Total Aktiva', TA, '#0284c7')}
+                                    {pasivaSecs.map(s => sectionBlock(s, TP))}
+                                    {grandRow('Total Pasiva', TP, '#8b5cf6')}
+                                    {otherSec && sectionBlock(otherSec, null)}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          )
+                        })()}
+                      </SectionCard>
+                    </>
+                  )}
                 </div>
 
               </div>

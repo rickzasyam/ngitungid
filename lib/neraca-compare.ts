@@ -1,10 +1,11 @@
-// Komparasi Neraca 2-checkpoint per akun (fitur "Compare Neraca" di Analytics).
-// Murni tanpa I/O — route yang query, fungsi ini yang menghitung (pola sama
-// dgn financial-agg). Nilai BERTANDA (signed): akun kontra (Akumulasi
-// Penyusutan, Prive, dsb) tersimpan negatif dari ekstraksi → subtotal section
-// = penjumlahan bertanda biasa, dan identitas TOTAL AKTIVA = TOTAL PASIVA
-// (HUTANG + MODAL) harus terpenuhi. Sama seperti aggregateBalanceSheet yang
-// juga signed (sejak fix 2026-07-14 — dulu Math.abs, salah utk akun kontra).
+// Detail Neraca N-checkpoint per akun (fitur "Detail Neraca" di Analytics —
+// tabel gaya P&L, satu kolom per periode). Murni tanpa I/O — route yang query,
+// fungsi ini yang menghitung (pola sama dgn financial-agg). Nilai BERTANDA
+// (signed): akun kontra (Akumulasi Penyusutan, Prive, dsb) tersimpan negatif
+// dari ekstraksi → subtotal section = penjumlahan bertanda biasa, dan identitas
+// TOTAL AKTIVA = TOTAL PASIVA (HUTANG + MODAL) harus terpenuhi. Sama seperti
+// aggregateBalanceSheet yang juga signed (sejak fix 2026-07-14 — dulu Math.abs,
+// salah utk akun kontra).
 
 import { classifyBs } from './financial-agg'
 
@@ -18,21 +19,10 @@ export interface CompareLine {
   status: string
 }
 
-export interface CompareAccount { kode: string; name: string; a: number; b: number }
-export interface CompareSection {
-  key: 'aktivaLancar' | 'aktivaTetap' | 'aktivaLainnya' | 'hutang' | 'modal' | 'other'
-  label: string
-  accounts: CompareAccount[]
-  totalA: number
-  totalB: number
-}
-export interface NeracaCompareResult {
-  sections: CompareSection[]
-  totalAktiva: { a: number; b: number }
-  totalPasiva: { a: number; b: number }
-}
+// Union kategori section neraca — dipakai lintas helper detail di bawah.
+export type BsSectionKey = 'aktivaLancar' | 'aktivaTetap' | 'aktivaLainnya' | 'hutang' | 'modal' | 'other'
 
-const SECTION_DEF: { key: CompareSection['key']; label: string }[] = [
+const SECTION_DEF: { key: BsSectionKey; label: string }[] = [
   { key: 'aktivaLancar', label: 'Aktiva Lancar' },
   { key: 'aktivaTetap', label: 'Aktiva Tetap' },
   { key: 'aktivaLainnya', label: 'Aktiva Lainnya' },
@@ -44,42 +34,52 @@ const SECTION_DEF: { key: CompareSection['key']; label: string }[] = [
   { key: 'other', label: 'Tidak Terklasifikasi' },
 ]
 
-export const AKTIVA_KEYS: CompareSection['key'][] = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
-export const PASIVA_KEYS: CompareSection['key'][] = ['hutang', 'modal']
+export const AKTIVA_KEYS: BsSectionKey[] = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
+export const PASIVA_KEYS: BsSectionKey[] = ['hutang', 'modal']
 
-export function buildNeracaCompare(linesA: CompareLine[], linesB: CompareLine[]): NeracaCompareResult {
-  const acc = new Map<string, { kode: string; name: string; cat: CompareSection['key']; a: number; b: number }>()
+// ── Detail Neraca N-checkpoint (fitur "Detail Neraca" — tabel gaya P&L) ──
+// Tiap akun punya saldo per checkpoint. Neraca point-in-time → nilai = saldo
+// akhir periode (BUKAN akumulasi antar periode; itu keputusan Ricko). Signed
+// sums, sama seperti aggregateBalanceSheet.
+export interface DetailAccount { kode: string; name: string; values: number[] }
+export interface DetailSection {
+  key: BsSectionKey
+  label: string
+  accounts: DetailAccount[]
+  totals: number[] // total section per periode
+}
+export interface NeracaDetailResult {
+  sections: DetailSection[]
+  totalAktiva: number[] // per periode
+  totalPasiva: number[]
+}
 
-  const add = (lines: CompareLine[], side: 'a' | 'b') => {
+export function buildNeracaDetail(periodLines: CompareLine[][]): NeracaDetailResult {
+  const nP = periodLines.length
+  const acc = new Map<string, { kode: string; name: string; cat: BsSectionKey; values: number[] }>()
+  periodLines.forEach((lines, idx) => {
     for (const l of lines) {
       if (l.isSubtotal || (l.status !== 'matched' && l.status !== 'edited')) continue
       if (!l.kelompok.toLowerCase().includes('neraca')) continue
-      const cat = classifyBs(l.subKelompok) as CompareSection['key']
-      const cur = acc.get(l.kode) ?? { kode: l.kode, name: l.nama, cat, a: 0, b: 0 }
-      cur[side] += l.amount
-      acc.set(l.kode, cur)
+      const cat = classifyBs(l.subKelompok) as BsSectionKey
+      let cur = acc.get(l.kode)
+      if (!cur) { cur = { kode: l.kode, name: l.nama, cat, values: new Array(nP).fill(0) }; acc.set(l.kode, cur) }
+      cur.values[idx] += l.amount
     }
-  }
-  add(linesA, 'a')
-  add(linesB, 'b')
+  })
 
   const sections = SECTION_DEF.map(def => {
     const accounts = [...acc.values()]
       .filter(x => x.cat === def.key)
-      .filter(x => x.a !== 0 || x.b !== 0) // nol di KEDUA sisi = tidak informatif
-      .sort((x, y) => x.kode.localeCompare(y.kode)) // urutan kode COA (seperti laporan manual)
-      .map(({ kode, name, a, b }) => ({ kode, name, a, b }))
-    const totalA = accounts.reduce((s, x) => s + x.a, 0)
-    const totalB = accounts.reduce((s, x) => s + x.b, 0)
-    return { key: def.key, label: def.label, accounts, totalA, totalB }
+      .filter(x => x.values.some(v => v !== 0)) // nol di SEMUA periode = tak informatif
+      .sort((x, y) => x.kode.localeCompare(y.kode))
+      .map(({ kode, name, values }) => ({ kode, name, values }))
+    const totals = Array.from({ length: nP }, (_, i) => accounts.reduce((s, a) => s + a.values[i], 0))
+    return { key: def.key, label: def.label, accounts, totals }
   }).filter(s => s.accounts.length > 0)
 
-  const sum = (keys: CompareSection['key'][], side: 'totalA' | 'totalB') =>
-    sections.filter(s => keys.includes(s.key)).reduce((t, s) => t + s[side], 0)
+  const sumKeys = (keys: BsSectionKey[]) =>
+    Array.from({ length: nP }, (_, i) => sections.filter(s => keys.includes(s.key)).reduce((t, s) => t + s.totals[i], 0))
 
-  return {
-    sections,
-    totalAktiva: { a: sum(AKTIVA_KEYS, 'totalA'), b: sum(AKTIVA_KEYS, 'totalB') },
-    totalPasiva: { a: sum(PASIVA_KEYS, 'totalA'), b: sum(PASIVA_KEYS, 'totalB') },
-  }
+  return { sections, totalAktiva: sumKeys(AKTIVA_KEYS), totalPasiva: sumKeys(PASIVA_KEYS) }
 }

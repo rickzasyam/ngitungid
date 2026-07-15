@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
 **Last Updated:** 2026-07-13
-**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` = Compare Neraca ✅ 2026-07-13, compare P&L belum diminta) · Phase 3.1 ✅ — Phase 3.2 & Phase 4 belum dimulai (sengaja, menunggu validasi manual loop inti)
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3.1 ✅ — Phase 3.2 & Phase 4 belum dimulai (sengaja, menunggu validasi manual loop inti)
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -299,7 +299,7 @@
 ## Current Status
 **Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6) · Phase 3.1 ✅**
 
-Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping → Dashboard real → Analytics real.** Compare Neraca (realisasi `/compare`, sisi Neraca) selesai 2026-07-13. Fitur berikutnya (3.2, Phase 4) **sengaja belum dimulai** — fokus dulu validasi manual loop inti dengan data nyata.
+Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping → Dashboard real → Analytics real.** Detail Neraca (realisasi `/compare`, sisi Neraca — tabel per-periode gaya P&L; menggantikan Compare Neraca) selesai 2026-07-14. Fitur berikutnya (3.2, Phase 4) **sengaja belum dimulai** — fokus dulu validasi manual loop inti dengan data nyata.
 
 ### Phase 1 — Frontend ✅
 6 halaman + polish menyeluruh selesai. "Remaining Phase 1 Work" lama (real upload flow, API integration untuk data finansial) sudah **tertutup** oleh Phase 2.4–2.6 (upload/extract/dashboard/analytics lepas dari mock).
@@ -311,7 +311,7 @@ Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → revi
 - ✅ 2.4 Upload & Extraction — via Phase 3.1 (`POST /api/upload`, PDF). CSV/Excel di-skip (laporan klien PDF)
 - ✅ 2.5 COA Matching — engine deterministik (`lib/coa-match.ts`), auto-map/saran, persist mapping (`/api/reports/[id]/mapping`) + review actions (`extraction-review`)
 - ✅ 2.6 Financial Data API — Dashboard + Analytics lepas dari mock. `GET /api/dashboard/[clientId]` + `GET /api/analytics/[clientId]/ratios` (seri bulanan, neraca, rasio, **trendArrays**, **scoring `lib/financial-health.ts`**, **pnlBreakdown**). **Task #23 (analytics off-mock A–E) selesai 2026-07-12.** Semantic-layer yang dulu dianggap blocker ternyata TIDAK diperlukan — klasifikasi berbasis kata kunci `subKelompok`/`classCf` (`lib/financial-agg.ts`) cukup
-- ✅ Compare Neraca (`GET /api/analytics/[clientId]/neraca-compare` + section di /analytics) — realisasi partial item `/compare` (2026-07-13); compare P&L belum diminta
+- ✅ Detail Neraca (`GET /api/analytics/[clientId]/neraca-detail` + section di /analytics) — **menggantikan Compare Neraca 2026-07-14** atas permintaan Ricko: bukan lagi 2-checkpoint (A vs B + growth), tapi tabel gaya P&L N-kolom = saldo akhir per periode (Neraca point-in-time, TIDAK diakumulasi antar periode; Total = periode terakhir). Filter rentang SENDIRI (dipakai bareng Detail Laba Rugi), terpisah dari filter rasio induk. Endpoint `neraca-compare` + `buildNeracaCompare` dihapus (dead code); `buildNeracaDetail` di `lib/neraca-compare.ts`
 
 ### Phase 3 — AI Integration
 - ✅ 3.1 Gemini PDF Extraction — `@google/genai` + `gemini-3.5-flash`, divalidasi vs 3 PDF asli
@@ -324,7 +324,7 @@ Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → revi
 Loop inti (upload → OCR → review → mapping → dashboard → analytics) **sudah lepas dari mock sepenuhnya**. Dua item "Next Sprint" lama (1. persist review actions, 2. Financial Data API) **dua-duanya sudah selesai**. Fokus berikutnya bukan fitur baru, tapi **validasi manual end-to-end dengan data nyata** sebelum lanjut.
 
 **Sengaja ditunda sampai loop inti tervalidasi manual:**
-- Compare P&L (padanan Compare Neraca untuk Laba Rugi) — belum diminta; Compare Neraca sendiri sudah ✅ 2026-07-13
+- Compare P&L (padanan komparasi antar-periode untuk Laba Rugi) — belum diminta. Catatan: Compare Neraca sendiri sudah diganti jadi **Detail Neraca** (tabel per-periode, bukan komparasi) 2026-07-14
 - 3.2 COA Auto-Mapping AI (Gemini fuzzy) — untuk klien yang penamaan akunnya berbeda dari Master COA
 - Phase 4 Operational Module (inventory / stock movement / COGS reconciliation)
 
