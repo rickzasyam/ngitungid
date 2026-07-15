@@ -732,6 +732,10 @@ export default function COAMappingPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Saran AI (Gemini) — aksi eksplisit, bukan auto-run (hemat kuota free-tier).
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiMessage, setAiMessage] = useState<{ tone: 'ok' | 'info' | 'error'; text: string } | null>(null)
+
   // ── Fetch periode tiap kali klien aktif berubah ────────────
   useEffect(() => {
     if (!clientId) return
@@ -746,6 +750,7 @@ export default function COAMappingPage() {
     setReports([])
     setMappings({})
     setOpenDropdownId(null)
+    setAiMessage(null)
 
     fetch(`/api/reports/periods?clientId=${clientId}`)
       .then(res => (res.ok ? res.json() : Promise.reject(new Error('Gagal memuat periode.'))))
@@ -768,6 +773,7 @@ export default function COAMappingPage() {
 
     setLoadingData(true)
     setLoadError(null)
+    setAiMessage(null)
 
     const qs = new URLSearchParams({
       clientId,
@@ -883,6 +889,19 @@ export default function COAMappingPage() {
     return m
   }, [reports])
 
+  // Laporan yang masih punya baris yang bahkan matcher deterministik tak bisa
+  // sarankan (belum ter-map, belum ada saran, bukan subtotal/rejected) — hanya
+  // ini yang perlu dikirim ke Gemini. Kalau kosong, tombol Saran AI disembunyikan.
+  const gapReports = useMemo(
+    () =>
+      reports.filter(r =>
+        r.lineItems.some(
+          l => !l.isSubtotal && l.masterCoaId === null && l.suggestedCoaId === null && l.status !== 'rejected'
+        )
+      ),
+    [reports]
+  )
+
   const mappedCount = Object.keys(mappings).length
   const isAllMapped = unmappedItems.length > 0 && mappedCount === unmappedItems.length
 
@@ -938,6 +957,45 @@ export default function COAMappingPage() {
       setSaving(false)
     }
   }, [mappings, reportIdByLineItem, loadData])
+
+  // Minta saran COA ke Gemini untuk baris yang deterministik tak bisa bantu.
+  // Satu request per laporan bercelah; allSettled supaya satu laporan gagal
+  // (mis. kuota) tidak membatalkan yang lain.
+  const handleAiSuggest = useCallback(async () => {
+    if (gapReports.length === 0 || aiLoading) return
+    setAiLoading(true)
+    setAiMessage(null)
+    try {
+      const settled = await Promise.allSettled(
+        gapReports.map(r =>
+          fetch(`/api/reports/${r.id}/suggest-ai`, { method: 'POST' }).then(async res => {
+            if (!res.ok) {
+              const payload = (await res.json().catch(() => null)) as { error?: string } | null
+              throw new Error(payload?.error ?? 'Gagal meminta saran AI.')
+            }
+            return res.json() as Promise<{ suggested: number }>
+          })
+        )
+      )
+      const total = settled.reduce((s, x) => (x.status === 'fulfilled' ? s + (x.value.suggested ?? 0) : s), 0)
+      const firstErr = settled.find(x => x.status === 'rejected') as PromiseRejectedResult | undefined
+
+      // Muat ulang supaya saran baru (suggestedCoaId) tampil di kartu.
+      await loadData()
+
+      if (total > 0) {
+        setAiMessage({ tone: 'ok', text: `${total} saran AI ditemukan — periksa lalu konfirmasi tiap kartu.` })
+      } else if (firstErr) {
+        setAiMessage({ tone: 'error', text: firstErr.reason?.message ?? 'Gagal meminta saran AI.' })
+      } else {
+        setAiMessage({ tone: 'info', text: 'AI tidak menemukan kecocokan tambahan yang cukup meyakinkan.' })
+      }
+    } catch (err) {
+      setAiMessage({ tone: 'error', text: err instanceof Error ? err.message : 'Gagal meminta saran AI.' })
+    } finally {
+      setAiLoading(false)
+    }
+  }, [gapReports, aiLoading, loadData])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -1022,22 +1080,72 @@ export default function COAMappingPage() {
                     border: '1px solid #f0f0f0',
                   }}
                 >
-                  <div className="flex items-center gap-3 mb-5">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
-                    >
-                      <ArrowRightLeft className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+                  <div className="flex items-start justify-between gap-3 mb-5 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #daf163 0%, #c8e000 100%)' }}
+                      >
+                        <ArrowRightLeft className="w-4 h-4" style={{ color: '#1a1a1a' }} />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
+                          Akun Belum Dipetakan
+                        </h2>
+                        <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+                          Petakan setiap akun ke Master COA {activeClient.name}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
-                        Akun Belum Dipetakan
-                      </h2>
-                      <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
-                        Petakan setiap akun ke Master COA {activeClient.name}
-                      </p>
-                    </div>
+
+                    {/* Saran AI (Gemini) — hanya muncul kalau ada baris yang bahkan
+                        matcher deterministik tidak bisa sarankan. */}
+                    {gapReports.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAiSuggest}
+                        disabled={aiLoading}
+                        aria-label="Minta saran COA dari AI Gemini untuk akun yang belum tercocokkan"
+                        className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all enabled:hover:shadow-[0_4px_16px_rgba(187,179,243,0.45)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-secondary) focus-visible:ring-offset-2"
+                        style={{ background: 'var(--color-accent-secondary)', color: '#1a1a1a' }}
+                      >
+                        {aiLoading ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Meminta saran AI…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Saran AI (Gemini)
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
+
+                  {aiMessage && (
+                    <div
+                      role="status"
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl mb-4 text-xs font-medium"
+                      style={{
+                        background:
+                          aiMessage.tone === 'ok' ? '#f0fdf4' : aiMessage.tone === 'error' ? '#fef2f2' : '#faf9ff',
+                        color:
+                          aiMessage.tone === 'ok' ? '#15803d' : aiMessage.tone === 'error' ? '#dc2626' : '#6d5fd0',
+                        border:
+                          '1px solid ' +
+                          (aiMessage.tone === 'ok' ? '#bbf7d0' : aiMessage.tone === 'error' ? '#fecaca' : 'rgba(187,179,243,0.4)'),
+                      }}
+                    >
+                      {aiMessage.tone === 'error' ? (
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
+                      )}
+                      {aiMessage.text}
+                    </div>
+                  )}
 
                   {unmappedItems.length === 0 ? (
                     <div className="py-6 text-center">

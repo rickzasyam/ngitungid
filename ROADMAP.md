@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-07-13
-**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3.1 ✅ — Phase 3.2 & Phase 4 belum dimulai (sengaja, menunggu validasi manual loop inti)
+**Last Updated:** 2026-07-15
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja)
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -200,9 +200,12 @@
 - ✅ `financial_reports.sourcePdf` bytea (migration `0002`) — round-trip Buffer terverifikasi via neon-http
 - ⏳ Persist review actions (edit/reject/confirm) + "Lanjut ke COA Mapping" → digabung ke Phase 2.5
 
-### 3.2 COA Auto-Mapping AI
-- ⏳ Gemini-assisted fuzzy matching
-- ⏳ Learning loop — improve suggestions from confirmed mappings
+### 3.2 COA Auto-Mapping AI — **COMPLETED 2026-07-15**
+- ✅ Gemini-assisted semantic matching — `lib/gemini/suggest-coa.ts` (`suggestCoaWithGemini`): satu panggilan per laporan, batch semua nama mentah → kode Master COA berdasarkan MAKNA akuntansi (bukan kemiripan huruf). Structured output (`responseSchema`, array `{ref, kode, confidence, reason}`), `temperature: 0`, retry transient via helper baru `generateContentWithRetry` di `lib/gemini/client.ts` (extract.ts tak disentuh). Kode COA (bukan UUID) yang dikembalikan Gemini → route yang map ke id
+- ✅ `POST /api/reports/[id]/suggest-ai` (admin) — aksi EKSPLISIT (bukan auto-run seperti /suggest) supaya kuota Gemini free-tier tak terbakar diam-diam. Hanya menyasar baris yang deterministik tak bisa bantu (belum ter-map, belum ada saran fuzzy, non-subtotal/rejected). Ambang terima `AI_MIN_CONFIDENCE=60`; kode di luar daftar / '' diabaikan. SELALU saran saja (`suggested_coa_id`, status tetap unmatched) — tebakan semantik AI menunggu konfirmasi admin. Error di-map ramah: no-key → 400, kuota → 429, transient → 502
+- ✅ Learning loop — tanpa infra baru: begitu admin konfirmasi saran AI lewat `/mapping`, ia ter-upsert ke `coa_mapping_history` → matcher deterministik (history) menangkapnya instan berikutnya, tanpa panggil Gemini lagi
+- ✅ UI `/coa-mapping` — tombol "Saran AI (Gemini)" (lilac, Sparkles) muncul HANYA saat ada baris yang bahkan matcher deterministik tak bisa sarankan; `Promise.allSettled` per laporan bercelah (satu gagal ≠ batal semua), pesan hasil (ok/info/error) + reload. Saran hasil AI tampil sebagai hint lilac "Saran AI" yang sudah ada (tanpa state kartu baru / migrasi)
+- ✅ Diverifikasi LIVE vs Gemini (1 request, tanpa DB): "Gaji Pegawai"→Biaya Gaji Karyawan (98), "Ongkir Shopee"→Beban Pengiriman (95), "Sewa Ruko Bulanan"→Biaya Sewa Gedung (90), "Pembelian Mesin CNC"→**tidak ada** (menolak, alasannya: aset tetap tak ada di COA — menghormati klasifikasi L/R vs Neraca, tidak memaksakan)
 
 ---
 
@@ -293,13 +296,16 @@
 | 2026-07-14 | **Fix `aggregateBalanceSheet`: penjumlahan BERTANDA, bukan `Math.abs` per baris** (`lib/financial-agg.ts`) | Akun kontra disimpan negatif dari ekstraksi (Akumulasi Penyusutan, Prive, Cadangan/provisi, kas overdraft). Math.abs membalik tandanya → tiap kategori ber-kontra menggelembung 2×\|nilai\| dan identitas TOTAL AKTIVA=PASIVA pecah. Kasus nyata Rasyuka Feb: Aktiva Lancar 1.603.181.915 (salah) vs 1.568.809.973 (PDF), over 34.371.942 = 2×(Kas Tiktok 177 + Cadangan Promosi 17.185.794). Fix signed → cocok PDF 100% di semua kategori, identitas terjaga. Memengaruhi card Kesehatan Neraca (dashboard) DAN semua rasio Analytics (CR/QR/DER/WC/DSO/DIO/DPO/turnover/ROE/ROA pakai bs ini). Laba Rugi (abs per-kategori, revenue net) & Arus Kas (signed) TIDAK terpengaruh. Compare Neraca sudah signed sejak awal |
 | 2026-07-13 | Kelola laporan ditempatkan di **panel "Riwayat Upload" halaman /upload** (bukan Settings / tab baru): panel-nya sudah ada sejak Phase 1 (mock) di lokasi yang tepat secara mental-model ("kelola file yang di-upload" = tempat upload), Settings = konfigurasi bukan data. "Ubah" = pindah periode LEVEL SESI (atomik, bukan per laporan — pindah parsial memecah sesi); "Ganti" = reuse POST /api/upload (sudah delete-first); konfirmasi hapus 2-langkah inline (tanpa infra modal baru) | Menutup mock Phase 1 sekaligus; endpoint per-kebutuhan kecil (list/delete/period) lebih aman daripada mengubah kontrak GET /api/reports yang dipakai extraction-review & coa-mapping |
 | 2026-07-13 | Compare Neraca = **endpoint terpisah** `GET /api/analytics/[clientId]/neraca-compare?a=&b=` + lib murni `lib/neraca-compare.ts`, BUKAN extend /ratios; checkpoint pilihan user **independen dari filter rentang halaman**; agregasi **BERTANDA** (bukan abs ala aggregateBalanceSheet) supaya kontra akun (Akumulasi Penyusutan, Prive) mengurangi & identitas AKTIVA=PASIVA terjaga; Growth% = (B−A)/A tanda-asli (konvensi laporan manual klien); % akun = porsi subtotal section (template lama punya denominator rusak — sengaja diperbaiki); angka tampil PENUH (bukan singkatan jt/M); toleransi banner tidak-seimbang Rp 100 (artefak pembulatan cetak PDF ±beberapa rupiah, salah mapping riil ≥ ribuan) | Komparasi = operasi 2 titik pilihan user: extend /ratios memaksa re-agregasi payload penuh tiap ganti pasangan & mengikat pasangan ke rentang halaman (berubah diam-diam saat ganti preset). Lib murni = testable: 19/19 assert vs angka asli PDF Compare Neraca Feb–Mar 2026 Rasyuka |
+| 2026-07-15 | **3.2 COA AI = fallback semantik, endpoint EKSPLISIT terpisah** (`/suggest-ai`), bukan menggantikan `/suggest` (deterministik, murah, auto-run) | Gemini free-tier 5 req/menit + 503 high-demand: auto-run tiap load halaman akan membakar kuota. AI hanya bernilai untuk baris yang deterministik (history/exact/fuzzy) gagal — jadi hanya baris bercelah yang dikirim, dipicu tombol admil. Deterministik tetap jalur utama (gratis, instan) |
+| 2026-07-15 | **Saran AI SELALU saran-saja (`suggested_coa_id`), tidak pernah auto-map**, walau confidence tinggi | Tebakan semantik ≠ kebenaran manusia. history/exact yang auto-map itu deterministik & bisa dipertanggungjawabkan; AI perlu satu klik konfirmasi admin. Konfirmasi itu upsert ke `coa_mapping_history` → jadi deterministik (history) berikutnya = learning loop tanpa infra baru & tanpa panggil Gemini lagi |
+| 2026-07-15 | Gemini mengembalikan **kode COA**, bukan UUID; ambang terima `confidence ≥ 60`; batch semua baris dalam 1 request/laporan | Model tak perlu (dan tak andal) menangani UUID DB — route yang map kode→id, kode di luar daftar diabaikan. Ambang 60 = filosofi sama dgn fuzzy 0.55: saran salah lebih mahal daripada tak ada. 1 request/laporan (bukan per-baris) hemat kuota. Retry transient dipindah ke helper bersama `generateContentWithRetry` (client.ts); `extract.ts` tak disentuh |
 
 ---
 
 ## Current Status
 **Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6) · Phase 3.1 ✅**
 
-Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping → Dashboard real → Analytics real.** Detail Neraca (realisasi `/compare`, sisi Neraca — tabel per-periode gaya P&L; menggantikan Compare Neraca) selesai 2026-07-14. Fitur berikutnya (3.2, Phase 4) **sengaja belum dimulai** — fokus dulu validasi manual loop inti dengan data nyata.
+Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → review (persist) → COA mapping (deterministik + AI) → Dashboard real → Analytics real.** Detail Neraca (menggantikan Compare Neraca) selesai 2026-07-14. **Loop inti divalidasi manual oleh Ricko 2026-07-15** (upload PDF, nominal terbaca benar di Dashboard & Analytics). **Phase 3.2 COA Auto-Mapping AI selesai 2026-07-15.** Berikutnya (Phase 4 Operational) **belum dimulai** — kandidat sprint depan.
 
 ### Phase 1 — Frontend ✅
 6 halaman + polish menyeluruh selesai. "Remaining Phase 1 Work" lama (real upload flow, API integration untuk data finansial) sudah **tertutup** oleh Phase 2.4–2.6 (upload/extract/dashboard/analytics lepas dari mock).
@@ -313,9 +319,9 @@ Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → revi
 - ✅ 2.6 Financial Data API — Dashboard + Analytics lepas dari mock. `GET /api/dashboard/[clientId]` + `GET /api/analytics/[clientId]/ratios` (seri bulanan, neraca, rasio, **trendArrays**, **scoring `lib/financial-health.ts`**, **pnlBreakdown**). **Task #23 (analytics off-mock A–E) selesai 2026-07-12.** Semantic-layer yang dulu dianggap blocker ternyata TIDAK diperlukan — klasifikasi berbasis kata kunci `subKelompok`/`classCf` (`lib/financial-agg.ts`) cukup
 - ✅ Detail Neraca (`GET /api/analytics/[clientId]/neraca-detail` + section di /analytics) — **menggantikan Compare Neraca 2026-07-14** atas permintaan Ricko: bukan lagi 2-checkpoint (A vs B + growth), tapi tabel gaya P&L N-kolom = saldo akhir per periode (Neraca point-in-time, TIDAK diakumulasi antar periode; Total = periode terakhir). Filter rentang SENDIRI (dipakai bareng Detail Laba Rugi), terpisah dari filter rasio induk. Endpoint `neraca-compare` + `buildNeracaCompare` dihapus (dead code); `buildNeracaDetail` di `lib/neraca-compare.ts`
 
-### Phase 3 — AI Integration
+### Phase 3 — AI Integration ✅
 - ✅ 3.1 Gemini PDF Extraction — `@google/genai` + `gemini-3.5-flash`, divalidasi vs 3 PDF asli
-- ⏳ 3.2 COA Auto-Mapping AI (Gemini fuzzy) — belum dimulai (sengaja; matching deterministik sudah cukup utk klien penamaan-identik)
+- ✅ 3.2 COA Auto-Mapping AI (Gemini semantic) — **selesai 2026-07-15**. Fallback semantik untuk baris yang matcher deterministik tak bisa sarankan (nama beda makna); saran-saja + konfirmasi admin feed history (learning loop). Endpoint eksplisit `POST /api/reports/[id]/suggest-ai` + tombol di /coa-mapping. Diverifikasi live vs Gemini
 
 ### Phase 4 — Operational Module
 - ⏳ Belum dimulai (sengaja) — menunggu loop inti tervalidasi manual dengan data nyata
@@ -323,10 +329,12 @@ Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → revi
 ### Next Sprint
 Loop inti (upload → OCR → review → mapping → dashboard → analytics) **sudah lepas dari mock sepenuhnya**. Dua item "Next Sprint" lama (1. persist review actions, 2. Financial Data API) **dua-duanya sudah selesai**. Fokus berikutnya bukan fitur baru, tapi **validasi manual end-to-end dengan data nyata** sebelum lanjut.
 
-**Sengaja ditunda sampai loop inti tervalidasi manual:**
-- Compare P&L (padanan komparasi antar-periode untuk Laba Rugi) — belum diminta. Catatan: Compare Neraca sendiri sudah diganti jadi **Detail Neraca** (tabel per-periode, bukan komparasi) 2026-07-14
-- 3.2 COA Auto-Mapping AI (Gemini fuzzy) — untuk klien yang penamaan akunnya berbeda dari Master COA
-- Phase 4 Operational Module (inventory / stock movement / COGS reconciliation)
+**Loop inti tervalidasi manual oleh Ricko 2026-07-15** (upload PDF → nominal terbaca benar di Dashboard & Analytics — "cukup puas"). Gate "tunggu validasi manual" resmi terbuka; item yang tadinya ditunda kini boleh dikerjakan.
+
+**Status item yang tadinya ditunda:**
+- ✅ **3.2 COA Auto-Mapping AI** — dikerjakan 2026-07-15 (lihat Phase 3.2 di atas)
+- ⏳ Phase 4 Operational Module (inventory / stock movement / COGS reconciliation) — kandidat sprint berikutnya (kapabilitas produk baru, effort besar)
+- ⏳ Compare P&L (komparasi antar-periode Laba Rugi) — belum diminta & kemungkinan redundan (Detail Laba Rugi per-periode sudah ada). Skip kecuali diminta bentuk komparasi A-vs-B spesifik
 
 **Catatan validasi (kondisi DB saat ini).** Ketiga klien baru punya laporan **Laba Rugi** — belum ada Neraca/Arus Kas ter-mapping. Konsekuensinya:
 - Dashboard: KPI/revenue/P&L/expense breakdown tampil; Balance-Sheet-Health butuh Neraca, Cashflow-Waterfall butuh Arus Kas.
