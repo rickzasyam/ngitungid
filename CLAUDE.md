@@ -69,11 +69,32 @@ current phase before assuming scope.
 
 ## Tech Stack
 
-Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui, Recharts, PostgreSQL (Phase 2,
-not yet set up).
+Next.js App Router, TypeScript, Tailwind CSS v4, shadcn/ui, Recharts, PostgreSQL via Neon
++ Drizzle ORM, NextAuth v5, Gemini API. (See `ROADMAP.md` for what's built — much of the
+backend described as "not yet started" below is now done.)
 
 Tailwind v4 specifics: configuration lives in `globals.css` via `@theme inline {}`. There is
 no `tailwind.config.ts` — do not create one.
+
+## Database Environments (dev vs production)
+
+Data lives in Neon with two branches: **`main`** (production — real client data) and
+**`dev`** (daily work, testing, seed, throwaway). `DATABASE_URL` in `.env.local` is the
+SINGLE switch every command reads — the app runtime (`lib/db/index.ts`), all `db:*`
+drizzle-kit commands (via `drizzle.config.ts`), `db:seed`/`db:seed:dev`, and any
+`tsx --env-file=.env.local` throwaway script. There is no per-command safety; the only
+thing protecting production is which branch `DATABASE_URL` points at.
+
+**Rules for any session that runs DB commands or throwaway scripts:**
+- Development work assumes `.env.local` points at the **dev** branch. Never rely on that
+  blindly for a destructive action — if unsure, confirm with Ricko before running.
+- NEVER run against production (`main`): `db:seed:dev` (destructive — wipes seed clients'
+  reports/COA), `db:seed`, `db:push`, or any throwaway/one-off script.
+- Throwaway verification scripts target dev and always clean up after themselves.
+- Production schema changes go through `db:generate` + `db:migrate` (reviewed SQL),
+  deliberately pointed at `main` — not `db:push`.
+
+Full workflow: see `README.md` § "Database environments".
 
 ## Design System (locked — do not deviate)
 
