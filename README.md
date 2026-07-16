@@ -72,6 +72,66 @@ lewat jalur yang di-review:
 3. `pnpm db:migrate` → terapkan migrasi yang sudah di-review
 4. Kembalikan `.env.local` ke `dev`
 
+## Backup & restore (branch `main`)
+
+Neon free tier cuma punya window restore **6 jam**. Karena itu ada backup
+independen di luar Neon: workflow [`backup.yml`](.github/workflows/backup.yml)
+jalan **tiap hari 01:00 WIB**, dan bisa dijalankan kapan saja lewat tombol
+**Run workflow** di tab Actions.
+
+Tiap run: `pg_dump` branch `main` → **restore ke Postgres throwaway** →
+bandingkan row count sumber vs hasil restore → baru dump-nya diunggah sebagai
+artifact. Artinya tiap backup sudah **terbukti** bisa di-restore, bukan cuma
+diasumsikan valid. Kalau row count tidak cocok, workflow-nya merah.
+
+- **Yang di-backup:** schema `public` + `drizzle` (data aplikasi + state migrasi).
+  Schema `neon_auth` sengaja dikecualikan — itu dikelola Neon, bukan data
+  aplikasi (auth kita ada di `public.users`), dan mengikutkannya bikin dump tidak
+  portabel ke Postgres biasa.
+- **Secret:** `DATABASE_URL_MAIN` — connection string **direct/unpooled** branch
+  `main`. `pg_dump` tidak bisa lewat endpoint `-pooler` (PgBouncer), jadi
+  workflow-nya sengaja gagal cepat kalau secret-nya masih pooled.
+- **Retensi:** artifact disimpan **30 hari** lalu hangus otomatis. DB sekarang
+  ~10 MB → dump terkompresi cuma beberapa MB, jauh di bawah kuota artifact
+  GitHub Free (500 MB). Kalau data membesar (terutama PDF di
+  `financial_reports.source_pdf`), pantau Settings → Billing dan turunkan
+  `retention-days` bila perlu.
+
+> GitHub menonaktifkan workflow terjadwal kalau repo tidak ada aktivitas 60 hari.
+> Kalau repo sempat lama diam, cek tab Actions dan aktifkan lagi.
+
+### Cara restore (langkah manual)
+
+1. **Ambil dump-nya.** GitHub → tab **Actions** → workflow **Backup DB (branch
+   main)** → pilih run tanggal yang diinginkan → panel **Artifacts** → download
+   `db-backup-main-<stamp>` (berupa `.zip`).
+2. **Unzip** → dapat `ngitungid-main-<stamp>.dump` (format custom `pg_dump`).
+3. **Siapkan target.** Bikin **branch/project Neon baru** dulu — JANGAN langsung
+   menimpa `main` sebelum hasil restore-nya diperiksa. Salin connection string
+   **direct/unpooled** milik target itu.
+4. **Pasang PostgreSQL client 18** (Neon jalan di PG18; `pg_restore` harus ≥
+   versi server). macOS: `brew install postgresql@18`. Windows: installer EDB.
+   Linux: paket `postgresql-client-18` dari repo PGDG.
+5. **Restore:**
+   ```bash
+   pg_restore --dbname="<CONNECTION_STRING_TARGET>" \
+     --no-owner --no-privileges --exit-on-error \
+     ngitungid-main-<stamp>.dump
+   ```
+6. **Verifikasi row count-nya:**
+   ```bash
+   psql "<CONNECTION_STRING_TARGET>" -At -F'|' -f .github/scripts/row-counts.sql
+   ```
+   Bandingkan dengan output step **"Bandingkan sumber vs hasil restore"** di run
+   backup yang dump-nya kamu pakai (angkanya tercetak di log run tersebut).
+7. **Arahkan app ke target baru** kalau ini memang recovery sungguhan: update
+   `DATABASE_URL` di dashboard Vercel (produksi) dan/atau `.env.local` (lokal).
+   Baru setelah yakin, `main` lama boleh diganti/dibuang.
+
+> Format dump-nya **custom** (`-Fc`), jadi bisa restore selektif juga — mis. satu
+> tabel saja:
+> `pg_restore --dbname="<TARGET>" --table=financial_reports ngitungid-main-<stamp>.dump`
+
 ## Scripts
 
 | Perintah | Fungsi |

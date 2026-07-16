@@ -1,0 +1,151 @@
+name: Backup DB (branch main)
+
+# Backup harian INDEPENDEN di luar Neon untuk data produksi (branch `main`).
+# Neon free tier cuma punya window restore 6 jam — ini memperpanjangnya jadi
+# 30 hari lewat artifact GitHub (tanpa perlu akun layanan lain).
+#
+# Tiap run: dump `main` → RESTORE ke Postgres throwaway → bandingkan row count
+# sumber vs hasil restore → baru artifact-nya diunggah. Jadi tiap backup TERBUKTI
+# bisa di-restore, bukan diasumsikan valid. Row count tidak cocok = job merah.
+#
+# Restore manual: lihat README.md § "Backup & restore".
+
+on:
+  schedule:
+    # 18:00 UTC = 01:00 WIB, tiap hari.
+    - cron: '0 18 * * *'
+  workflow_dispatch: # tombol "Run workflow" di tab Actions
+
+# Jangan pernah jalankan dua backup barengan; jangan batalkan yang sedang jalan.
+concurrency:
+  group: backup-main
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump main + uji restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Target restore throwaway — hidup hanya selama job, dibuang otomatis.
+    # Postgres biasa (bukan Neon): sekalian membuktikan dump-nya PORTABEL, bisa
+    # di-restore ke Postgres mana pun, bukan cuma balik ke Neon.
+    services:
+      verify:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: verify
+          POSTGRES_DB: verifydb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # Kredensial container lokal throwaway — BUKAN rahasia, aman di-commit.
+      VERIFY_URL: postgresql://postgres:verify@localhost:5432/verifydb
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cek secret & pastikan koneksinya unpooled
+        env:
+          MAIN_URL: ${{ secrets.DATABASE_URL_MAIN }}
+        run: |
+          if [ -z "$MAIN_URL" ]; then
+            echo "::error::Secret DATABASE_URL_MAIN belum di-set. Buat di Settings → Secrets and variables → Actions → New repository secret, isi dengan connection string DIRECT (unpooled) branch main dari Neon Console."
+            exit 1
+          fi
+          # Neon: pg_dump WAJIB lewat koneksi direct. Endpoint pooler (PgBouncer)
+          # tidak mendukung semua operasi pg_dump → backup bisa gagal/tidak utuh.
+          case "$MAIN_URL" in
+            *-pooler.*)
+              echo "::error::DATABASE_URL_MAIN memakai endpoint '-pooler'. pg_dump butuh koneksi DIRECT/unpooled. Di Neon Console matikan toggle 'Connection pooling' saat menyalin connection string, lalu update secret-nya."
+              exit 1
+              ;;
+          esac
+          echo "Secret terisi & unpooled ✓"
+
+      # Neon jalan di PostgreSQL 18; ubuntu-latest cuma bawa client 16, dan
+      # pg_dump MENOLAK men-dump dari server yang lebih baru → pasang client 18.
+      - name: Pasang postgresql-client-18
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          pg_dump --version
+          pg_restore --version
+
+      - name: Dump branch main
+        env:
+          MAIN_URL: ${{ secrets.DATABASE_URL_MAIN }}
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y%m%d-%H%M%SZ)"
+          FILE="ngitungid-main-$STAMP.dump"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          # Hanya schema milik aplikasi. `neon_auth` dikecualikan: dikelola Neon,
+          # bukan data aplikasi, dan bikin dump tak portabel ke Postgres biasa.
+          # --no-owner/--no-privileges supaya bisa di-restore sebagai role apa pun.
+          pg_dump "$MAIN_URL" \
+            --format=custom --compress=9 \
+            --no-owner --no-privileges \
+            --schema=public --schema=drizzle \
+            --file="$FILE"
+          ls -lh "$FILE"
+
+      - name: Row count di SUMBER (main)
+        env:
+          MAIN_URL: ${{ secrets.DATABASE_URL_MAIN }}
+        run: |
+          set -euo pipefail
+          psql "$MAIN_URL" -At -F'|' -v ON_ERROR_STOP=1 \
+            -f .github/scripts/row-counts.sql > counts-main.txt
+
+      - name: Restore ke Postgres throwaway
+        run: |
+          set -euo pipefail
+          pg_restore --dbname="$VERIFY_URL" \
+            --no-owner --no-privileges --exit-on-error \
+            "$FILE"
+
+      - name: Row count di HASIL RESTORE
+        run: |
+          set -euo pipefail
+          psql "$VERIFY_URL" -At -F'|' -v ON_ERROR_STOP=1 \
+            -f .github/scripts/row-counts.sql > counts-restored.txt
+
+      - name: Bandingkan sumber vs hasil restore
+        run: |
+          set -euo pipefail
+          echo "── main (sumber) ──"
+          cat counts-main.txt
+          echo "── hasil restore ──"
+          cat counts-restored.txt
+          if diff -u counts-main.txt counts-restored.txt; then
+            echo "✅ Row count cocok — dump ini TERBUKTI bisa di-restore."
+          else
+            echo "::error::Row count sumber ≠ hasil restore — backup ini TIDAK bisa diandalkan. Jangan anggap backup hari ini valid."
+            exit 1
+          fi
+
+      # if: always() → dump tetap disimpan walau verifikasi gagal (buat diagnosa).
+      # Dilewati kalau step dump sendiri tidak sempat menghasilkan file.
+      - name: Upload artifact
+        if: always() && env.FILE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-main-${{ env.STAMP }}
+          path: ${{ env.FILE }}
+          retention-days: 30
+          if-no-files-found: error
