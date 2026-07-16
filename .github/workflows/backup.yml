@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cek secret & pastikan koneksinya unpooled
         env:
@@ -159,7 +159,7 @@ jobs:
       # Dilewati kalau step dump sendiri tidak sempat menghasilkan file.
       - name: Upload artifact
         if: always() && env.FILE != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: db-backup-main-${{ env.STAMP }}
           path: ${{ env.FILE }}

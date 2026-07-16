@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # pnpm dipasang SEBELUM setup-node supaya cache pnpm store bisa dipakai.
       # Versi dipin sama dengan lokal (lihat pnpm-workspace.yaml `allowBuilds`,
