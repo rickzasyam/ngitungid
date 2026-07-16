@@ -416,6 +416,31 @@ html {
   box-shadow: inset 0 0 0 2px var(--color-accent-primary);
 }
 
+/* Sidebar: tombol logout. Hover/focus memerah (critical) karena keluar akun
+   itu aksi yang memutus sesi — bukan navigasi biasa. Class-based (bukan
+   onMouseEnter inline) supaya pengguna keyboard dapat perlakuan sama. */
+.ng-logout-btn {
+  color: rgba(255, 255, 255, 0.45);
+  background: transparent;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.ng-logout-btn:hover,
+.ng-logout-btn:focus-visible {
+  color: var(--color-accent-critical);
+  background: rgba(244, 114, 182, 0.12);
+}
+
+.ng-logout-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent-critical);
+}
+
+.ng-logout-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Sidebar: tombol collapse di tepi kanan. Hit area 32px transparan, lingkaran
    visual 22px ada di <span> anaknya — hover/focus mewarnai lingkarannya. */
 .ng-edge-toggle-dot {

@@ -17,9 +17,12 @@ import {
   Check,
   Menu,
   X,
+  LogOut,
+  Loader2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useSession, signOut } from 'next-auth/react'
 import { useClient, ClientInfo } from '@/lib/client-context'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
@@ -36,6 +39,11 @@ export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
   const { activeClient, setActiveClient, role, storageMap, clients } = useClient()
+  // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
+  // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
+  // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
+  const { data: session } = useSession()
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
@@ -146,6 +154,23 @@ export function Sidebar() {
     setActiveClient(client)
     setIsWorkspaceDropdownOpen(false)
   }
+
+  // signOut() next-auth memanggil endpoint signout → cookie sesi DIHAPUS di
+  // server, bukan sekadar pindah halaman. redirect:true supaya user mendarat di
+  // /login; kalau ia mencoba balik ke rute terproteksi, proxy.ts memantulkannya
+  // lagi karena cookie-nya memang sudah tidak ada.
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    try {
+      await signOut({ callbackUrl: '/login' })
+    } catch {
+      setIsSigningOut(false) // gagal → biarkan admin coba lagi
+    }
+  }
+
+  const userName = session?.user?.name ?? session?.user?.email ?? ''
+  const userInitial = userName.charAt(0).toUpperCase() || '?'
 
   return (
     <>
@@ -500,6 +525,87 @@ export function Sidebar() {
             )}
           </div>
         </div>
+
+        {/* Akun yang sedang login + keluar. Sengaja DI BAWAH kartu workspace dan
+            dipisah garis: kartu di atas = klien yang dikelola, blok ini = akun
+            yang dipakai. Avatar-nya lilac (bukan lime) supaya dua konsep itu
+            tidak tertukar secara visual. Relevan sejak tiap akunting punya akun
+            sendiri & bisa berbagi device. */}
+        {session?.user && (
+          <div
+            className="px-4 pb-5 pt-4"
+            style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            {isCollapsed ? (
+              <div className="flex flex-col items-center gap-2">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{ background: 'var(--color-accent-secondary)', color: '#1a1a1a' }}
+                  title={userName}
+                >
+                  {userInitial}
+                </div>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={isSigningOut}
+                    aria-label={`Keluar dari akun ${userName}`}
+                    onMouseEnter={() => setHoveredItem('__logout')}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    onFocus={() => setHoveredItem('__logout')}
+                    onBlur={() => setHoveredItem(null)}
+                    className="ng-logout-btn flex items-center justify-center rounded-xl"
+                    style={{ width: 32, height: 32 }}
+                  >
+                    {isSigningOut
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <LogOut className="w-4 h-4" />}
+                  </button>
+                  {hoveredItem === '__logout' && (
+                    <div
+                      className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg whitespace-nowrap z-50 pointer-events-none"
+                      style={{ background: 'var(--color-bg-sidebar)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}
+                    >
+                      <span className="text-xs font-medium" style={{ color: 'white' }}>Keluar</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{ background: 'var(--color-accent-secondary)', color: '#1a1a1a' }}
+                >
+                  {userInitial}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: 'white' }}>
+                    {session.user.name || session.user.email}
+                  </p>
+                  <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {session.user.role === 'admin' ? 'Admin' : 'Klien'}
+                    {session.user.name && session.user.email ? ` · ${session.user.email}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  aria-label={`Keluar dari akun ${userName}`}
+                  title="Keluar"
+                  className="ng-logout-btn flex items-center justify-center rounded-xl flex-shrink-0"
+                  style={{ width: 32, height: 32 }}
+                >
+                  {isSigningOut
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <LogOut className="w-4 h-4" />}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
       </aside>
     </>
