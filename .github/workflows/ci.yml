@@ -1,0 +1,68 @@
+name: CI
+
+# Type-check + build pada tiap push ke `main` dan tiap pull request.
+# CI hanya meng-COMPILE — tidak menyentuh DB/auth sungguhan (lihat env
+# placeholder di bawah). Belum ada step test; tempatnya sudah disiapkan
+# untuk vitest (sesi berikutnya).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Batalkan run yang masih berjalan untuk ref yang sama saat ada push baru.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+
+    env:
+      # ── Placeholder BUILD-TIME saja — BUKAN credential asli, aman di-commit ──
+      # CI cuma meng-compile; tak ada koneksi DB/auth yang dijalankan. neon()
+      # baru konek saat query dieksekusi (tidak ada saat `next build`), dan
+      # lib/db/index.ts hanya butuh DATABASE_URL non-kosong agar tak throw saat
+      # modul di-load. AUTH_SECRET diisi nilai palsu supaya inisialisasi
+      # NextAuth tidak rewel di lingkungan produksi build.
+      #
+      # Kalau nanti CI perlu KONEK/SEED DB sungguhan (mis. test integrasi):
+      # pindahkan ke GitHub Secrets (Settings → Secrets and variables → Actions)
+      # dan referensikan lewat ${{ secrets.NAMA }} — JANGAN taruh nilai asli di
+      # file ini (repo bisa dibaca siapa pun yang punya akses repo).
+      DATABASE_URL: postgresql://ci:ci@ep-ci-placeholder.us-east-1.aws.neon.tech/ci?sslmode=require
+      AUTH_SECRET: ci-build-placeholder-not-a-real-secret
+      AUTH_TRUST_HOST: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm dipasang SEBELUM setup-node supaya cache pnpm store bisa dipakai.
+      # Versi dipin sama dengan lokal (lihat pnpm-workspace.yaml `allowBuilds`,
+      # fitur pnpm 10/11).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build
+        run: pnpm build
+
+      # TODO(sesi berikutnya): tambah step test setelah vitest disiapkan, mis.:
+      # - name: Test
+      #   run: pnpm test
