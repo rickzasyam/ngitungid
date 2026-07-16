@@ -117,6 +117,17 @@ jobs:
           psql "$MAIN_URL" -At -F'|' -v ON_ERROR_STOP=1 \
             -f .github/scripts/row-counts.sql > counts-main.txt
 
+      # pg_dump dengan --schema=public IKUT menuliskan `CREATE SCHEMA public;`,
+      # sementara database Postgres baru SUDAH punya schema public bawaan →
+      # pg_restore --exit-on-error gagal "schema public already exists".
+      # Kosongkan target dulu supaya isi dump yang menentukan strukturnya, dan
+      # --exit-on-error tetap bisa dipertahankan (justru ketegasan itu yang bikin
+      # verifikasi ini bernilai).
+      - name: Kosongkan target restore
+        run: |
+          set -euo pipefail
+          psql "$VERIFY_URL" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA IF EXISTS public CASCADE;'
+
       - name: Restore ke Postgres throwaway
         run: |
           set -euo pipefail
