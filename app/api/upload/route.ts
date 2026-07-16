@@ -4,7 +4,8 @@ import { db } from '@/lib/db'
 import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireAdmin } from '@/lib/api/guards'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
-import { isAutoMappable, normalizeName, suggestCoa } from '@/lib/coa-match'
+import { normalizeName } from '@/lib/coa-match'
+import { buildLineItemValues } from '@/lib/reports/line-items'
 
 // Gemini + neon-http + Buffer butuh Node runtime. maxDuration dinaikkan karena
 // ekstraksi PDF (paralel) bisa ~25s — default Vercel Hobby 10s terlalu pendek.
@@ -106,27 +107,15 @@ export async function POST(req: Request) {
 
       try {
         const lines = await extractReport(bytes, type)
-        let autoMapped = 0
-        let suggested = 0
-        if (lines.length > 0) {
-          const values = lines.map((l, i) => {
-            // Baris subtotal tidak pernah dipetakan ke COA.
-            const s = l.isSubtotal ? null : suggestCoa(l.rawName, accounts, historyByRawName)
-            const auto = s !== null && isAutoMappable(s)
-            if (auto) autoMapped++
-            else if (s) suggested++
-            return {
-              reportId: report.id,
-              rawName: l.rawName,
-              amount: String(l.amount), // numeric column → string
-              isSubtotal: l.isSubtotal,
-              confidence: l.confidence,
-              suggestedCoaId: s ? s.masterCoaId : null,
-              masterCoaId: auto ? s.masterCoaId : null,
-              status: auto ? ('matched' as const) : ('unmatched' as const),
-              lineOrder: i,
-            }
-          })
+        // Pembentukan row + kebijakan auto-map/saran dipakai bareng dengan route
+        // retry-extract (lib/reports/line-items) supaya keduanya tak menyimpang.
+        const { values, autoMapped, suggested } = buildLineItemValues(
+          lines,
+          report.id,
+          accounts,
+          historyByRawName
+        )
+        if (values.length > 0) {
           await db.insert(reportLineItems).values(values)
         }
         await db

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { DateRangePicker } from '@/components/date-range-picker'
+import type { RetryState } from '@/lib/reports/retry-policy'
 
 type ReportType = 'laba_rugi' | 'neraca' | 'arus_kas'
 type ReportMeta = {
@@ -26,6 +27,8 @@ type ReportMeta = {
   status: 'uploaded' | 'extracting' | 'review' | 'mapped' | 'confirmed'
   lineCount: number
   mappedCount: number
+  /** Dihitung server (lib/reports/retry-policy) — jangan hitung ulang di sini. */
+  retry: RetryState
 }
 
 const TYPE_LABEL: Record<ReportType, string> = { laba_rugi: 'Laba Rugi', neraca: 'Neraca', arus_kas: 'Arus Kas' }
@@ -55,12 +58,19 @@ const ymdToDate = (ymd: string) => {
 }
 const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-function StatusBadge({ status }: { status: ReportMeta['status'] }) {
-  const cfg = STATUS_CONFIG[status]
+function StatusBadge({ status, retry }: { status: ReportMeta['status']; retry: RetryState }) {
+  // Laporan 'extracting' yang sudah lewat ambang = yatim, bukan sedang jalan.
+  // Menampilkan spinner "Proses" untuk itu justru menyembunyikan masalahnya —
+  // inilah yang dulu bikin laporan terlihat "diproses" selamanya.
+  const stuck = status === 'extracting' && retry === 'retriable'
+  const cfg = stuck
+    ? { Icon: AlertCircle, label: 'Macet', bg: '#fef2f2', color: '#b91c1c', spin: false }
+    : STATUS_CONFIG[status]
   return (
     <div
       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
       style={{ background: cfg.bg, color: cfg.color }}
+      title={stuck ? 'Ekstraksi berhenti di tengah jalan — tekan "Coba lagi" untuk mengulang dari PDF yang sudah tersimpan.' : undefined}
     >
       <cfg.Icon className={`w-3 h-3 ${cfg.spin ? 'animate-spin' : ''}`} />
       <span>{cfg.label}</span>
@@ -147,6 +157,23 @@ export default function LaporanPage() {
     } finally {
       setBusy(null)
       setConfirmDeleteId(null)
+    }
+  }
+
+  // Ekstraksi ulang dari PDF yang SUDAH tersimpan — tidak perlu unggah lagi.
+  // Server yang memutuskan boleh/tidaknya (retry-policy) & membersihkan line item
+  // lama, jadi di sini cukup panggil lalu muat ulang.
+  const handleRetry = async (r: ReportMeta) => {
+    setBusy(`retry:${r.id}`)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/reports/${r.id}/retry-extract`, { method: 'POST' })
+      if (!res.ok) throw new Error(await readError(res, 'Gagal mengekstrak ulang.'))
+      await load()
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Gagal mengekstrak ulang.')
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -407,6 +434,7 @@ export default function LaporanPage() {
                           {group.items.map(r => {
                             const deleting = busy === `del:${r.id}`
                             const replacing = busy === `replace:${r.id}`
+                            const retrying = busy === `retry:${r.id}`
                             const confirming = confirmDeleteId === r.id
                             return (
                               <Fragment key={r.id}>
@@ -424,13 +452,29 @@ export default function LaporanPage() {
                                   </td>
                                   <td style={{ ...td, textAlign: 'right', color: '#374151' }}>{r.lineCount}</td>
                                   <td style={td}>
-                                    {replacing
+                                    {replacing || retrying
                                       ? <span style={{ fontSize: 12, color: '#0284c7' }} className="inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Mengekstrak ulang…</span>
                                       : <MapProgress mapped={r.mappedCount} total={r.lineCount} />}
                                   </td>
-                                  <td style={td}><StatusBadge status={r.status} /></td>
+                                  <td style={td}><StatusBadge status={r.status} retry={r.retry} /></td>
                                   <td style={{ ...td, textAlign: 'right' }}>
                                     <div className="inline-flex items-center gap-2">
+                                      {/* Hanya muncul kalau server bilang laporan ini memang
+                                          bisa di-retry (macet / gagal ekstraksi & PDF-nya ada). */}
+                                      {r.retry === 'retriable' && (
+                                        <button
+                                          aria-label={`Coba lagi ekstraksi ${TYPE_LABEL[r.reportType]}`}
+                                          title="Ekstrak ulang dari PDF yang sudah tersimpan (tanpa upload lagi)"
+                                          disabled={busy !== null}
+                                          onClick={() => void handleRetry(r)}
+                                          style={{ ...ghostBtn(busy !== null), color: '#0284c7', borderColor: 'rgba(2,132,199,0.3)' }}
+                                        >
+                                          {retrying
+                                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            : <RotateCw className="w-3.5 h-3.5" />}
+                                          {retrying ? 'Mengekstrak…' : 'Coba lagi'}
+                                        </button>
+                                      )}
                                       <button
                                         aria-label={`Ganti file ${TYPE_LABEL[r.reportType]}`}
                                         title="Ganti file (re-upload PDF → ekstraksi ulang)"

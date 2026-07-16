@@ -3,6 +3,7 @@ import { asc, desc, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { financialReports, reportLineItems } from '@/lib/db/schema'
 import { requireUser } from '@/lib/api/guards'
+import { retryState } from '@/lib/reports/retry-policy'
 
 export const runtime = 'nodejs'
 
@@ -34,6 +35,9 @@ export async function GET(req: Request) {
       periodEnd: financialReports.periodEnd,
       sourceFileName: financialReports.sourceFileName,
       status: financialReports.status,
+      updatedAt: financialReports.updatedAt,
+      // Kolom bytea-nya sendiri TIDAK diambil (bisa megabyte-an) — cukup tahu ada/tidak.
+      hasPdf: sql<boolean>`${financialReports.sourcePdf} is not null`,
       lineCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal})`.mapWith(Number),
       mappedCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal} and ${reportLineItems.masterCoaId} is not null)`.mapWith(Number),
     })
@@ -43,5 +47,12 @@ export async function GET(req: Request) {
     .groupBy(financialReports.id)
     .orderBy(desc(financialReports.periodStart), asc(financialReports.reportType))
 
-  return NextResponse.json({ reports: rows })
+  // `retry` dihitung di SERVER (bukan di browser) supaya ambang waktunya memakai
+  // jam yang sama dengan route retry-extract — jam client bisa meleset.
+  const reports = rows.map(({ updatedAt, hasPdf, ...r }) => ({
+    ...r,
+    retry: retryState({ status: r.status, updatedAt, hasPdf }),
+  }))
+
+  return NextResponse.json({ reports })
 }
