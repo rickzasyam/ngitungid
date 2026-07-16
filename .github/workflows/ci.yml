@@ -60,9 +60,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
 
+      # Vitest — hanya lib MURNI (tanpa DB/jaringan), jadi tidak butuh service
+      # container maupun env tambahan. Sengaja SEBELUM build: lebih cepat gagal.
+      - name: Test
+        run: pnpm test
+
       - name: Build
         run: pnpm build
-
-      # TODO(sesi berikutnya): tambah step test setelah vitest disiapkan, mis.:
-      # - name: Test
-      #   run: pnpm test
