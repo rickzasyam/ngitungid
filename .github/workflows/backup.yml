@@ -75,15 +75,20 @@ jobs:
       - name: Pasang postgresql-client-18
         run: |
           set -euo pipefail
-          sudo install -d /usr/share/postgresql-common/pgdg
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          # Pakai skrip resmi PGDG (non-interaktif dgn -y). Cara manual
+          # `curl ... | sudo gpg --dearmor` GAGAL di runner: gpg mencoba membuka
+          # /dev/tty yang tidak ada di CI → exit 2 (dan curl ikut error 23).
           sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y -qq postgresql-client-18
-          pg_dump --version
-          pg_restore --version
+          # Pakai binary versi 18 SECARA EKSPLISIT: /usr/bin/pg_dump adalah
+          # pg_wrapper (dari postgresql-common) yang bisa memilih versi lain yang
+          # kebetulan terpasang. GITHUB_PATH prepend → step berikutnya dapat v18.
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/pg_restore --version
+          /usr/lib/postgresql/18/bin/psql --version
 
       - name: Dump branch main
         env:
