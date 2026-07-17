@@ -2,6 +2,11 @@ allowBuilds:
   # @google/genai & protobufjs tidak butuh build script — SDK jalan tanpa itu
   # (ekstraksi PDF terverifikasi). false = jangan jalankan postinstall-nya.
   '@google/genai': false
+  # postinstall @sentry/cli mengunduh binary sentry-cli yang HANYA dipakai untuk
+  # upload source map saat build. Kita tidak melakukannya (tanpa auth token) —
+  # capture error tidak butuh binary itu. Set true kalau nanti source map
+  # upload diaktifkan.
+  '@sentry/cli': false
   esbuild: true
   msw: true
   protobufjs: false

@@ -132,6 +132,48 @@ diasumsikan valid. Kalau row count tidak cocok, workflow-nya merah.
 > tabel saja:
 > `pg_restore --dbname="<TARGET>" --table=financial_reports ngitungid-main-<stamp>.dump`
 
+## Error tracking (Sentry)
+
+Error server & client dilaporkan otomatis ke [Sentry](https://sentry.io).
+
+> ### 💸 Sentry **Developer plan itu GRATIS SELAMANYA** — bukan trial
+> Akun baru biasanya dimulai dengan **trial Business plan 14 hari**. Saat trial
+> habis, akunnya **TIDAK mati dan TIDAK jadi berbayar** — ia otomatis turun ke
+> **Developer plan yang gratis permanen**. Jadi jangan kaget/panik saat notifikasi
+> "trial berakhir" muncul; tidak ada yang perlu dibayar dan tidak ada yang perlu
+> dilakukan.
+>
+> Kuota Developer plan (gratis selamanya): **5.000 error/bulan · 1 user ·
+> retensi 30 hari**. Cukup untuk pemakaian internal tim; fitur Business (dashboard
+> lanjutan, multi-user, dsb) memang hilang setelah trial, tapi error tracking-nya
+> tetap jalan.
+
+**Konfigurasi:**
+
+| File | Fungsi |
+|------|--------|
+| [`instrumentation.ts`](instrumentation.ts) | Hook Next.js: load config per runtime + `onRequestError` (WAJIB — tanpa ini error di route handler/server component tidak tertangkap) |
+| [`sentry.server.config.ts`](sentry.server.config.ts) | Init runtime Node |
+| [`sentry.edge.config.ts`](sentry.edge.config.ts) | Init runtime Edge (`proxy.ts`) |
+| [`instrumentation-client.ts`](instrumentation-client.ts) | Init browser (di-load Next otomatis) |
+| [`app/global-error.tsx`](app/global-error.tsx) | Error boundary terluar — menangkap error saat RENDER React |
+
+- **DSN** dibaca dari `NEXT_PUBLIC_SENTRY_DSN` (lihat `.env.example`), tidak pernah
+  di-hardcode. **Kosong = Sentry non-aktif**, app tetap jalan normal — jadi
+  kontributor tanpa DSN dan CI tidak terganggu.
+- Prefix `NEXT_PUBLIC_` memang wajib: DSN dirancang publik (ikut ter-bundle ke JS
+  browser) dan hanya bisa **mengirim** event, tidak bisa membaca data project.
+- Event ditandai `environment` (`development` / `production`) — filter/mute
+  `development` di dashboard kalau berisik.
+- `tracesSampleRate: 0` dan `sendDefaultPii: false` disetel sengaja: hemat kuota,
+  dan **body request memuat angka keuangan klien** yang tidak boleh ikut terkirim.
+- Source map belum di-upload (butuh auth token). Karena itu postinstall
+  `@sentry/cli` di-`false` di `pnpm-workspace.yaml`. Kalau nanti mau stack trace
+  yang ter-map rapi di production, aktifkan keduanya.
+
+**Untuk deploy nanti:** set `NEXT_PUBLIC_SENTRY_DSN` juga di environment variables
+Vercel (bukan dari `.env.local`).
+
 ## Scripts
 
 | Perintah | Fungsi |
