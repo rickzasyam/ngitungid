@@ -56,10 +56,18 @@ export const lineItemStatusEnum = pgEnum('line_item_status', [
 export const userRoleEnum = pgEnum('user_role', ['akunting', 'user', 'owner'])
 
 // ── clients ──────────────────────────────────────────────────
+// logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
+// .source_pdf. Alasannya sama: file-nya kecil (logo klien lazimnya < 200KB,
+// dibatasi MAX_LOGO_BYTES di route) sehingga TOAST aman, dan kita tidak perlu
+// menambah akun/kredensial object storage baru. logoMime disimpan supaya
+// endpoint GET bisa mengirim Content-Type yang benar (png/jpeg/svg/webp) —
+// tanpa itu browser harus menebak.
 export const clients = pgTable('clients', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   type: text('type').notNull(),
+  logo: bytea('logo'),
+  logoMime: text('logo_mime'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -201,8 +209,8 @@ export const clientMetricVisibility = pgTable(
 )
 
 // ── users ────────────────────────────────────────────────────
-// clientId null = admin (akses semua klien), terisi = role 'user'
-// dipin ke 1 klien — sama persis dengan perilaku MOCK_ROLE saat ini.
+// clientId null = staf internal (owner/akunting, akses semua klien), terisi =
+// role 'user' dipin ke 1 klien.
 // onDelete restrict: klien tidak boleh terhapus diam-diam selama masih
 // ada user yang terikat ke situ.
 export const users = pgTable('users', {
@@ -216,6 +224,37 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// ── client_assignments ───────────────────────────────────────
+// Catatan "siapa pegang klien apa" — MURNI TRACKING/organisasi. Tabel ini
+// TIDAK dipakai untuk membatasi akses: semua akunting tetap boleh membuka &
+// mengedit semua klien (keputusan Ricko). Kalau suatu saat dipakai sebagai
+// filter akses, guard-nya harus ditulis eksplisit — jangan diam-diam.
+//
+// onDelete cascade di KEDUA sisi: baris ini cuma penanda, tidak menyimpan nilai
+// sendiri. Klien dihapus → penugasannya ikut hilang; akun akunting dihapus →
+// penugasannya ikut hilang. Tidak ada 'restrict' di sini supaya assignment tidak
+// pernah menghalangi penghapusan (beda dengan users.clientId yang memang sengaja
+// menghalangi).
+export const clientAssignments = pgTable(
+  'client_assignments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assignedAt: timestamp('assigned_at').defaultNow().notNull(),
+  },
+  (table) => [
+    // Satu akunting hanya boleh tercatat sekali per klien.
+    unique('client_assignments_client_user_unique').on(table.clientId, table.userId),
+    index('client_assignments_client_id_idx').on(table.clientId),
+    index('client_assignments_user_id_idx').on(table.userId),
+  ]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -224,10 +263,17 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   coaMappingHistory: many(coaMappingHistory),
   metricVisibility: many(clientMetricVisibility),
   users: many(users),
+  assignments: many(clientAssignments),
 }))
 
-export const usersRelations = relations(users, ({ one }) => ({
+export const usersRelations = relations(users, ({ one, many }) => ({
   client: one(clients, { fields: [users.clientId], references: [clients.id] }),
+  assignments: many(clientAssignments),
+}))
+
+export const clientAssignmentsRelations = relations(clientAssignments, ({ one }) => ({
+  client: one(clients, { fields: [clientAssignments.clientId], references: [clients.id] }),
+  user: one(users, { fields: [clientAssignments.userId], references: [users.id] }),
 }))
 
 export const masterCoaRelations = relations(masterCoa, ({ one, many }) => ({
