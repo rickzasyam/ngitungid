@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { useClient } from '@/lib/client-context'
+import { ClientAvatar } from '@/components/client-avatar'
 
 // Date → 'YYYY-MM-DD' dari komponen lokal (hindari geser hari akibat UTC).
 const toYMD = (d: Date) => {
@@ -207,14 +208,7 @@ export function UploadSession({
             className="flex items-center gap-3 px-4 py-3 rounded-2xl"
             style={{ background: '#f8f8f8', border: '1.5px solid #e5e5e5' }}
           >
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'var(--color-accent-primary)' }}
-            >
-              <span className="text-xs font-bold" style={{ color: 'var(--color-bg-main)' }}>
-                {activeClient?.name.charAt(0)}
-              </span>
-            </div>
+            {activeClient && <ClientAvatar client={activeClient} size={32} rounded={12} fontSize={12} />}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate" style={{ color: '#2d2d2d' }}>
                 {activeClient?.name}

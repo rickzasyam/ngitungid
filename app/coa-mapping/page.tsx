@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRequireClient } from '@/lib/use-require-client'
+import type { ClientInfo } from '@/lib/client-context'
+import { ClientAvatar } from '@/components/client-avatar'
 import {
   ChevronDown,
   ChevronUp,
@@ -125,7 +127,7 @@ function buildCoaGroups(accounts: CoaAccount[]): COAGroup[] {
 // ============================================================
 
 function SessionContextBar({
-  clientName,
+  client,
   periods,
   selectedPeriod,
   onSelectPeriod,
@@ -135,7 +137,7 @@ function SessionContextBar({
   mappedCount,
   unmappedTotal,
 }: {
-  clientName: string
+  client: ClientInfo
   periods: Period[]
   selectedPeriod: Period | null
   onSelectPeriod: (p: Period) => void
@@ -159,14 +161,9 @@ function SessionContextBar({
         {/* Session info pills */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-              style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-main)' }}
-            >
-              {clientName.charAt(0)}
-            </div>
+            <ClientAvatar client={client} size={28} rounded={8} />
             <span className="text-sm font-semibold" style={{ color: '#2d2d2d' }}>
-              {clientName}
+              {client.name}
             </span>
           </div>
 
@@ -1037,7 +1034,7 @@ export default function COAMappingPage() {
 
           {/* Session context bar */}
           <SessionContextBar
-            clientName={activeClient.name}
+            client={activeClient}
             periods={periods}
             selectedPeriod={selectedPeriod}
             onSelectPeriod={setSelectedPeriod}

@@ -2,13 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useClient } from '@/lib/client-context'
+import { useClient, type ClientInfo } from '@/lib/client-context'
 import { NewClientModal } from '@/components/new-client-modal'
+import { ClientAvatar } from '@/components/client-avatar'
+import { ClientCardMenu, EditClientModal, DeleteClientModal, AssignClientModal } from '@/components/client-manage'
 import { ArrowRight, Plus, Building2, Loader2 } from 'lucide-react'
 
 export default function AdminOverviewPage() {
-  const { clients, setActiveClient, refreshClients, isLoaded } = useClient()
+  const { clients, activeClient, setActiveClient, refreshClients, isLoaded, isStaff, isOwner } = useClient()
   const [showNewClient, setShowNewClient] = useState(false)
+  const [editing, setEditing] = useState<ClientInfo | null>(null)
+  const [deleting, setDeleting] = useState<ClientInfo | null>(null)
+  const [assigning, setAssigning] = useState<ClientInfo | null>(null)
   const router = useRouter()
 
   // "Buka workspace" harus benar-benar membuka workspace. setActiveClient
@@ -91,12 +96,12 @@ export default function AdminOverviewPage() {
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {clients.map((client, index) => (
-                    <button
+                    // Kartu = <div> (bukan <button>): tombol "Buka workspace" dan
+                    // kebab menu adalah dua <button> BERSEBELAHAN, bukan bersarang
+                    // (button-in-button itu HTML tidak valid & merusak keyboard).
+                    <div
                       key={client.id}
-                      type="button"
-                      onClick={() => openWorkspace(client)}
-                      aria-label={`Buka workspace ${client.name}`}
-                      className="text-left rounded-3xl overflow-hidden animate-slide-up ng-card-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+                      className="relative rounded-3xl overflow-hidden animate-slide-up ng-card-lift"
                       style={{
                         background: 'white',
                         border: '1px solid #f0f0f0',
@@ -105,17 +110,28 @@ export default function AdminOverviewPage() {
                       }}
                     >
                       {/* Accent strip */}
-                      <div
-                        style={{ height: 4, background: 'linear-gradient(90deg, #daf163, #b8e000)' }}
-                      />
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-3">
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold"
-                            style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-main)' }}
-                          >
-                            {client.name.charAt(0)}
-                          </div>
+                      <div style={{ height: 4, background: 'linear-gradient(90deg, #daf163, #b8e000)' }} />
+
+                      {/* Kebab (staf saja) — di atas tombol utama, z-index lebih tinggi */}
+                      {isStaff && (
+                        <div className="absolute" style={{ top: 12, right: 10, zIndex: 3 }}>
+                          <ClientCardMenu
+                            isOwner={isOwner}
+                            onEdit={() => setEditing(client)}
+                            onAssign={() => setAssigning(client)}
+                            onDelete={() => setDeleting(client)}
+                          />
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => openWorkspace(client)}
+                        aria-label={`Buka workspace ${client.name}`}
+                        className="w-full text-left p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-inset"
+                      >
+                        <div className="flex items-start mb-3">
+                          <ClientAvatar client={client} size={40} rounded={12} />
                         </div>
                         <p className="text-sm font-bold mb-0.5" style={{ color: '#2d2d2d' }}>
                           {client.name}
@@ -129,8 +145,8 @@ export default function AdminOverviewPage() {
                           </p>
                           <ArrowRight className="w-3.5 h-3.5" style={{ color: 'var(--color-accent-primary)' }} />
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -147,6 +163,36 @@ export default function AdminOverviewPage() {
           await refreshClients()
         }}
       />
+
+      {editing && (
+        <EditClientModal
+          client={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => { setEditing(null); await refreshClients() }}
+        />
+      )}
+
+      {deleting && (
+        <DeleteClientModal
+          client={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={async () => {
+            // Kalau klien yang dihapus sedang aktif, lepas dulu supaya tidak ada
+            // active client yang menunjuk ke id yang sudah tidak ada.
+            if (activeClient?.id === deleting.id) setActiveClient(null)
+            setDeleting(null)
+            await refreshClients()
+          }}
+        />
+      )}
+
+      {assigning && isOwner && (
+        <AssignClientModal
+          client={assigning}
+          onClose={() => setAssigning(null)}
+          onSaved={() => setAssigning(null)}
+        />
+      )}
     </div>
   )
 }

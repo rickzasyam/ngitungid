@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { useClient, ClientInfo } from '@/lib/client-context'
+import { ClientAvatar } from '@/components/client-avatar'
 import { ROLE_LABEL } from '@/lib/roles'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
@@ -397,12 +398,7 @@ export function Sidebar() {
                 <div className="relative">
                   {activeClient ? (
                     <>
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                        style={{ background: 'var(--color-accent-primary)', color: 'var(--color-bg-sidebar)' }}
-                      >
-                        {activeClient.name.charAt(0)}
-                      </div>
+                      <ClientAvatar client={activeClient} size={32} rounded={999} fontSize={12} />
                       <span
                         className="absolute rounded-full"
                         style={{ width: '8px', height: '8px', bottom: '-2px', right: '-2px', background: storageUsed > 80 ? '#f59e0b' : 'var(--color-accent-primary)', border: '2px solid var(--color-bg-sidebar)' }}
@@ -504,15 +500,19 @@ export function Sidebar() {
                       data-selected={activeClient?.id === client.id}
                       className="ng-switch-row w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
                     >
-                      <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                        style={{
-                          background: activeClient?.id === client.id ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.08)',
-                          color: activeClient?.id === client.id ? 'var(--color-bg-sidebar)' : 'white',
-                        }}
-                      >
-                        {client.name.charAt(0)}
-                      </div>
+                      {client.hasLogo ? (
+                        <ClientAvatar client={client} size={28} rounded={8} />
+                      ) : (
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                          style={{
+                            background: activeClient?.id === client.id ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.08)',
+                            color: activeClient?.id === client.id ? 'var(--color-bg-sidebar)' : 'white',
+                          }}
+                        >
+                          {client.name.charAt(0)}
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate" style={{ color: 'white' }}>{client.name}</p>
                         <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{client.type}</p>

@@ -8,6 +8,9 @@ export interface ClientInfo {
   id: string
   name: string
   type: string
+  hasLogo: boolean
+  // ISO string dari clients.updatedAt — dipakai sebagai cache-buster URL logo.
+  updatedAt: string
 }
 
 const STORAGE_KEY = 'ngitungid-active-client-id'
