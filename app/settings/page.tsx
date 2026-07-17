@@ -18,10 +18,13 @@ import {
   Globe,
   SlidersHorizontal,
   User,
+  Users,
+  UserPlus,
   Bell,
   Building2,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
+import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
@@ -126,12 +129,16 @@ const defaultVisibility = (): Record<string, boolean> =>
   Object.fromEntries(ALL_METRIC_IDS.map(id => [id, id !== 'dpo' && id !== 'dar']))
 
 // ── Settings nav ─────────────────────────────────────────────
-type TabId = 'general' | 'coa' | 'analytics' | 'account' | 'notifications'
+type TabId = 'general' | 'coa' | 'analytics' | 'users' | 'account' | 'notifications'
 
-const NAV_ITEMS: { id: TabId; label: string; desc: string; Icon: typeof Globe; scoped: boolean; soon?: boolean }[] = [
+// `ownerOnly`: tab disembunyikan total dari akunting. Itu cuma kenyamanan UI —
+// penjaga sebenarnya ada di requireOwner() pada route API-nya, karena
+// menyembunyikan tombol bukan kontrol keamanan.
+const NAV_ITEMS: { id: TabId; label: string; desc: string; Icon: typeof Globe; scoped: boolean; soon?: boolean; ownerOnly?: boolean }[] = [
   { id: 'general',       label: 'General',           desc: 'Bahasa, format, timezone',      Icon: Globe,             scoped: false },
   { id: 'coa',           label: 'Master COA',        desc: 'Struktur akun klien',           Icon: FileSpreadsheet,   scoped: true },
   { id: 'analytics',     label: 'Analytics Display', desc: 'Metrik yang tampil ke klien',   Icon: SlidersHorizontal, scoped: true },
+  { id: 'users',         label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',         Icon: Users,             scoped: false, ownerOnly: true },
   { id: 'account',       label: 'Account',           desc: 'Profil & keamanan',             Icon: User,              scoped: false, soon: true },
   { id: 'notifications', label: 'Notifications',     desc: 'Email & pengingat',             Icon: Bell,              scoped: false, soon: true },
 ]
@@ -798,16 +805,203 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
 
 // ── Page ─────────────────────────────────────────────────────
 
+// ── Kelola Akun (Owner only) ─────────────────────────────────
+// Provisioning akun tim dari dalam app. Sengaja BUKAN halaman register publik:
+// ini internal tool, akun dibuat Owner. Guard sebenarnya ada di requireOwner()
+// pada /api/users — komponen ini cuma UI-nya.
+type TeamUser = {
+  id: string
+  email: string
+  name: string
+  role: Role
+  clientId: string | null
+  createdAt: string
+}
+
+function UsersTab() {
+  const [list, setList] = useState<TeamUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [role, setRole] = useState<Role>('akunting')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/users')
+      if (!res.ok) throw new Error()
+      const d: { users: TeamUser[] } = await res.json()
+      setList(d.users)
+    } catch {
+      setList([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    setOkMsg(null)
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, role }),
+      })
+      const payload = (await res.json().catch(() => null)) as { error?: string; user?: TeamUser } | null
+      if (!res.ok) throw new Error(payload?.error ?? 'Gagal membuat akun.')
+      setOkMsg(`Akun "${payload?.user?.email}" (${ROLE_LABEL[role]}) berhasil dibuat.`)
+      setName(''); setEmail(''); setPassword(''); setRole('akunting')
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal membuat akun.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #e5e7eb',
+    fontSize: 13, color: '#1f2430', background: 'white',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 5,
+  }
+
+  return (
+    <>
+      <SettingsCard>
+        <SectionHeading
+          Icon={UserPlus}
+          accent="linear-gradient(135deg, #daf163 0%, #c8e000 100%)"
+          title="Buat Akun Baru"
+          subtitle="Hanya Owner. Password di-hash bcrypt sebelum disimpan — tidak pernah jadi teks biasa"
+        />
+        <form onSubmit={submit} className="space-y-3 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle} htmlFor="u-name">NAMA</label>
+              <input id="u-name" style={inputStyle} value={name} onChange={e => setName(e.target.value)}
+                placeholder="Nama lengkap" required minLength={2} />
+            </div>
+            <div>
+              <label style={labelStyle} htmlFor="u-email">EMAIL</label>
+              <input id="u-email" type="email" style={inputStyle} value={email}
+                onChange={e => setEmail(e.target.value)} placeholder="nama@ngitungid.com" required />
+            </div>
+            <div>
+              <label style={labelStyle} htmlFor="u-pass">PASSWORD (min 8 karakter)</label>
+              <input id="u-pass" type="password" style={inputStyle} value={password}
+                onChange={e => setPassword(e.target.value)} placeholder="••••••••" required minLength={8} />
+            </div>
+            <div>
+              <label style={labelStyle} htmlFor="u-role">ROLE</label>
+              <select id="u-role" style={{ ...inputStyle, cursor: 'pointer' }} value={role}
+                onChange={e => setRole(e.target.value as Role)}>
+                {CREATABLE_ROLES.map(r => (
+                  <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>
+            <strong style={{ color: '#6b7280' }}>Akunting</strong> — upload, review, mapping, kelola klien, lihat semua klien.{' '}
+            <strong style={{ color: '#6b7280' }}>Owner</strong> — semua itu, plus membuat akun & assign akunting ke klien.
+          </p>
+
+          {error && (
+            <div role="alert" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 10, padding: '9px 12px', fontSize: 12 }}>
+              {error}
+            </div>
+          )}
+          {okMsg && (
+            <div role="status" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', borderRadius: 10, padding: '9px 12px', fontSize: 12 }}>
+              {okMsg}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-full font-semibold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+            style={{ padding: '9px 18px', fontSize: 12.5, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)', cursor: saving ? 'default' : 'pointer' }}
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+            {saving ? 'Membuat…' : 'Buat Akun'}
+          </button>
+        </form>
+      </SettingsCard>
+
+      <SettingsCard delay={60}>
+        <SectionHeading
+          Icon={Users}
+          accent="linear-gradient(135deg, #bbb3f3 0%, #a5b4fc 100%)"
+          title="Akun Tim"
+          subtitle={`${list.length} akun terdaftar`}
+        />
+        <div className="mt-4" />
+        {loading ? (
+          <div className="flex items-center gap-2" style={{ color: '#9ca3af', fontSize: 12 }}>
+            <Loader2 className="w-4 h-4 animate-spin" /> Memuat akun…
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+              <thead>
+                <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Nama</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Email</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map(u => (
+                  <tr key={u.id} style={{ borderBottom: '1px solid #f5f5f6' }}>
+                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: '#1f2430', fontWeight: 500 }}>{u.name}</td>
+                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: '#6b7280' }}>{u.email}</td>
+                    <td style={{ padding: '9px 10px' }}>
+                      <span
+                        className="inline-flex items-center rounded-full"
+                        style={{
+                          padding: '2px 9px', fontSize: 10.5, fontWeight: 600,
+                          background: u.role === 'owner' ? 'rgba(187,179,243,0.25)' : u.role === 'akunting' ? 'rgba(218,241,99,0.3)' : '#f0f0f0',
+                          color: '#1f2430',
+                        }}
+                      >
+                        {ROLE_LABEL[u.role]}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SettingsCard>
+    </>
+  )
+}
+
 export default function SettingsPage() {
   // Tidak pakai useRequireClient: tab General bersifat platform-level dan harus
   // tetap bisa diakses tanpa klien aktif — tab scoped punya empty state sendiri.
-  const { activeClient } = useClient()
+  const { activeClient, isOwner } = useClient()
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
   // Visibility metrik sekarang dimiliki AnalyticsDisplayTab (persisted ke
   // client_metric_visibility), bukan lagi state lokal di page ini.
 
-  const activeNav = NAV_ITEMS.find(n => n.id === activeTab)!
+  const navItems = NAV_ITEMS.filter(n => !n.ownerOnly || isOwner)
+  const activeNav = navItems.find(n => n.id === activeTab) ?? navItems[0]
   const needsClient = activeNav.scoped && !activeClient
 
   return (
@@ -834,8 +1028,8 @@ export default function SettingsPage() {
             className="flex lg:flex-col gap-1 p-3 overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto flex-shrink-0 border-b lg:border-b-0 lg:border-r lg:w-[230px]"
             style={{ borderColor: '#f0f0f0' }}
           >
-            {NAV_ITEMS.map(item => {
-              const isActive = activeTab === item.id
+            {navItems.map(item => {
+              const isActive = activeNav.id === item.id
               const isSoon = !!item.soon
 
               return (
@@ -887,7 +1081,9 @@ export default function SettingsPage() {
               {/* Empty state kalau tab scoped tapi belum ada klien */}
               {needsClient && <NoClientState />}
 
-              {activeTab === 'general' && <GeneralTab />}
+              {activeNav.id === 'general' && <GeneralTab />}
+
+              {activeNav.id === 'users' && isOwner && <UsersTab />}
 
               {activeTab === 'coa' && activeClient && (
                 <MasterCoaTab key={activeClient.id} clientId={activeClient.id} />
