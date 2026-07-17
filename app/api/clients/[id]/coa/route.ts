@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clients, masterCoa, reportLineItems } from '@/lib/db/schema'
-import { requireAdmin, requireUser } from '@/lib/api/guards'
+import { requireAkunting, requireUser } from '@/lib/api/guards'
 import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse, isFkViolation } from '@/lib/api/db-errors'
 
@@ -56,7 +56,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 // POST /api/clients/[id]/coa — admin only. multipart/form-data { file }.
 // Replace-all: hapus COA lama + insert baru dalam satu batch atomik.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id } = await params

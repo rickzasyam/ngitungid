@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
+import type { Role } from '@/lib/roles'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: 'jwt' },
@@ -49,7 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Ambient augmentation untuk JWT (@auth/core/jwt) tidak ke-merge
       // karena package itu nested di pnpm virtual store, bukan top-level —
       // cast eksplisit di sini lebih robust daripada bergantung ke situ.
-      session.user.role = token.role as 'admin' | 'user'
+      session.user.role = token.role as Role
       session.user.clientId = token.clientId as string | null
       return session
     },

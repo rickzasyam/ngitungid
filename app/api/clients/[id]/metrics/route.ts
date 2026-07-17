@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { clients, clientMetricVisibility } from '@/lib/db/schema'
-import { requireAdmin, requireUser } from '@/lib/api/guards'
+import { requireAkunting, requireUser } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
@@ -43,7 +43,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 // Upsert seluruh map sekaligus (last-write-wins), jadi aman dipanggil berkali-
 // kali dari toggle yang cepat berturut-turut.
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id } = await params

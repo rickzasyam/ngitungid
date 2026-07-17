@@ -1,6 +1,8 @@
 import type { DefaultSession } from 'next-auth'
 
-type Role = 'admin' | 'user'
+// Harus sinkron dengan userRoleEnum di lib/db/schema.ts.
+// owner > akunting > user (owner mewarisi semua kemampuan akunting).
+type Role = 'owner' | 'akunting' | 'user'
 
 declare module 'next-auth' {
   interface User {

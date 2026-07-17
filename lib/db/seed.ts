@@ -35,12 +35,18 @@ async function seedAdmin() {
 
   const passwordHash = await bcrypt.hash(password, 12)
 
+  // role 'owner': akun pertama harus bisa MEMBUAT akun lain, kalau tidak
+  // instalasi baru tidak punya siapa pun yang bisa provisioning tim.
+  //
+  // PERHATIAN: onConflictDoNothing → akun yang SUDAH ADA dilewati diam-diam,
+  // termasuk role-nya. Jadi ini TIDAK mempromosikan admin lama menjadi owner.
+  // Untuk database yang sudah berisi, pakai `pnpm db:promote-owner`.
   await db
     .insert(users)
-    .values({ email, passwordHash, name, role: 'admin', clientId: null })
+    .values({ email, passwordHash, name, role: 'owner', clientId: null })
     .onConflictDoNothing({ target: users.email })
 
-  console.log(`✓ Admin user "${email}" seeded (or already present)`)
+  console.log(`✓ Owner user "${email}" seeded (or already present — role tidak diubah)`)
 }
 
 async function main() {

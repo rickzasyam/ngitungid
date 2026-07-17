@@ -1,0 +1,22 @@
+-- DITULIS TANGAN — sengaja MENGGANTI hasil auto-generate drizzle-kit.
+--
+-- Yang di-generate drizzle-kit adalah: ubah kolom jadi text → DROP TYPE
+-- user_role → CREATE TYPE baru → cast balik `USING role::user_role`.
+-- Itu PASTI GAGAL di database yang sudah ada isinya: baris existing bernilai
+-- 'admin', sedangkan enum barunya tidak punya nilai 'admin' →
+-- `invalid input value for enum user_role: "admin"`. Transaksinya rollback,
+-- migrasi tidak pernah jalan (dan kalau sampai separuh jadi, kolom role
+-- tertinggal sebagai text — lebih parah lagi).
+--
+-- Versi di bawah tidak menyentuh satu baris data pun:
+--   * RENAME VALUE hanya mengganti label enum; baris yang ada tetap menunjuk
+--     OID yang sama → semua 'admin' otomatis jadi 'akunting' seketika, tanpa
+--     rewrite tabel dan tanpa cast.
+--   * ADD VALUE menambah 'owner' di urutan terakhir.
+--
+-- CATATAN Postgres: nilai enum yang baru di-ADD tidak boleh DIPAKAI di
+-- transaksi yang sama. Karena itu promosi akun Ricko → 'owner' TIDAK ada di
+-- sini; itu langkah terpisah lewat `pnpm db:promote-owner` (lihat
+-- lib/db/promote-owner.ts).
+ALTER TYPE "public"."user_role" RENAME VALUE 'admin' TO 'akunting';--> statement-breakpoint
+ALTER TYPE "public"."user_role" ADD VALUE 'owner';

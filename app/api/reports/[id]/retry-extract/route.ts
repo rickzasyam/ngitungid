@@ -3,7 +3,7 @@ import { and, eq, lt, or } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
 import { normalizeName } from '@/lib/coa-match'
@@ -23,7 +23,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Dipakai tombol "Coba lagi" di /laporan. Kebijakan boleh/tidaknya ada di
 // `lib/reports/retry-policy.ts` (dipakai bareng route list).
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id: reportId } = await params

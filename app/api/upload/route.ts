@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
 import { normalizeName } from '@/lib/coa-match'
 import { buildLineItemValues } from '@/lib/reports/line-items'
@@ -29,7 +29,7 @@ const bad = (msg: string) => NextResponse.json({ error: msg }, { status: 400 })
 // + file per tipe (pnl/neraca/cashflow, PDF). Simpan PDF, ekstrak via Gemini
 // (paralel), simpan line item, set status 'review'.
 export async function POST(req: Request) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   let form: FormData

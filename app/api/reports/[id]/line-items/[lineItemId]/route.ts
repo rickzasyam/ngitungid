@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { reportLineItems } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 
 export const runtime = 'nodejs'
 
@@ -18,7 +18,7 @@ type LineStatus = (typeof VALID_STATUS)[number]
 // absen = biarkan apa adanya. Status laporan TIDAK disentuh di sini —
 // transisi review→mapped dimiliki route /mapping (berbasis masterCoaId).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string; lineItemId: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id: reportId, lineItemId } = await params

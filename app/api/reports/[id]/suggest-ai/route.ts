@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { suggestCoaWithGemini, type CoaChoice, type UnmappedRef } from '@/lib/gemini/suggest-coa'
 import type { ReportType } from '@/lib/gemini/extract'
@@ -30,7 +30,7 @@ const AI_MIN_CONFIDENCE = 60
 // /mapping ia masuk `coa_mapping_history` → matcher deterministik menangkapnya
 // instan berikutnya (learning loop).
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id: reportId } = await params

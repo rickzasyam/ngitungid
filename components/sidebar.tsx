@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { useClient, ClientInfo } from '@/lib/client-context'
+import { ROLE_LABEL } from '@/lib/roles'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
 const CAPSULE_TRANSITION = 'transform .48s cubic-bezier(.34,1.42,.5,1), height .48s cubic-bezier(.34,1.42,.5,1)'
@@ -38,7 +39,7 @@ const ROUTE_ACTIVE_MAP: Record<string, string> = {
 export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
-  const { activeClient, setActiveClient, role, storageMap, clients } = useClient()
+  const { activeClient, setActiveClient, isStaff, storageMap, clients } = useClient()
   // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
   // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
   // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
@@ -148,7 +149,8 @@ export function Sidebar() {
   ]
 
   const storageUsed = activeClient ? (storageMap[activeClient.id] ?? 50) : 0
-  const canSwitch = role === 'admin'
+  // Owner & akunting sama-sama boleh pindah klien (semua staf lihat semua klien).
+  const canSwitch = isStaff
 
   const handleSelectClient = (client: ClientInfo | null) => {
     setActiveClient(client)
@@ -421,7 +423,7 @@ export function Sidebar() {
                     <>
                       <div className="flex items-center justify-between mb-0.5">
                         <p className="text-[11px] whitespace-nowrap overflow-hidden" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                          {role === 'admin' ? 'Mengelola klien' : 'Workspace Bisnis'}
+                          {isStaff ? 'Mengelola klien' : 'Workspace Bisnis'}
                         </p>
                         {canSwitch && <ChevronDown className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />}
                       </div>
@@ -585,7 +587,7 @@ export function Sidebar() {
                     {session.user.name || session.user.email}
                   </p>
                   <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {session.user.role === 'admin' ? 'Admin' : 'Klien'}
+                    {ROLE_LABEL[session.user.role] ?? 'Klien'}
                     {session.user.name && session.user.email ? ` · ${session.user.email}` : ''}
                   </p>
                 </div>

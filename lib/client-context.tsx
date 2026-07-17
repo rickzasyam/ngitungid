@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
+import { isOwner as roleIsOwner, isStaff as roleIsStaff, type Role } from '@/lib/roles'
 
 export interface ClientInfo {
   id: string
@@ -17,7 +18,11 @@ interface ClientContextValue {
   setActiveClient: (client: ClientInfo | null) => void
   refreshClients: () => Promise<ClientInfo[]>
   isLoaded: boolean
-  role: 'admin' | 'user'
+  role: Role
+  /** Staf internal (owner ATAU akunting) — boleh switch klien & kelola data. */
+  isStaff: boolean
+  /** Owner saja — boleh buat akun & assign akunting ke klien. */
+  isOwner: boolean
   storageMap: Record<string, number>
 }
 
@@ -38,7 +43,11 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const [activeClient, setActiveClientState] = useState<ClientInfo | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
 
-  const role: 'admin' | 'user' = session?.user?.role ?? 'user'
+  // Default 'user' (paling sempit) kalau sesi belum ke-resolve — jangan pernah
+  // menganggap staf sebelum terbukti.
+  const role: Role = session?.user?.role ?? 'user'
+  const isStaff = roleIsStaff(role)
+  const isOwner = roleIsOwner(role)
   const userClientId = session?.user?.clientId ?? null
 
   const fetchClients = useCallback(async (): Promise<ClientInfo[]> => {
@@ -81,12 +90,12 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const setActiveClient = useCallback(
     (client: ClientInfo | null) => {
       setActiveClientState(client)
-      if (role === 'admin') {
+      if (isStaff) {
         if (client) localStorage.setItem(STORAGE_KEY, client.id)
         else localStorage.removeItem(STORAGE_KEY)
       }
     },
-    [role]
+    [isStaff]
   )
 
   // Dipanggil setelah bikin klien baru. Refresh daftar tanpa mengganggu
@@ -105,7 +114,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ClientContext.Provider
-      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, storageMap }}
+      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, isStaff, isOwner, storageMap }}
     >
       {children}
     </ClientContext.Provider>

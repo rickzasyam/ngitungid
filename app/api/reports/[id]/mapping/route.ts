@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { financialReports, masterCoa, reportLineItems, coaMappingHistory } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
@@ -20,7 +20,7 @@ type MappingInput = { lineItemId: string; masterCoaId: string }
 //   2. coa_mapping_history di-upsert (fondasi fuzzy-match-with-history-boost)
 //   3. financial_reports.status → 'mapped' kalau tidak ada sisa unmatched
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id: reportId } = await params

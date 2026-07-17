@@ -43,7 +43,17 @@ export const lineItemStatusEnum = pgEnum('line_item_status', [
   'rejected',
 ])
 
-export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])
+// Urutan nilai SENGAJA mengikuti urutan fisik enum di Postgres setelah migrasi
+// 0003: 'admin' di-RENAME jadi 'akunting' (tetap di posisi lama), lalu 'owner'
+// di-ADD (masuk paling belakang). Jangan diurut ulang — drizzle-kit akan
+// menganggapnya perubahan tipe.
+//
+// owner    : tingkat tertinggi — bisa buat akun & assign akunting ke klien,
+//            PLUS semua kemampuan akunting.
+// akunting : upload, review, mapping, kelola klien, lihat semua klien.
+//            (dulu bernama 'admin' — fungsinya sama).
+// user     : klien, read-only Dashboard + Analytics. TIDAK berubah.
+export const userRoleEnum = pgEnum('user_role', ['akunting', 'user', 'owner'])
 
 // ── clients ──────────────────────────────────────────────────
 export const clients = pgTable('clients', {

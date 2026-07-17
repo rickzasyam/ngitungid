@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { financialReports } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
@@ -21,7 +21,7 @@ const TYPE_LABEL: Record<string, string> = { laba_rugi: 'Laba Rugi', neraca: 'Ne
 // Januari), dan pindah per laporan bisa memecah sesi kalau sebagian gagal.
 // Konflik unique(client, type, period) dicek dulu → 409 jelas, bukan 500.
 export async function PATCH(req: Request) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   let body: Record<string, unknown>

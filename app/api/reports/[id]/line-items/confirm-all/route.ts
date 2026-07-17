@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { and, eq, ne } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { financialReports, reportLineItems } from '@/lib/db/schema'
-import { requireAdmin } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 
 export const runtime = 'nodejs'
 
@@ -17,7 +17,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // juga tidak mengganggu route /mapping — perhitungan sisa di sana berbasis
 // masterCoaId, bukan status.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id: reportId } = await params

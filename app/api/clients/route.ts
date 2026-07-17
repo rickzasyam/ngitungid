@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clients } from '@/lib/db/schema'
-import { requireAdmin, requireUser } from '@/lib/api/guards'
+import { requireAkunting, requireUser } from '@/lib/api/guards'
 
 const clientColumns = { id: clients.id, name: clients.name, type: clients.type }
 
@@ -29,7 +29,7 @@ export async function GET() {
 
 // POST /api/clients — admin only. Body { name, type }.
 export async function POST(req: Request) {
-  const g = await requireAdmin()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const body = (await req.json().catch(() => null)) as { name?: unknown; type?: unknown } | null
