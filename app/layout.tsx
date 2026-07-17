@@ -11,26 +11,12 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+  title: 'NgitungID BI',
+  description: 'Financial Business Intelligence untuk UMKM Indonesia',
+  // `icons` sengaja TIDAK diisi. Next App Router otomatis memakai app/icon.png
+  // (favicon) dan app/apple-icon.png lewat konvensi file. Dulu di sini ada
+  // override manual ke aset template v0 — dan override itu MENANG atas
+  // konvensi, jadi selama masih ada, app/icon.png tidak akan pernah tampil.
 }
 
 export const viewport: Viewport = {
