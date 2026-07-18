@@ -255,6 +255,36 @@ export const clientAssignments = pgTable(
   ]
 )
 
+// ── login_attempts ───────────────────────────────────────────
+// Rate limiting percobaan login: SATU baris per email (dinormalisasi lowercase).
+// DB-backed, BUKAN in-memory — target deploy Vercel serverless (cold start /
+// multi-instance) membuat counter in-memory tidak reliable. email adalah signal
+// utama (tool internal, sedikit akun → fokus proteksi per-akun). Sengaja TIDAK
+// ada FK ke users: kegagalan untuk email yang tidak terdaftar pun dihitung,
+// supaya lockout tidak membocorkan email mana yang benar-benar ada (anti account
+// enumeration). lastIp cuma informatif untuk investigasi di log/Sentry, tidak
+// pernah dipakai sebagai kunci lockout. Baris dihapus begitu login email tsb
+// berhasil (lihat clearLoginAttempts di lib/login-rate-limit-store.ts).
+export const loginAttempts = pgTable(
+  'login_attempts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    email: text('email').notNull().unique(),
+    failedCount: integer('failed_count').notNull().default(0),
+    // Awal window penghitungan berjalan. Kalau window kedaluwarsa tanpa mencapai
+    // ambang, hitungan reset dari nol (lihat registerFailure).
+    windowStart: timestamp('window_start').defaultNow().notNull(),
+    // Terisi saat ambang tercapai; login untuk email ini ditolak sampai lewat.
+    lockedUntil: timestamp('locked_until'),
+    lastIp: text('last_ip'),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  // Index untuk membantu prune baris lock yang sudah kedaluwarsa (opsional,
+  // kalau nanti dibuat job pembersih). Lookup panas by-email sudah dilayani
+  // unique constraint di kolom email.
+  (table) => [index('login_attempts_locked_until_idx').on(table.lockedUntil)]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
