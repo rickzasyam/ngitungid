@@ -867,9 +867,15 @@ function UsersTab() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSaving(true)
     setError(null)
     setOkMsg(null)
+    // Lapisan tambahan DI ATAS required/minLength HTML — jaga-jaga kalau browser
+    // autofill mengisi field dengan nilai tak dimaksud (kasus nyata: Nama
+    // ke-autofill jadi email). Trim → whitespace-only ikut ketolak.
+    if (name.trim().length < 2) { setError('Nama minimal 2 karakter.'); return }
+    if (password.length < 8) { setError('Password minimal 8 karakter.'); return }
+    if (role === 'user' && !clientId) { setError('Pilih klien untuk akun Klien (User).'); return }
+    setSaving(true)
     try {
       const res = await fetch('/api/users', {
         method: 'POST',
@@ -907,21 +913,24 @@ function UsersTab() {
           title="Buat Akun Baru"
           subtitle="Hanya Owner. Password di-hash bcrypt sebelum disimpan — tidak pernah jadi teks biasa"
         />
-        <form onSubmit={submit} className="space-y-3 mt-4">
+        {/* autoComplete="off" di form + input, plus name non-generik &
+            new-password di field password: cegah browser autofill mengisi akun
+            ORANG LAIN dgn kredensial/identitas admin (beda dari form login). */}
+        <form onSubmit={submit} autoComplete="off" className="space-y-3 mt-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label style={labelStyle} htmlFor="u-name">NAMA</label>
-              <input id="u-name" style={inputStyle} value={name} onChange={e => setName(e.target.value)}
+              <input id="u-name" name="ngid-acc-name" autoComplete="off" style={inputStyle} value={name} onChange={e => setName(e.target.value)}
                 placeholder="Nama lengkap" required minLength={2} />
             </div>
             <div>
               <label style={labelStyle} htmlFor="u-email">EMAIL</label>
-              <input id="u-email" type="email" style={inputStyle} value={email}
+              <input id="u-email" name="ngid-acc-email" type="email" autoComplete="off" style={inputStyle} value={email}
                 onChange={e => setEmail(e.target.value)} placeholder="nama@ngitungid.com" required />
             </div>
             <div>
               <label style={labelStyle} htmlFor="u-pass">PASSWORD (min 8 karakter)</label>
-              <input id="u-pass" type="password" style={inputStyle} value={password}
+              <input id="u-pass" name="ngid-acc-password" type="password" autoComplete="new-password" style={inputStyle} value={password}
                 onChange={e => setPassword(e.target.value)} placeholder="••••••••" required minLength={8} />
             </div>
             <div>
