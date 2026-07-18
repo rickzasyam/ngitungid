@@ -46,11 +46,11 @@ describe('ROLE_LABEL', () => {
 })
 
 describe('CREATABLE_ROLES', () => {
-  // Akun 'user' (klien) terikat ke clientId & alurnya beda — tidak dibuat
-  // lewat form "Buat Akun" milik Owner.
-  it('hanya akunting & owner yang bisa dibuat dari UI', () => {
-    expect(CREATABLE_ROLES).toEqual(['akunting', 'owner'])
-    expect(CREATABLE_ROLES).not.toContain('user')
+  // Ketiganya bisa dibuat lewat form "Buat Akun" milik Owner. 'user' (klien)
+  // ditambahkan 2026-07-19 — validasinya beda (WAJIB clientId), ditegakkan di
+  // resolveNewAccountClientId, bukan di daftar ini.
+  it('mencakup akunting, owner, dan user', () => {
+    expect(CREATABLE_ROLES).toEqual(['akunting', 'owner', 'user'])
   })
 })
 

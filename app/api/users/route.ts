@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
-import { asc } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
-import { users } from '@/lib/db/schema'
+import { users, clients } from '@/lib/db/schema'
 import { requireOwner } from '@/lib/api/guards'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 import { CREATABLE_ROLES, type Role } from '@/lib/roles'
+import { resolveNewAccountClientId } from '@/lib/api/account'
 
 export const runtime = 'nodejs'
 
@@ -38,14 +39,15 @@ export async function GET() {
   return NextResponse.json({ users: rows })
 }
 
-// POST /api/users — OWNER ONLY. Buat akun staf baru (akunting / owner).
-// Sengaja TIDAK ada halaman register publik: ini internal tool, akun
-// di-provisioning oleh Owner.
+// POST /api/users — OWNER ONLY. Buat akun baru: staf (akunting/owner) ATAU
+// klien (user). Sengaja TIDAK ada halaman register publik: ini internal tool,
+// semua akun di-provisioning oleh Owner. Akun 'user' WAJIB terikat satu klien
+// (clientId tervalidasi); akun staf DIPAKSA clientId null.
 export async function POST(req: Request) {
   const g = await requireOwner()
   if ('error' in g) return g.error
 
-  let body: { name?: unknown; email?: unknown; password?: unknown; role?: unknown }
+  let body: { name?: unknown; email?: unknown; password?: unknown; role?: unknown; clientId?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -62,23 +64,32 @@ export async function POST(req: Request) {
   if (name.length < 2) return bad('Nama minimal 2 karakter.')
   if (!EMAIL_RE.test(email)) return bad('Format email tidak valid.')
   if (password.length < MIN_PASSWORD) return bad(`Password minimal ${MIN_PASSWORD} karakter.`)
-  // Role 'user' (klien) TIDAK dibuat dari sini — ia harus terikat clientId dan
-  // alurnya beda; membiarkannya lolos akan menghasilkan akun klien tanpa klien.
   if (!CREATABLE_ROLES.includes(role)) {
     return bad(`Role harus salah satu dari: ${CREATABLE_ROLES.join(', ')}.`)
   }
+
+  // clientId ASIMETRIS: WAJIB & tervalidasi-exist untuk 'user', DIPAKSA null
+  // untuk staf (body.clientId diabaikan). Cek exist di DB, bukan percaya id
+  // dari client. Lihat lib/api/account.ts.
+  const resolution = await resolveNewAccountClientId(role, body.clientId, async id => {
+    const [c] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, id)).limit(1)
+    return !!c
+  })
+  if (!resolution.ok) return bad(resolution.error)
+  const clientId = resolution.clientId
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST)
 
   try {
     const [created] = await db
       .insert(users)
-      .values({ email, passwordHash, name, role, clientId: null })
+      .values({ email, passwordHash, name, role, clientId })
       .returning({
         id: users.id,
         email: users.email,
         name: users.name,
         role: users.role,
+        clientId: users.clientId,
         createdAt: users.createdAt,
       })
     // Hash TIDAK pernah ikut di response.

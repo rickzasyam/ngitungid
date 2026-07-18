@@ -31,8 +31,14 @@ export const ROLE_LABEL: Record<Role, string> = {
   user: 'Klien',
 }
 
-/** Role yang boleh dibuat lewat UI "Buat Akun" oleh Owner. */
-export const CREATABLE_ROLES: Role[] = ['akunting', 'owner']
+/**
+ * Role yang boleh dibuat lewat UI "Buat Akun" (Kelola Akun) oleh Owner.
+ * 'user' (klien) TERMASUK, tapi validasinya berbeda: akun user WAJIB terikat
+ * satu `clientId` yang valid, sedangkan staf (akunting/owner) justru DIPAKSA
+ * `clientId` null — lihat `resolveNewAccountClientId` di lib/api/account.ts.
+ * Urutan array = urutan tampil di dropdown Role.
+ */
+export const CREATABLE_ROLES: Role[] = ['akunting', 'owner', 'user']
 
 /**
  * Boleh-kah pengguna dengan `role` ini melihat DATA milik `targetClientId`?

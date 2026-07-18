@@ -831,15 +831,23 @@ type TeamUser = {
 }
 
 function UsersTab() {
+  // Daftar klien untuk selector akun 'user' — pakai list yang sudah di-fetch
+  // client-context (dipakai sidebar/admin-overview), jangan fetch baru.
+  const { clients } = useClient()
   const [list, setList] = useState<TeamUser[]>([])
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('akunting')
+  const [clientId, setClientId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
+
+  // Nama klien untuk kolom "Klien" di tabel Akun Tim (baris role user).
+  const clientNameById = (id: string | null) =>
+    id ? clients.find(c => c.id === id)?.name ?? '—' : '—'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -866,12 +874,14 @@ function UsersTab() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role }),
+        // clientId hanya dikirim untuk role user; staf tidak pernah kirim
+        // (backend juga memaksanya null kalau ada).
+        body: JSON.stringify({ name, email, password, role, clientId: role === 'user' ? clientId : undefined }),
       })
       const payload = (await res.json().catch(() => null)) as { error?: string; user?: TeamUser } | null
       if (!res.ok) throw new Error(payload?.error ?? 'Gagal membuat akun.')
       setOkMsg(`Akun "${payload?.user?.email}" (${ROLE_LABEL[role]}) berhasil dibuat.`)
-      setName(''); setEmail(''); setPassword(''); setRole('akunting')
+      setName(''); setEmail(''); setPassword(''); setRole('akunting'); setClientId('')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal membuat akun.')
@@ -925,9 +935,36 @@ function UsersTab() {
             </div>
           </div>
 
+          {/* Client selector — HANYA untuk role user (klien), wajib. Data dari
+              client-context (bukan fetch baru). */}
+          {role === 'user' && (
+            <div>
+              <label style={labelStyle} htmlFor="u-client">KLIEN (akun ini terikat ke satu klien)</label>
+              {clients.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#b45309' }}>
+                  Belum ada klien. Buat klien dulu di Admin Overview sebelum membuat akun Klien.
+                </p>
+              ) : (
+                <select
+                  id="u-client"
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                  value={clientId}
+                  onChange={e => setClientId(e.target.value)}
+                  required
+                >
+                  <option value="">Pilih klien…</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
           <p style={{ fontSize: 11, color: '#9ca3af' }}>
             <strong style={{ color: '#6b7280' }}>Akunting</strong> — upload, review, mapping, kelola klien, lihat semua klien.{' '}
-            <strong style={{ color: '#6b7280' }}>Owner</strong> — semua itu, plus membuat akun & assign akunting ke klien.
+            <strong style={{ color: '#6b7280' }}>Owner</strong> — semua itu, plus membuat akun & assign akunting ke klien.{' '}
+            <strong style={{ color: '#6b7280' }}>Klien</strong> — akses read-only terikat ke satu klien: Dashboard, Analytics, Laporan (monitoring), Settings (General + Master COA, read-only).
           </p>
 
           {error && (
@@ -973,6 +1010,7 @@ function UsersTab() {
                   <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Nama</th>
                   <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Email</th>
                   <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Role</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Klien</th>
                 </tr>
               </thead>
               <tbody>
@@ -991,6 +1029,9 @@ function UsersTab() {
                       >
                         {ROLE_LABEL[u.role]}
                       </span>
+                    </td>
+                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: '#6b7280' }}>
+                      {u.role === 'user' ? clientNameById(u.clientId) : '—'}
                     </td>
                   </tr>
                 ))}
