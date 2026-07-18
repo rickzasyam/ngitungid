@@ -4,22 +4,36 @@ import type { Role } from './roles'
 
 const STAFF_ROLES: Role[] = ['owner', 'akunting']
 
+// Halaman yang BOLEH dibuka role 'user' (klien) — read-only.
+const USER_ALLOWED = ['/dashboard', '/analytics', '/laporan', '/settings']
+
 describe('isPathAllowedForRole — role user (klien) read-only', () => {
-  it('boleh Dashboard & Analytics (surface klien)', () => {
-    expect(isPathAllowedForRole('user', '/dashboard')).toBe(true)
-    expect(isPathAllowedForRole('user', '/analytics')).toBe(true)
+  it('boleh Dashboard, Analytics, Laporan, Settings', () => {
+    for (const p of USER_ALLOWED) {
+      expect(isPathAllowedForRole('user', p)).toBe(true)
+    }
   })
 
-  it('DITOLAK dari tiap surface kerja staf', () => {
+  it('boleh sub-path Laporan & Settings (mis. /settings/general, /laporan/x)', () => {
+    expect(isPathAllowedForRole('user', '/settings/general')).toBe(true)
+    expect(isPathAllowedForRole('user', '/laporan/detail')).toBe(true)
+  })
+
+  it('DITOLAK dari tiap surface kerja staf (upload/coa-mapping/extraction-review/admin-overview)', () => {
     for (const p of STAFF_ONLY_PREFIXES) {
       expect(isPathAllowedForRole('user', p)).toBe(false)
     }
   })
 
-  it('DITOLAK dari sub-path surface staf (mis. /coa-mapping/abc, /settings/x)', () => {
+  it('DITOLAK dari sub-path surface staf (mis. /coa-mapping/abc, /upload/step-2)', () => {
     expect(isPathAllowedForRole('user', '/coa-mapping/123')).toBe(false)
-    expect(isPathAllowedForRole('user', '/settings/general')).toBe(false)
     expect(isPathAllowedForRole('user', '/upload/step-2')).toBe(false)
+    expect(isPathAllowedForRole('user', '/extraction-review/x')).toBe(false)
+  })
+
+  it('/laporan & /settings SUDAH TIDAK di daftar blokir (perubahan requirement)', () => {
+    expect((STAFF_ONLY_PREFIXES as readonly string[]).includes('/laporan')).toBe(false)
+    expect((STAFF_ONLY_PREFIXES as readonly string[]).includes('/settings')).toBe(false)
   })
 
   it('prefix match tidak bocor ke path yang cuma berawalan huruf sama', () => {
@@ -37,9 +51,10 @@ describe('isPathAllowedForRole — staf tidak pernah ter-block (anti regresi rol
     }
   })
 
-  it.each(STAFF_ROLES)('%s boleh Dashboard & Analytics juga', (role) => {
-    expect(isPathAllowedForRole(role, '/dashboard')).toBe(true)
-    expect(isPathAllowedForRole(role, '/analytics')).toBe(true)
+  it.each(STAFF_ROLES)('%s boleh Dashboard/Analytics/Laporan/Settings juga', (role) => {
+    for (const p of USER_ALLOWED) {
+      expect(isPathAllowedForRole(role, p)).toBe(true)
+    }
   })
 })
 

@@ -3,21 +3,22 @@
 // jalan SEBELUM render) dan filter menu sidebar — satu sumber kebenaran, dan
 // bisa diuji tanpa NextAuth/DB (pola sama dengan lib/roles.ts & retry-policy.ts).
 //
-// Spek role: 'user' (klien) = read-only, HANYA Dashboard + Analytics. Tidak
-// melihat proses upload/ekstraksi/mapping maupun Settings. owner & akunting =
-// staf internal, akses penuh.
+// Spek role: 'user' (klien) = read-only. Boleh Dashboard, Analytics, Laporan
+// (monitoring bulan mana yang sudah/belum di-upload), dan Settings terbatas
+// (General + Master COA, read-only). TIDAK boleh proses kerja: upload, COA
+// mapping, extraction review, admin overview. owner & akunting = staf, penuh.
 
 import type { Role } from '@/lib/roles'
 
-// Prefix surface kerja staf. 'user' diblok dari sini (dan turunannya, mis.
-// /coa-mapping/abc). /extraction-review & /admin-overview ikut walau tak punya
-// item nav 1:1 — keduanya bagian alur kerja staf, bukan read-only klien.
+// Prefix surface KERJA staf yang tetap terkunci untuk 'user' (dan turunannya,
+// mis. /coa-mapping/abc). /extraction-review & /admin-overview ikut walau tak
+// punya item nav 1:1 — keduanya alur kerja staf. Catatan: /laporan & /settings
+// SENGAJA TIDAK di sini — user boleh membukanya (read-only; kontrol tulis
+// disembunyikan di komponen & ditegakkan requireAkunting/Owner di API).
 export const STAFF_ONLY_PREFIXES = [
   '/upload',
-  '/laporan',
   '/coa-mapping',
   '/extraction-review',
-  '/settings',
   '/admin-overview',
 ] as const
 

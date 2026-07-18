@@ -11,9 +11,10 @@ import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import Link from 'next/link'
 import {
   FileText, CheckCircle2, Clock, AlertCircle, Loader2, Trash2, RefreshCw,
-  CalendarCog, X, Check, Inbox, RotateCw, Upload as UploadIcon,
+  CalendarCog, X, Check, Inbox, RotateCw, Upload as UploadIcon, Eye,
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
+import { useClient } from '@/lib/client-context'
 import { DateRangePicker } from '@/components/date-range-picker'
 import type { RetryState } from '@/lib/reports/retry-policy'
 
@@ -27,6 +28,8 @@ type ReportMeta = {
   status: 'uploaded' | 'extracting' | 'review' | 'mapped' | 'confirmed'
   lineCount: number
   mappedCount: number
+  /** Ada PDF sumber tersimpan? Menentukan tombol Preview inline muncul. */
+  hasPdf: boolean
   /** Dihitung server (lib/reports/retry-policy) — jangan hitung ulang di sini. */
   retry: RetryState
 }
@@ -98,8 +101,72 @@ function MapProgress({ mapped, total }: { mapped: number; total: number }) {
   )
 }
 
+// Slide-over preview PDF inline (semua role) — iframe ke GET /api/reports/[id]/pdf
+// (browser render PDF native, tanpa library). Tutup dengan Esc / tombol / klik
+// backdrop. Pola konsisten dgn modal client-manage: fixed inset-0 z-[60],
+// role="dialog" aria-modal, animate-* yang punya fallback reduced-motion.
+function PdfPreview({ report, onClose }: { report: ReportMeta; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    closeRef.current?.focus()
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex justify-end animate-fade-in"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Preview ${TYPE_LABEL[report.reportType]} — ${report.sourceFileName}`}
+        onClick={e => e.stopPropagation()}
+        className="h-full flex flex-col animate-slide-in-right"
+        style={{
+          width: 'min(680px, 94vw)', background: 'white',
+          borderTopLeftRadius: 24, borderBottomLeftRadius: 24,
+          boxShadow: '-8px 0 40px rgba(0,0,0,0.22)', overflow: 'hidden',
+        }}
+      >
+        <div className="flex items-center justify-between gap-3 flex-shrink-0" style={{ padding: '15px 20px', borderBottom: '1px solid #f0f0f0' }}>
+          <div className="min-w-0 flex items-center gap-2.5">
+            <div className="flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, borderRadius: 9, background: TYPE_ACCENT[report.reportType] + '22' }}>
+              <FileText className="w-4 h-4" style={{ color: '#1f2430' }} />
+            </div>
+            <div className="min-w-0">
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1f2430' }}>{TYPE_LABEL[report.reportType]}</div>
+              <div className="truncate" style={{ fontSize: 11.5, color: '#9ca3af', maxWidth: 440 }} title={report.sourceFileName}>{report.sourceFileName}</div>
+            </div>
+          </div>
+          <button
+            ref={closeRef}
+            onClick={onClose}
+            aria-label="Tutup preview"
+            className="inline-flex items-center justify-center rounded-full flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+            style={{ width: 34, height: 34, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' }}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0" style={{ background: '#525659' }}>
+          <iframe
+            src={`/api/reports/${report.id}/pdf`}
+            title={`PDF ${TYPE_LABEL[report.reportType]} — ${report.sourceFileName}`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LaporanPage() {
   const { activeClient, isLoaded } = useRequireClient()
+  const { isStaff } = useClient()
   const clientId = activeClient?.id ?? null
 
   const [reports, setReports] = useState<ReportMeta[]>([])
@@ -110,6 +177,8 @@ export default function LaporanPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [editPeriodKey, setEditPeriodKey] = useState<string | null>(null)
+  // PDF preview inline (semua role). null = tertutup.
+  const [previewReport, setPreviewReport] = useState<ReportMeta | null>(null)
   const [editRange, setEditRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>(undefined)
 
   const fileRef = useRef<HTMLInputElement>(null)
@@ -280,7 +349,9 @@ export default function LaporanPage() {
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f2430', margin: 0 }}>Laporan</h1>
             <p style={{ fontSize: 12.5, color: '#6b7280', margin: '2px 0 0' }}>
-              {activeClient.name} · Kelola laporan yang sudah masuk — ganti file, ubah periode, atau hapus
+              {isStaff
+                ? `${activeClient.name} · Kelola laporan yang sudah masuk — ganti file, ubah periode, atau hapus`
+                : `${activeClient.name} · Pantau laporan yang sudah masuk & status ekstraksinya`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -292,13 +363,16 @@ export default function LaporanPage() {
             >
               <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Muat ulang
             </button>
-            <Link
-              href="/upload"
-              className="inline-flex items-center gap-2 rounded-full font-semibold"
-              style={{ padding: '8px 16px', fontSize: 12.5, background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
-            >
-              <UploadIcon className="w-3.5 h-3.5" /> Upload Baru
-            </Link>
+            {/* Upload = aksi tulis, hanya staf. User (klien) read-only. */}
+            {isStaff && (
+              <Link
+                href="/upload"
+                className="inline-flex items-center gap-2 rounded-full font-semibold"
+                style={{ padding: '8px 16px', fontSize: 12.5, background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
+              >
+                <UploadIcon className="w-3.5 h-3.5" /> Upload Baru
+              </Link>
+            )}
           </div>
         </div>
 
@@ -320,15 +394,19 @@ export default function LaporanPage() {
                 </div>
                 <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Belum ada laporan</p>
                 <p className="text-xs mb-4" style={{ color: '#6b7280' }}>
-                  Belum ada laporan ter-upload untuk {activeClient.name}. Mulai dengan meng-upload Laba Rugi, Neraca, atau Arus Kas.
+                  {isStaff
+                    ? `Belum ada laporan ter-upload untuk ${activeClient.name}. Mulai dengan meng-upload Laba Rugi, Neraca, atau Arus Kas.`
+                    : `Belum ada laporan ter-upload untuk ${activeClient.name}. Laporan akan muncul di sini setelah tim akunting mengunggahnya.`}
                 </p>
-                <Link
-                  href="/upload"
-                  className="inline-flex items-center gap-2 rounded-full font-semibold"
-                  style={{ padding: '8px 16px', fontSize: 12.5, background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
-                >
-                  <UploadIcon className="w-3.5 h-3.5" /> Upload Laporan
-                </Link>
+                {isStaff && (
+                  <Link
+                    href="/upload"
+                    className="inline-flex items-center gap-2 rounded-full font-semibold"
+                    style={{ padding: '8px 16px', fontSize: 12.5, background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
+                  >
+                    <UploadIcon className="w-3.5 h-3.5" /> Upload Laporan
+                  </Link>
+                )}
               </div>
             </div>
           ) : (
@@ -367,7 +445,7 @@ export default function LaporanPage() {
                           </div>
                         </div>
                       </div>
-                      {!isEditing && (
+                      {!isEditing && isStaff && (
                         <button
                           disabled={busy !== null}
                           onClick={() => {
@@ -459,9 +537,21 @@ export default function LaporanPage() {
                                   <td style={td}><StatusBadge status={r.status} retry={r.retry} /></td>
                                   <td style={{ ...td, textAlign: 'right' }}>
                                     <div className="inline-flex items-center gap-2">
-                                      {/* Hanya muncul kalau server bilang laporan ini memang
-                                          bisa di-retry (macet / gagal ekstraksi & PDF-nya ada). */}
-                                      {r.retry === 'retriable' && (
+                                      {/* Preview PDF inline — SEMUA role (perbaikan UX umum),
+                                          hanya kalau PDF sumbernya memang tersimpan. */}
+                                      {r.hasPdf && (
+                                        <button
+                                          aria-label={`Preview ${TYPE_LABEL[r.reportType]}`}
+                                          title="Lihat PDF laporan (preview inline)"
+                                          onClick={() => { setPreviewReport(r); setActionError(null) }}
+                                          className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                          style={{ ...ghostBtn(false), color: '#374151' }}
+                                        >
+                                          <Eye className="w-3.5 h-3.5" /> Preview
+                                        </button>
+                                      )}
+                                      {/* Aksi TULIS (retry/ganti/hapus) — hanya staf. User read-only. */}
+                                      {isStaff && r.retry === 'retriable' && (
                                         <button
                                           aria-label={`Coba lagi ekstraksi ${TYPE_LABEL[r.reportType]}`}
                                           title="Ekstrak ulang dari PDF yang sudah tersimpan (tanpa upload lagi)"
@@ -475,24 +565,28 @@ export default function LaporanPage() {
                                           {retrying ? 'Mengekstrak…' : 'Coba lagi'}
                                         </button>
                                       )}
-                                      <button
-                                        aria-label={`Ganti file ${TYPE_LABEL[r.reportType]}`}
-                                        title="Ganti file (re-upload PDF → ekstraksi ulang)"
-                                        disabled={busy !== null}
-                                        onClick={() => { replacingRef.current = r; setActionError(null); fileRef.current?.click() }}
-                                        style={{ ...ghostBtn(busy !== null), color: '#374151' }}
-                                      >
-                                        <RefreshCw className="w-3.5 h-3.5" /> Ganti
-                                      </button>
-                                      <button
-                                        aria-label={`Hapus laporan ${TYPE_LABEL[r.reportType]}`}
-                                        title="Hapus laporan"
-                                        disabled={busy !== null}
-                                        onClick={() => { setConfirmDeleteId(r.id); setActionError(null) }}
-                                        style={{ ...ghostBtn(busy !== null), color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)' }}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" /> Hapus
-                                      </button>
+                                      {isStaff && (
+                                        <>
+                                          <button
+                                            aria-label={`Ganti file ${TYPE_LABEL[r.reportType]}`}
+                                            title="Ganti file (re-upload PDF → ekstraksi ulang)"
+                                            disabled={busy !== null}
+                                            onClick={() => { replacingRef.current = r; setActionError(null); fileRef.current?.click() }}
+                                            style={{ ...ghostBtn(busy !== null), color: '#374151' }}
+                                          >
+                                            <RefreshCw className="w-3.5 h-3.5" /> Ganti
+                                          </button>
+                                          <button
+                                            aria-label={`Hapus laporan ${TYPE_LABEL[r.reportType]}`}
+                                            title="Hapus laporan"
+                                            disabled={busy !== null}
+                                            onClick={() => { setConfirmDeleteId(r.id); setActionError(null) }}
+                                            style={{ ...ghostBtn(busy !== null), color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)' }}
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" /> Hapus
+                                          </button>
+                                        </>
+                                      )}
                                     </div>
                                   </td>
                                 </tr>
@@ -541,6 +635,10 @@ export default function LaporanPage() {
           )}
         </main>
       </div>
+
+      {previewReport && (
+        <PdfPreview report={previewReport} onClose={() => setPreviewReport(null)} />
+      )}
     </div>
   )
 }

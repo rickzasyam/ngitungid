@@ -283,47 +283,45 @@ function NoClientState() {
 
 // ── Tab: General (platform-level, tidak scoped) ──────────────
 
-function GeneralTab() {
+// readOnly (role user/klien): kontrol dirender sebagai chip nilai statis, bukan
+// SegButtons aktif — spek: user melihat General read-only, tanpa form input.
+function GeneralTab({ readOnly = false }: { readOnly?: boolean }) {
   const [language, setLanguage] = useState<'id' | 'en'>('id')
   const [currencyFormat, setCurrencyFormat] = useState<'id' | 'intl'>('id')
   const [timezone, setTimezone] = useState<'wib' | 'wita' | 'wit'>('wib')
+
+  const seg = <T extends string>(
+    label: string,
+    options: { value: T; label: string }[],
+    value: T,
+    onChange: (v: T) => void
+  ): React.ReactNode =>
+    readOnly ? (
+      <span
+        className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium flex-shrink-0"
+        style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
+      >
+        {options.find(o => o.value === value)?.label ?? '—'}
+      </span>
+    ) : (
+      <SegButtons label={label} options={options} value={value} onChange={onChange} />
+    )
 
   const rows: { label: string; desc: string; control: React.ReactNode }[] = [
     {
       label: 'Language',
       desc: 'Bahasa antarmuka platform',
-      control: (
-        <SegButtons
-          label="Language"
-          options={[{ value: 'id' as const, label: 'Bahasa Indonesia' }, { value: 'en' as const, label: 'English' }]}
-          value={language}
-          onChange={setLanguage}
-        />
-      ),
+      control: seg('Language', [{ value: 'id' as const, label: 'Bahasa Indonesia' }, { value: 'en' as const, label: 'English' }], language, setLanguage),
     },
     {
       label: 'Currency Format',
       desc: 'Format penulisan nominal di seluruh laporan',
-      control: (
-        <SegButtons
-          label="Currency Format"
-          options={[{ value: 'id' as const, label: 'Rp 1.234.567' }, { value: 'intl' as const, label: 'IDR 1,234,567' }]}
-          value={currencyFormat}
-          onChange={setCurrencyFormat}
-        />
-      ),
+      control: seg('Currency Format', [{ value: 'id' as const, label: 'Rp 1.234.567' }, { value: 'intl' as const, label: 'IDR 1,234,567' }], currencyFormat, setCurrencyFormat),
     },
     {
       label: 'Timezone',
       desc: 'Acuan tanggal upload & periode laporan',
-      control: (
-        <SegButtons
-          label="Timezone"
-          options={[{ value: 'wib' as const, label: 'WIB' }, { value: 'wita' as const, label: 'WITA' }, { value: 'wit' as const, label: 'WIT' }]}
-          value={timezone}
-          onChange={setTimezone}
-        />
-      ),
+      control: seg('Timezone', [{ value: 'wib' as const, label: 'WIB' }, { value: 'wita' as const, label: 'WITA' }, { value: 'wit' as const, label: 'WIT' }], timezone, setTimezone),
     },
   ]
 
@@ -333,7 +331,7 @@ function GeneralTab() {
         Icon={Globe}
         accent="linear-gradient(135deg, #daf163 0%, #c8e000 100%)"
         title="Preferensi Platform"
-        subtitle="Berlaku global untuk seluruh platform, bukan per-klien"
+        subtitle={readOnly ? 'Preferensi global platform (tampilan saja)' : 'Berlaku global untuk seluruh platform, bukan per-klien'}
       />
       <div className="mt-4">
         {rows.map((row, i) => (
@@ -356,7 +354,9 @@ function GeneralTab() {
 
 // ── Tab: Master COA (scoped ke klien aktif) ──────────────────
 
-function MasterCoaTab({ clientId }: { clientId: string }) {
+// readOnly (role user/klien): sembunyikan import/ganti Excel (tulis = requireAkunting
+// di API), tabel struktur tetap tampil. Preview struktur = read-only untuk semua.
+function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOnly?: boolean }) {
   const [data, setData] = useState<CoaData | null>(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -419,17 +419,19 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
 
   return (
     <SettingsCard>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={e => {
-          const file = e.target.files?.[0]
-          if (file) handleFile(file)
-          e.target.value = ''
-        }}
-      />
+      {!readOnly && (
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0]
+            if (file) handleFile(file)
+            e.target.value = ''
+          }}
+        />
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1 min-w-0">
@@ -469,41 +471,45 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 mt-4">
-        {hasCoa && (
-          <button
-            type="button"
-            onClick={() => setShowPreview(!showPreview)}
-            aria-expanded={showPreview}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors duration-150 hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-            style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            Struktur
-            {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-200 enabled:hover:-translate-y-px enabled:hover:shadow-[0_4px_14px_rgba(218,241,99,0.4)] disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
-          style={{ background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
-        >
-          {uploading ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Mengupload…
-            </>
-          ) : (
-            <>
-              <Upload className="w-3.5 h-3.5" />
-              {hasCoa ? 'Ganti Excel' : 'Upload Master COA'}
-            </>
+      {/* Actions — Struktur (read-only, semua role) + Upload/Ganti (staf saja) */}
+      {(hasCoa || !readOnly) && (
+        <div className="flex items-center gap-2 mt-4">
+          {hasCoa && (
+            <button
+              type="button"
+              onClick={() => setShowPreview(!showPreview)}
+              aria-expanded={showPreview}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors duration-150 hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Struktur
+              {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
           )}
-        </button>
-      </div>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-200 enabled:hover:-translate-y-px enabled:hover:shadow-[0_4px_14px_rgba(218,241,99,0.4)] disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+              style={{ background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Mengupload…
+                </>
+              ) : (
+                <>
+                  <Upload className="w-3.5 h-3.5" />
+                  {hasCoa ? 'Ganti Excel' : 'Upload Master COA'}
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Error banner */}
       {error && (
@@ -534,8 +540,14 @@ function MasterCoaTab({ clientId }: { clientId: string }) {
           style={{ border: '2px dashed #fde68a', background: 'linear-gradient(135deg, #fffdf0 0%, #fefce8 100%)' }}
         >
           <p className="text-xs" style={{ color: '#92400e' }}>
-            Upload file Excel berisi kolom: <strong>Kode, Nama Akun, Posisi, Kelompok, Sub Kelompok, Class CF</strong>.
-            Tanpa Master COA, hasil ekstraksi klien ini tidak bisa dipetakan.
+            {readOnly ? (
+              'Master COA untuk klien ini belum disiapkan tim akunting. Struktur akun akan tampil di sini setelah diunggah.'
+            ) : (
+              <>
+                Upload file Excel berisi kolom: <strong>Kode, Nama Akun, Posisi, Kelompok, Sub Kelompok, Class CF</strong>.
+                Tanpa Master COA, hasil ekstraksi klien ini tidak bisa dipetakan.
+              </>
+            )}
           </p>
         </div>
       )}
@@ -994,13 +1006,19 @@ function UsersTab() {
 export default function SettingsPage() {
   // Tidak pakai useRequireClient: tab General bersifat platform-level dan harus
   // tetap bisa diakses tanpa klien aktif — tab scoped punya empty state sendiri.
-  const { activeClient, isOwner } = useClient()
+  const { activeClient, isOwner, isStaff } = useClient()
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
   // Visibility metrik sekarang dimiliki AnalyticsDisplayTab (persisted ke
   // client_metric_visibility), bukan lagi state lokal di page ini.
 
-  const navItems = NAV_ITEMS.filter(n => !n.ownerOnly || isOwner)
+  // Role 'user' (klien): HANYA General + Master COA (keduanya read-only). Tab
+  // Analytics Display/Kelola Akun/Account/Notifications disembunyikan total —
+  // bukan di-disable. Staf: semua kecuali ownerOnly untuk akunting.
+  const USER_TABS: TabId[] = ['general', 'coa']
+  const navItems = NAV_ITEMS.filter(n =>
+    isStaff ? !n.ownerOnly || isOwner : USER_TABS.includes(n.id)
+  )
   const activeNav = navItems.find(n => n.id === activeTab) ?? navItems[0]
   const needsClient = activeNav.scoped && !activeClient
 
@@ -1081,12 +1099,12 @@ export default function SettingsPage() {
               {/* Empty state kalau tab scoped tapi belum ada klien */}
               {needsClient && <NoClientState />}
 
-              {activeNav.id === 'general' && <GeneralTab />}
+              {activeNav.id === 'general' && <GeneralTab readOnly={!isStaff} />}
 
               {activeNav.id === 'users' && isOwner && <UsersTab />}
 
               {activeTab === 'coa' && activeClient && (
-                <MasterCoaTab key={activeClient.id} clientId={activeClient.id} />
+                <MasterCoaTab key={activeClient.id} clientId={activeClient.id} readOnly={!isStaff} />
               )}
 
               {activeTab === 'analytics' && activeClient && (

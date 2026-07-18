@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clients, masterCoa, reportLineItems } from '@/lib/db/schema'
-import { requireAkunting } from '@/lib/api/guards'
+import { requireAkunting, requireUser } from '@/lib/api/guards'
+import { canAccessClientData } from '@/lib/roles'
 import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse, isFkViolation } from '@/lib/api/db-errors'
 
@@ -23,18 +24,22 @@ const coaColumns = {
   classCf: masterCoa.classCf,
 }
 
-// GET /api/clients/[id]/coa
-// Staf (owner/akunting), klien mana pun. Feeds badge status + preview struktur
-// di Settings dan dropdown COA di /coa-mapping — keduanya surface staf.
-// requireAkunting: role 'user' (klien) tidak punya akses (spek read-only —
-// hanya Dashboard + Analytics).
+// GET /api/clients/[id]/coa — READ Master COA. Dipakai Settings (tab Master COA,
+// read-only untuk user) & dropdown COA di /coa-mapping (staf). requireUser: role
+// 'user' (klien) boleh melihat COA KLIEN-NYA SENDIRI (scoping canAccessClientData
+// di bawah); staf boleh klien mana pun. IMPORT/tulis = POST di bawah, tetap
+// requireAkunting — jangan ikut kebuka.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAkunting()
+  const g = await requireUser()
   if ('error' in g) return g.error
 
   const { id } = await params
   if (!UUID_RE.test(id)) {
     return NextResponse.json({ error: 'ID klien tidak valid.' }, { status: 400 })
+  }
+  // Scoping ANTAR-klien: user hanya COA klien-nya sendiri; staf tak dibatasi.
+  if (!canAccessClientData(g.user.role, g.user.clientId, id)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const rows = await db

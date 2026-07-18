@@ -49,9 +49,11 @@ export async function GET(req: Request) {
 
   // `retry` dihitung di SERVER (bukan di browser) supaya ambang waktunya memakai
   // jam yang sama dengan route retry-extract — jam client bisa meleset.
-  const reports = rows.map(({ updatedAt, hasPdf, ...r }) => ({
+  // `hasPdf` ikut dikirim (bukan cuma dipakai retry) supaya UI Laporan tahu baris
+  // mana yang punya PDF untuk tombol Preview inline.
+  const reports = rows.map(({ updatedAt, ...r }) => ({
     ...r,
-    retry: retryState({ status: r.status, updatedAt, hasPdf }),
+    retry: retryState({ status: r.status, updatedAt, hasPdf: r.hasPdf }),
   }))
 
   return NextResponse.json({ reports })

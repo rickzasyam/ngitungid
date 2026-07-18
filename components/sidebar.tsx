@@ -142,18 +142,19 @@ export function Sidebar() {
     localStorage.setItem(STORAGE_KEY, String(next))
   }
 
-  // staffOnly: surface kerja staf. Role 'user' (klien) hanya melihat Dashboard +
-  // Analytics — pelengkap guard proxy (lib/route-access.ts), bukan pengganti:
-  // route protection tetap yang menegakkan akses, ini menjaga nav tidak
-  // menampilkan menu yang toh akan di-redirect.
+  // staffOnly: surface KERJA staf, disembunyikan dari role 'user' (klien) —
+  // pelengkap guard proxy (lib/route-access.ts), bukan pengganti: route
+  // protection tetap yang menegakkan akses. User (read-only) melihat Dashboard,
+  // Analytics, Laporan (monitoring) & Settings (General + Master COA read-only);
+  // Upload/COA Mapping/Operational tetap staffOnly.
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'upload', label: 'Upload', icon: Upload, staffOnly: true },
-    { id: 'laporan', label: 'Laporan', icon: Files, staffOnly: true },
+    { id: 'laporan', label: 'Laporan', icon: Files },
     { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined, staffOnly: true },
     { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
-    { id: 'settings', label: 'Settings', icon: Settings, staffOnly: true },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ].filter((item) => isStaff || !item.staffOnly)
 
   const storageUsed = activeClient ? (storageMap[activeClient.id] ?? 50) : 0
