@@ -1,10 +1,12 @@
 import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
+import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import type { Role } from '@/lib/roles'
+import { isPathAllowedForRole, USER_HOME } from '@/lib/route-access'
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/login-rate-limit-store'
 
 // IP klien best-effort untuk log/Sentry. Di Vercel x-forwarded-for berisi
@@ -84,9 +86,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.clientId = token.clientId as string | null
       return session
     },
-    // Dipakai proxy.ts (export { auth as proxy }) — tanpa ini, auth cuma
-    // menempel req.auth tanpa pernah redirect siapapun ke /login. Return
-    // false otomatis redirect ke pages.signIn dengan ?callbackUrl= terisi.
-    authorized: ({ auth }) => !!auth,
+    // Dipakai proxy.ts (export { auth as proxy }) — INI lapisan route protection
+    // yang jalan di middleware SEBELUM page render (tidak ada flash konten).
+    // next-auth memanggil callback ini di handleAuth dan menghormati Response
+    // yang dikembalikan (redirect) — lihat node_modules/next-auth/lib/index.js.
+    authorized: ({ request, auth }) => {
+      // Belum login → false: handleAuth otomatis redirect ke pages.signIn
+      // dengan ?callbackUrl= terisi (perilaku lama, tidak berubah).
+      if (!auth?.user) return false
+      // Role 'user' (klien) = read-only Dashboard + Analytics. Blokir akses ke
+      // surface kerja staf DI LAPISAN PROXY (bukan cuma sembunyikan menu di UI).
+      // owner & akunting selalu lolos.
+      if (!isPathAllowedForRole(auth.user.role as Role, request.nextUrl.pathname)) {
+        return NextResponse.redirect(new URL(USER_HOME, request.nextUrl))
+      }
+      return true
+    },
   },
 })

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clients, masterCoa, reportLineItems } from '@/lib/db/schema'
-import { requireAkunting, requireUser } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse, isFkViolation } from '@/lib/api/db-errors'
 
@@ -24,18 +24,17 @@ const coaColumns = {
 }
 
 // GET /api/clients/[id]/coa
-// Admin (klien mana pun) atau user pemilik klien tsb. Feeds badge status +
-// preview struktur di Settings.
+// Staf (owner/akunting), klien mana pun. Feeds badge status + preview struktur
+// di Settings dan dropdown COA di /coa-mapping — keduanya surface staf.
+// requireAkunting: role 'user' (klien) tidak punya akses (spek read-only —
+// hanya Dashboard + Analytics).
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireUser()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const { id } = await params
   if (!UUID_RE.test(id)) {
     return NextResponse.json({ error: 'ID klien tidak valid.' }, { status: 400 })
-  }
-  if (g.user.role === 'user' && g.user.clientId !== id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const rows = await db

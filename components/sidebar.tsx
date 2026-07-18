@@ -81,7 +81,10 @@ export function Sidebar() {
   }, [])
 
   useEffect(() => {
-    if (!activeClient) { setPendingMapping(0); return }
+    // Badge pendingMapping cuma relevan untuk staf (item "COA Mapping" hanya
+    // tampil ke staf). Role 'user' tidak perlu — jangan panggil /api/reports/list
+    // untuknya (selaras spek read-only Dashboard + Analytics).
+    if (!activeClient || !isStaff) { setPendingMapping(0); return }
     let alive = true
     fetch(`/api/reports/list?clientId=${activeClient.id}`)
       .then(r => (r.ok ? r.json() : { reports: [] }))
@@ -90,7 +93,7 @@ export function Sidebar() {
       })
       .catch(() => { if (alive) setPendingMapping(0) })
     return () => { alive = false }
-  }, [activeClient, pathname])
+  }, [activeClient, pathname, isStaff])
 
   // Slides the nav capsule to the active item. `snap` skips the transition
   // (first paint, and window resize where an animated chase would lag/jitter).
@@ -139,15 +142,19 @@ export function Sidebar() {
     localStorage.setItem(STORAGE_KEY, String(next))
   }
 
+  // staffOnly: surface kerja staf. Role 'user' (klien) hanya melihat Dashboard +
+  // Analytics — pelengkap guard proxy (lib/route-access.ts), bukan pengganti:
+  // route protection tetap yang menegakkan akses, ini menjaga nav tidak
+  // menampilkan menu yang toh akan di-redirect.
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
-    { id: 'upload', label: 'Upload', icon: Upload },
-    { id: 'laporan', label: 'Laporan', icon: Files },
-    { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined },
-    { id: 'operational', label: 'Operational', icon: Package, comingSoon: true },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ]
+    { id: 'upload', label: 'Upload', icon: Upload, staffOnly: true },
+    { id: 'laporan', label: 'Laporan', icon: Files, staffOnly: true },
+    { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined, staffOnly: true },
+    { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
+    { id: 'settings', label: 'Settings', icon: Settings, staffOnly: true },
+  ].filter((item) => isStaff || !item.staffOnly)
 
   const storageUsed = activeClient ? (storageMap[activeClient.id] ?? 50) : 0
   // Owner & akunting sama-sama boleh pindah klien (semua staf lihat semua klien).

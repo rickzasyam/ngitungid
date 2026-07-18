@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { financialReports, reportLineItems } from '@/lib/db/schema'
-import { requireUser } from '@/lib/api/guards'
+import { requireAkunting } from '@/lib/api/guards'
 
 export const runtime = 'nodejs'
 
@@ -11,9 +11,11 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
 
 // GET /api/reports?clientId=&periodStart=&periodEnd=
 // Laporan (per tipe) + line item-nya untuk satu "sesi" (klien + periode).
-// Feeds extraction-review. Role-aware: admin klien mana pun, user hanya miliknya.
+// Feeds extraction-review & /coa-mapping (surface staf). requireAkunting: role
+// 'user' (klien) tidak melihat proses ekstraksi/mapping (spek read-only —
+// hanya Dashboard + Analytics). Staf boleh klien mana pun.
 export async function GET(req: Request) {
-  const g = await requireUser()
+  const g = await requireAkunting()
   if ('error' in g) return g.error
 
   const url = new URL(req.url)
@@ -26,9 +28,6 @@ export async function GET(req: Request) {
   }
   if (!YMD_RE.test(periodStart) || !YMD_RE.test(periodEnd)) {
     return NextResponse.json({ error: 'Periode tidak valid.' }, { status: 400 })
-  }
-  if (g.user.role === 'user' && g.user.clientId !== clientId) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const reports = await db
