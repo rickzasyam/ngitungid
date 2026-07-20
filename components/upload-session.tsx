@@ -393,7 +393,10 @@ export function UploadSession({
                     <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
                       PDF · Max 25 MB
                     </p>
-                    <p className="text-[10px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                    {/* minHeight = 2 baris: deskripsi Laba Rugi memakan 2 baris,
+                        Neraca & Arus Kas cuma 1 — reservasi tinggi 2 baris bikin
+                        ketiga kartu sama tinggi tanpa ruang kosong menggantung. */}
+                    <p className="text-[10px] mt-1" style={{ color: 'var(--color-text-muted)', lineHeight: 1.4, minHeight: '2.8em' }}>
                       {report.description}
                     </p>
                   </div>

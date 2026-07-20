@@ -44,7 +44,7 @@ export function Sidebar() {
   // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
   // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
   // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
@@ -155,7 +155,11 @@ export function Sidebar() {
     { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined, staffOnly: true },
     { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
     { id: 'settings', label: 'Settings', icon: Settings },
-  ].filter((item) => isStaff || !item.staffOnly)
+    // Saat sesi masih 'loading', role belum ke-resolve (client-context default
+    // 'user') → isStaff sementara false. JANGAN sembunyikan menu staf di window
+    // itu, kalau tidak item seperti Upload "hilang" sekejap tiap halaman dibuka
+    // lalu muncul lagi. Setelah sesi resolved, filter normal berlaku.
+  ].filter((item) => status === 'loading' || isStaff || !item.staffOnly)
 
   const storageUsed = activeClient ? (storageMap[activeClient.id] ?? 50) : 0
   // Owner & akunting sama-sama boleh pindah klien (semua staf lihat semua klien).
