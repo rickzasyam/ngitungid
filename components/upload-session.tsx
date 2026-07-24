@@ -84,7 +84,7 @@ export function UploadSession({
   isProcessing: boolean
   setIsProcessing: (v: boolean) => void
 }) {
-  const { activeClient, role } = useClient()
+  const { activeClient } = useClient()
   const router = useRouter()
 
   const [processError, setProcessError] = useState<string | null>(null)

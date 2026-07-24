@@ -11,3 +11,8 @@ allowBuilds:
   msw: true
   protobufjs: false
   sharp: true
+  # unrs-resolver = native (napi) module resolver yang dipakai eslint-config-next
+  # (plugin import). Postinstall-nya melink binary native prebuilt untuk platform
+  # ini; tanpa itu ESLint/plugin import gagal load. Dep resmi dari config Next,
+  # jadi build-nya di-allow supaya `pnpm lint` jalan.
+  unrs-resolver: true

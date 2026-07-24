@@ -1,9 +1,8 @@
 name: CI
 
-# Type-check + build pada tiap push ke `main` dan tiap pull request.
-# CI hanya meng-COMPILE — tidak menyentuh DB/auth sungguhan (lihat env
-# placeholder di bawah). Belum ada step test; tempatnya sudah disiapkan
-# untuk vitest (sesi berikutnya).
+# Lint + type-check + test + build pada tiap push ke `main` dan tiap pull request.
+# CI hanya meng-COMPILE & menjalankan test lib MURNI (vitest, tanpa DB/jaringan) —
+# tidak menyentuh DB/auth sungguhan (lihat env placeholder di bawah).
 
 on:
   push:
@@ -59,6 +58,11 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
+
+      # ESLint (flat config, eslint.config.mjs). Sejajar typecheck: gaya kode &
+      # aturan react-hooks/next. `unrs-resolver` build di-allow di pnpm-workspace.
+      - name: Lint
+        run: pnpm lint
 
       # Vitest — hanya lib MURNI (tanpa DB/jaringan), jadi tidak butuh service
       # container maupun env tambahan. Sengaja SEBELUM build: lebih cepat gagal.

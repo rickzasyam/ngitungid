@@ -50,7 +50,7 @@ export function StatusSection({ active = false }: { active?: boolean }) {
 
       {/* Pipeline steps */}
       <div className="space-y-1">
-        {STEPS.map((label, index) => (
+        {STEPS.map((label) => (
           <div
             key={label}
             className="flex items-center gap-3 py-2.5 border-b last:border-0"

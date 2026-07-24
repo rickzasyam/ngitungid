@@ -46,7 +46,7 @@ function CombinedTooltip({ active, payload, label }: {
   )
 }
 
-export function RevenueTrendChart({ data, totalRevenue, monthsCount }: RevenueTrendChartProps) {
+export function RevenueTrendChart({ data }: RevenueTrendChartProps) {
   const chartData = data
     .filter(d => d.revenue !== null)
     .map(d => ({

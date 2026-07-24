@@ -387,7 +387,6 @@ export function MetricDrawer({
             {dim.metrics.map(mk => {
               const m = registry[mk]
               if (!m) return null
-              const mt = TONES[m.tone]
               return (
                 <button
                   key={mk}

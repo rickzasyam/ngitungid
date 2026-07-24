@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clientAssignments, clients, users } from '@/lib/db/schema'
 import { requireAkunting, requireOwner } from '@/lib/api/guards'

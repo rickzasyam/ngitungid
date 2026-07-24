@@ -27,11 +27,6 @@ const isSameDay = (a: Date, b: Date) =>
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate()
 
-const isInRange = (date: Date, from: Date, to: Date) => {
-  const d = date.getTime()
-  return d > from.getTime() && d < to.getTime()
-}
-
 const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate()
 
 const getFirstDayOfWeek = (year: number, month: number) => {

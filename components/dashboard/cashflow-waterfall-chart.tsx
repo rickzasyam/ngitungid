@@ -4,7 +4,6 @@ import {
   BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
-import { formatRupiahShort } from './dashboard-utils'
 import { ArrowLeftRight } from 'lucide-react'
 
 interface CashflowItem {
