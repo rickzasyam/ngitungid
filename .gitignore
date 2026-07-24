@@ -22,3 +22,7 @@ node_modules
 
 # TypeScript build cache — auto-generated
 tsconfig.tsbuildinfo
+
+# graphify knowledge-graph output — generated artifact (regenerable via /graphify),
+# bukan source code. Architecture.md (hasil analisis) tetap di-commit.
+graphify-out/
