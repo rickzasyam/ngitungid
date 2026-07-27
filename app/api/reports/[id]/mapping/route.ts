@@ -75,6 +75,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .select({
       id: reportLineItems.id,
       rawName: reportLineItems.rawName,
+      // amount ikut diambil karena isMappable() memakainya untuk mengenali
+      // baris kosong (placeholder + nominal 0).
+      amount: reportLineItems.amount,
       masterCoaId: reportLineItems.masterCoaId,
       isSubtotal: reportLineItems.isSubtotal,
       status: reportLineItems.status,

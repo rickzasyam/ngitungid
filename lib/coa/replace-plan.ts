@@ -198,7 +198,15 @@ export function buildReplacePlan(input: PlanInput): { plan: ReplacePlan; relinks
     const projected = (linesByReport.get(reportId) ?? []).map(l => {
       const newMaster = resolve(l.masterCoaId)
       const broke = l.masterCoaId !== null && newMaster === null
-      return { isSubtotal: l.isSubtotal, status: broke ? 'unmatched' : l.status, masterCoaId: newMaster }
+      // rawName & amount diteruskan apa adanya: replace COA tidak mengubah
+      // keduanya, tapi isMappable() memerlukannya untuk mengenali baris kosong.
+      return {
+        isSubtotal: l.isSubtotal,
+        status: broke ? 'unmatched' : l.status,
+        masterCoaId: newMaster,
+        rawName: l.rawName,
+        amount: l.amount,
+      }
     })
     const computed = statusAfterExtract(projected)
 

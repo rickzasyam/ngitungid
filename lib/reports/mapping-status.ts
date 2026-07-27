@@ -16,15 +16,58 @@ export interface MappableLine {
   /** Status baris ('matched' | 'unmatched' | 'edited' | 'rejected'). */
   status: string
   masterCoaId: string | null
+  rawName: string
+  /** numeric dari DB datang sebagai string; number dari sisi klien. */
+  amount: number | string
 }
 
-/** Baris yang memang WAJIB punya COA: bukan subtotal, dan tidak ditolak admin.
+/**
+ * Teks yang JELAS bukan nama akun, dicocokkan PERSIS (setelah trim +
+ * lowercase). Sengaja hanya berisi yang benar-benar teramati di data —
+ * "Tidak Ada Data" muncul di PDF Rasyuka dan dibaca Gemini dengan
+ * confidence 99 (prompt ekstraksi memang menyuruh menyalin teks apa
+ * adanya, jadi ini bukan kegagalan OCR).
+ *
+ * JANGAN diisi tebakan yang belum pernah terbukti muncul ("Nihil", "N/A",
+ * "-", dst): entri spekulatif hanya menambah peluang menyembunyikan akun
+ * yang sah. Tambahkan satu per satu saat kasus barunya benar-benar ketemu.
+ *
+ * JANGAN pula diganti heuristik (panjang nama, substring). Data dev punya
+ * akun sah bernama "OVO" (3 huruf, Rp1.718.442) dan "Emas" (4 huruf,
+ * Rp5.200.000) — heuristik panjang akan membuang keduanya.
+ */
+export const PLACEHOLDER_RAW_NAMES: readonly string[] = ['tidak ada data']
+
+export function isPlaceholderName(rawName: string): boolean {
+  return PLACEHOLDER_RAW_NAMES.includes(rawName.trim().toLowerCase())
+}
+
+/**
+ * Baris tanpa informasi apa pun: namanya placeholder DAN nominalnya 0.
+ *
+ * DUA syarat sekaligus, dan itu disengaja. Placeholder bernominal ≠ 0 tetap
+ * ditampilkan karena berarti ada ANGKA yang ikut masuk laporan tanpa nama
+ * yang jelas — itu kegagalan ekstraksi yang berdampak ke hasil hitungan dan
+ * justru harus terlihat, bukan disembunyikan. Sebaliknya, akun bernama jelas
+ * dengan saldo 0 juga tetap tampil: saldo nol itu sah.
+ */
+export function isEmptyRow(line: MappableLine): boolean {
+  return isPlaceholderName(line.rawName) && Number(line.amount) === 0
+}
+
+/** Baris yang memang WAJIB punya COA: bukan subtotal, tidak ditolak admin, dan
+ *  bukan baris kosong tanpa informasi.
  *  Subtotal (LABA KOTOR, TOTAL AKTIVA, …) adalah hasil hitung, bukan akun;
- *  baris rejected sengaja dibuang saat Extraction Review. Keduanya tidak pernah
- *  bisa dipetakan — kalau ikut dihitung, sisa unmatched tidak pernah nol dan
- *  status laporan tidak pernah berpindah ke 'mapped'. */
+ *  baris rejected sengaja dibuang saat Extraction Review; baris kosong (lihat
+ *  isEmptyRow) tidak mewakili apa pun. Ketiganya tidak pernah bisa dipetakan —
+ *  kalau ikut dihitung, sisa unmatched tidak pernah nol dan status laporan
+ *  tidak pernah berpindah ke 'mapped'.
+ *
+ *  CATATAN: kriteria ini punya kembaran dalam bentuk SQL di
+ *  GET /api/reports/list (kolom unmappedCount). Kalau aturan di sini berubah,
+ *  SQL di sana WAJIB ikut diperbarui — lihat komentar di route tersebut. */
 export function isMappable(line: MappableLine): boolean {
-  return !line.isSubtotal && line.status !== 'rejected'
+  return !line.isSubtotal && line.status !== 'rejected' && !isEmptyRow(line)
 }
 
 /** Wajib dipetakan TAPI belum punya COA. */

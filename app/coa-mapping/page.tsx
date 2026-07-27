@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRequireClient } from '@/lib/use-require-client'
+import { groupUnmappedByReportType, isUnreadableName } from '@/lib/reports/group-unmapped'
 import type { ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import {
@@ -32,6 +33,9 @@ type UnmappedItem = {
   amount: number
   confidence: number
   suggestedCOA?: COAOption
+  reportType: ApiReport['reportType']
+  /** Nama gagal terbaca TAPI ada nominalnya — ditandai, bukan disembunyikan. */
+  namaTakTerbaca: boolean
 }
 
 type AutoMatchedItem = {
@@ -73,6 +77,14 @@ const REPORT_TYPE_LABEL: Record<ApiReport['reportType'], string> = {
   laba_rugi: 'Laba Rugi',
   neraca: 'Neraca',
   arus_kas: 'Arus Kas',
+}
+
+// Warna aksen per jenis laporan — sama dengan yang dipakai halaman Laporan
+// supaya jenis yang sama dikenali lewat warna yang sama di seluruh app.
+const REPORT_TYPE_ACCENT: Record<ApiReport['reportType'], string> = {
+  laba_rugi: '#daf163',
+  neraca: '#7dd3fc',
+  arus_kas: '#bbb3f3',
 }
 
 // ============================================================
@@ -485,6 +497,19 @@ function MappingCard({
                 >
                   confidence {item.confidence}%
                 </span>
+                {/* Nama tak terbaca TAPI ada nominalnya — sengaja tidak
+                    disembunyikan: angkanya ikut masuk laporan, jadi kegagalan
+                    ekstraksi ini harus terlihat, bukan hilang diam-diam. */}
+                {item.namaTakTerbaca && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: '#fef2f2', color: '#b91c1c' }}
+                    title="Nama akun tidak terbaca dari PDF, tetapi baris ini punya nominal. Periksa dokumen aslinya sebelum memetakan."
+                  >
+                    <AlertTriangle className="w-2.5 h-2.5" />
+                    nama tak terbaca
+                  </span>
+                )}
               </div>
               <p className="text-sm font-semibold mt-1" style={{ color: '#6b7280' }}>
                 {formatRupiah(item.amount)}
@@ -836,23 +861,42 @@ export default function COAMappingPage() {
   )
   const coaGroups = useMemo(() => buildCoaGroups(accounts), [accounts])
 
+  // reportType ikut dibawa: flatMap dulu membuang asosiasi baris→laporan,
+  // padahal /api/reports sudah mengirimkannya. Dibutuhkan untuk mengelompokkan
+  // daftar "belum dipetakan" per jenis laporan.
   const allLines = useMemo(
-    () => reports.flatMap(r => r.lineItems).filter(l => !l.isSubtotal),
+    () =>
+      reports.flatMap(r => r.lineItems.map(l => ({ ...l, reportType: r.reportType }))).filter(l => !l.isSubtotal),
     [reports]
   )
 
+  // Penyaringan "masih perlu dipetakan" + pengelompokan per jenis laporan
+  // seluruhnya dari lib/reports/group-unmapped (yang sendirinya memakai
+  // isMappable) — halaman tidak boleh punya kriteria sendiri yang bisa
+  // menyimpang dari badge sidebar & statusAfterExtract.
+  const unmappedGroups = useMemo(() => {
+    const toItem = (l: (typeof allLines)[number]): UnmappedItem => ({
+      id: l.id,
+      rawName: l.rawName,
+      amount: l.amount,
+      confidence: l.confidence,
+      suggestedCOA: l.suggestedCoaId ? coaById.get(l.suggestedCoaId) : undefined,
+      reportType: l.reportType,
+      // Lolos filter TAPI namanya placeholder → berarti nominalnya ≠ 0.
+      // Angka ini ikut masuk laporan tanpa nama yang jelas, jadi ditandai.
+      namaTakTerbaca: isUnreadableName(l),
+    })
+    return groupUnmappedByReportType(allLines).map(g => ({
+      reportType: g.reportType as ApiReport['reportType'],
+      items: g.items.map(toItem),
+    }))
+  }, [allLines, coaById])
+
+  // Daftar rata — dipakai hitungan progres & payload simpan, yang tidak peduli
+  // pengelompokan. Diturunkan DARI grup supaya keduanya mustahil beda isi.
   const unmappedItems = useMemo<UnmappedItem[]>(
-    () =>
-      allLines
-        .filter(l => l.masterCoaId === null)
-        .map(l => ({
-          id: l.id,
-          rawName: l.rawName,
-          amount: l.amount,
-          confidence: l.confidence,
-          suggestedCOA: l.suggestedCoaId ? coaById.get(l.suggestedCoaId) : undefined,
-        })),
-    [allLines, coaById]
+    () => unmappedGroups.flatMap(g => g.items),
+    [unmappedGroups]
   )
 
   const autoMatchedItems = useMemo<AutoMatchedItem[]>(
@@ -1162,33 +1206,59 @@ export default function COAMappingPage() {
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-4" data-testid="unmapped-list">
-                      {unmappedItems.map((item, index) => (
-                        <div
-                          key={item.id}
-                          data-dropdown
-                          className="animate-slide-up relative"
-                          style={{
-                            animationDelay: `${index * 80}ms`,
-                            // animate-slide-up (fill-mode both) meninggalkan transform yang membuat
-                            // stacking context per-card — card dengan dropdown terbuka harus di atas
-                            // sibling berikutnya supaya panel dropdown tidak tertimpa.
-                            // Ini mengurus kartu-vs-kartu SAJA; kartu-vs-section
-                            // lain diurus z-index di wrapper section (lihat atas).
-                            zIndex: openDropdownId === item.id ? 30 : 0,
-                          }}
-                        >
-                          <MappingCard
-                            item={item}
-                            groups={coaGroups}
-                            mappedValue={mappings[item.id] ?? null}
-                            onMap={(opt) => handleMap(item.id, opt)}
-                            isDropdownOpen={openDropdownId === item.id}
-                            onDropdownToggle={() => handleDropdownToggle(item.id)}
-                            searchQuery={searchQueries[item.id] ?? ''}
-                            onSearchChange={(q) => setSearchQueries(prev => ({ ...prev, [item.id]: q }))}
-                          />
-                        </div>
+                    /* Dikelompokkan per jenis laporan. Chip di header cuma label
+                       pasif "periode ini punya jenis apa saja" — pengelompokan di
+                       sinilah yang benar-benar memilah isinya, jadi keduanya
+                       saling melengkapi, bukan tumpang tindih. */
+                    <div className="space-y-5" data-testid="unmapped-list">
+                      {unmappedGroups.map((group, gi) => (
+                        <section key={group.reportType} aria-label={`Akun belum dipetakan — ${REPORT_TYPE_LABEL[group.reportType]}`}>
+                          <div className="flex items-center gap-2 mb-2.5">
+                            <span
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ background: REPORT_TYPE_ACCENT[group.reportType] }}
+                            />
+                            <h3 className="text-xs font-bold" style={{ color: '#2d2d2d' }}>
+                              {REPORT_TYPE_LABEL[group.reportType]}
+                            </h3>
+                            <span
+                              className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
+                              style={{ background: '#f0f0f0', color: '#6b7280' }}
+                            >
+                              {group.items.length} akun
+                            </span>
+                          </div>
+
+                          <div className="space-y-4">
+                            {group.items.map((item, index) => (
+                              <div
+                                key={item.id}
+                                data-dropdown
+                                className="animate-slide-up relative"
+                                style={{
+                                  animationDelay: `${(gi * 3 + index) * 80}ms`,
+                                  // animate-slide-up (fill-mode both) meninggalkan transform yang membuat
+                                  // stacking context per-card — card dengan dropdown terbuka harus di atas
+                                  // sibling berikutnya supaya panel dropdown tidak tertimpa.
+                                  // Ini mengurus kartu-vs-kartu SAJA; kartu-vs-section
+                                  // lain diurus z-index di wrapper section (lihat atas).
+                                  zIndex: openDropdownId === item.id ? 30 : 0,
+                                }}
+                              >
+                                <MappingCard
+                                  item={item}
+                                  groups={coaGroups}
+                                  mappedValue={mappings[item.id] ?? null}
+                                  onMap={(opt) => handleMap(item.id, opt)}
+                                  isDropdownOpen={openDropdownId === item.id}
+                                  onDropdownToggle={() => handleDropdownToggle(item.id)}
+                                  searchQuery={searchQueries[item.id] ?? ''}
+                                  onSearchChange={(q) => setSearchQueries(prev => ({ ...prev, [item.id]: q }))}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </section>
                       ))}
                     </div>
                   )}

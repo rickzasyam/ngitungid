@@ -6,6 +6,8 @@ import {
   needsMapping,
   statusAfterExtract,
   sumUnmapped,
+  isEmptyRow,
+  isPlaceholderName,
   type MappableLine,
 } from './mapping-status'
 import { buildLineItemValues } from './line-items'
@@ -15,6 +17,10 @@ const line = (over: Partial<MappableLine> = {}): MappableLine => ({
   isSubtotal: false,
   status: 'unmatched',
   masterCoaId: null,
+  // Default = baris normal: punya nama bermakna & nominal ≠ 0, jadi test lama
+  // tetap menguji hal yang sama (bukan tidak sengaja kena filter baris kosong).
+  rawName: 'Akun Biasa',
+  amount: 1000,
   ...over,
 })
 
@@ -167,5 +173,58 @@ describe('sumUnmapped (badge sidebar)', () => {
 
   it('klien tanpa laporan → nol', () => {
     expect(sumUnmapped([])).toBe(0)
+  })
+})
+
+// ── Baris kosong tanpa informasi ─────────────────────────────
+// Aturannya DUA syarat sekaligus; ketiga kasus di bawah adalah alasan
+// kenapa tidak boleh dilonggarkan jadi salah satu saja.
+describe('isEmptyRow — filter baris tanpa informasi', () => {
+  it('placeholder + nominal 0 → TIDAK perlu dipetakan', () => {
+    const l = line({ rawName: 'Tidak Ada Data', amount: 0 })
+    expect(isEmptyRow(l)).toBe(true)
+    expect(isMappable(l)).toBe(false)
+    expect(needsMapping(l)).toBe(false)
+    expect(countUnmapped([l])).toBe(0)
+  })
+
+  it('placeholder TAPI nominal ≠ 0 → TETAP perlu dipetakan (angkanya masuk laporan)', () => {
+    const l = line({ rawName: 'Tidak Ada Data', amount: 1_500_000 })
+    expect(isEmptyRow(l)).toBe(false)
+    expect(needsMapping(l)).toBe(true)
+    // Ini kegagalan ekstraksi yang berdampak ke hasil hitungan — menyembunyikannya
+    // berarti menghilangkan angka dari laporan tanpa jejak.
+    expect(countUnmapped([l])).toBe(1)
+  })
+
+  it('nama bermakna TAPI nominal 0 → TETAP perlu dipetakan (saldo nol itu sah)', () => {
+    const l = line({ rawName: 'Piutang Karyawan', amount: 0 })
+    expect(isEmptyRow(l)).toBe(false)
+    expect(needsMapping(l)).toBe(true)
+  })
+
+  it('placeholder dicocokkan persis, bukan substring / panjang nama', () => {
+    // Akun sah bernama pendek yang benar-benar ada di data dev.
+    expect(isPlaceholderName('OVO')).toBe(false)
+    expect(isPlaceholderName('Emas')).toBe(false)
+    // Nama yang MENGANDUNG placeholder tapi bukan placeholder itu sendiri.
+    expect(isPlaceholderName('Cadangan Tidak Ada Data Lama')).toBe(false)
+    // Tahan spasi & huruf besar-kecil.
+    expect(isPlaceholderName('  TIDAK ADA DATA  ')).toBe(true)
+  })
+
+  it('baris kosong tidak menghalangi laporan jadi 100% ter-mapping', () => {
+    const lines = [
+      line({ rawName: 'Penjualan', amount: 100, masterCoaId: 'coa-1', status: 'matched' }),
+      line({ rawName: 'Tidak Ada Data', amount: 0 }), // tanpa COA, tapi tak dihitung
+    ]
+    expect(isFullyMapped(lines)).toBe(true)
+    expect(statusAfterExtract(lines)).toBe('mapped')
+  })
+
+  it('laporan yang isinya HANYA baris kosong tidak dianggap selesai', () => {
+    // Tidak ada baris mappable sama sekali → tetap masuk antrean review,
+    // konsisten dengan perilaku laporan tanpa baris apa pun.
+    expect(statusAfterExtract([line({ rawName: 'Tidak Ada Data', amount: 0 })])).toBe('review')
   })
 })

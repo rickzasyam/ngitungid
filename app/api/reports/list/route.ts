@@ -4,10 +4,24 @@ import { db } from '@/lib/db'
 import { financialReports, reportLineItems } from '@/lib/db/schema'
 import { requireUser } from '@/lib/api/guards'
 import { retryState } from '@/lib/reports/retry-policy'
+import { PLACEHOLDER_RAW_NAMES } from '@/lib/reports/mapping-status'
 
 export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Padanan SQL dari !isEmptyRow() di lib/reports/mapping-status.
+// Daftar placeholder-nya di-expand jadi parameter satu per satu (`in ($1, $2…)`),
+// BUKAN `= any($1)`: drizzle mengirim array JS sebagai satu parameter tunggal dan
+// Postgres menolaknya dengan "malformed array literal" — query-nya gagal total,
+// bukan sekadar salah hitung.
+const NOT_EMPTY_ROW =
+  PLACEHOLDER_RAW_NAMES.length === 0
+    ? sql`true`
+    : sql`not (lower(btrim(${reportLineItems.rawName})) in (${sql.join(
+        PLACEHOLDER_RAW_NAMES.map(p => sql`${p}`),
+        sql`, `
+      )}) and ${reportLineItems.amount} = 0)`
 
 // GET /api/reports/list?clientId=
 // SEMUA laporan satu klien — meta saja (tanpa line item) + jumlah baris &
@@ -43,9 +57,16 @@ export async function GET(req: Request) {
       // Sisa akun yang masih perlu dipetakan — sumber badge sidebar COA Mapping.
       // BUKAN `lineCount - mappedCount`: baris rejected tidak punya COA tapi juga
       // tidak pernah perlu dipetakan, jadi selisih itu akan melaporkan sisa palsu
-      // yang tak pernah bisa dinolkan. Kriterianya sengaja dibuat identik dengan
-      // needsMapping() di lib/reports/mapping-status (subtotal & rejected keluar).
-      unmappedCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal} and ${reportLineItems.status} <> 'rejected' and ${reportLineItems.masterCoaId} is null)`.mapWith(Number),
+      // yang tak pernah bisa dinolkan.
+      //
+      // ⚠️ KEMBARAN: ekspresi ini HARUS setara dengan needsMapping() di
+      // lib/reports/mapping-status.ts — subtotal keluar, rejected keluar, dan
+      // baris kosong (nama placeholder DAN nominal 0) keluar. Kalau aturan di
+      // sana berubah, ubah DI SINI JUGA; tidak ada yang menegakkan ini secara
+      // otomatis (tercatat sebagai tech debt di ROADMAP). Daftar placeholder-nya
+      // sendiri di-inject dari konstanta yang sama supaya minimal datanya tidak
+      // pernah menyimpang.
+      unmappedCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal} and ${reportLineItems.status} <> 'rejected' and ${reportLineItems.masterCoaId} is null and ${NOT_EMPTY_ROW})`.mapWith(Number),
     })
     .from(financialReports)
     .leftJoin(reportLineItems, eq(reportLineItems.reportId, financialReports.id))
