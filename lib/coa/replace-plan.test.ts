@@ -47,7 +47,7 @@ describe('buildReplacePlan — re-link by kode', () => {
     expect(plan.relinkedLineCount).toBe(1)
     expect(plan.brokenLineCount).toBe(0)
     expect(relinks).toEqual([
-      { lineItemId: 'L1', newMasterCoaId: 'NEW-A-1', newSuggestedCoaId: null },
+      { lineItemId: 'L1', newMasterCoaId: 'NEW-A-1', newSuggestedCoaId: null, lostMapping: false },
     ])
     // Id BERUBAH walau kode sama — inti dari re-link ini.
     expect(relinks[0].newMasterCoaId).not.toBe('OLD-A-1')
@@ -67,7 +67,7 @@ describe('buildReplacePlan — re-link by kode', () => {
 
     expect(plan.missingKode).toEqual(['A-2'])
     expect(plan.brokenLineCount).toBe(1)
-    expect(relinks).toContainEqual({ lineItemId: 'L2', newMasterCoaId: null, newSuggestedCoaId: null })
+    expect(relinks).toContainEqual({ lineItemId: 'L2', newMasterCoaId: null, newSuggestedCoaId: null, lostMapping: true })
 
     const impact = plan.reports[0]
     expect(impact.relinkedCount).toBe(1)
@@ -95,7 +95,7 @@ describe('buildReplacePlan — re-link by kode', () => {
     expect(plan.matchedKode).not.toContain('A-1')
     expect(plan.missingKode).toContain('A-1')
     expect(plan.brokenLineCount).toBe(1)
-    expect(relinks).toEqual([{ lineItemId: 'L1', newMasterCoaId: null, newSuggestedCoaId: null }])
+    expect(relinks).toEqual([{ lineItemId: 'L1', newMasterCoaId: null, newSuggestedCoaId: null, lostMapping: true }])
   })
 
   it('suggested_coa_id ikut disambung / dihitung saat hilang', () => {
@@ -298,5 +298,108 @@ describe('buildReplacePlan — ringkasan kode', () => {
       })
     )
     expect(plan.reports).toEqual([])
+  })
+})
+
+// ── Hapus SATU baris COA memakai mesin yang sama ─────────────
+// Triknya: newKodeToId diisi seluruh kode BESERTA ID-NYA YANG SEKARANG, minus
+// kode yang dihapus. Baris yang menunjuk akun lain me-resolve ke id yang sama
+// (no-op), yang menunjuk akun terhapus me-resolve ke null.
+describe('buildReplacePlan dipakai untuk hapus satu baris COA', () => {
+  const survivorsExcept = (kode: string) =>
+    new Map([['A-1', 'OLD-A-1'], ['A-2', 'OLD-A-2']].filter(([k]) => k !== kode) as [string, string][])
+
+  it('baris yang memakai akun terhapus jadi putus; akun lain tidak tersentuh', () => {
+    const { plan, relinks } = buildReplacePlan(
+      base({
+        newKodeToId: survivorsExcept('A-2'),
+        lines: [
+          line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' }), // akun lain
+          line({ id: 'L2', reportId: 'R1', masterCoaId: 'OLD-A-2', rawName: 'Beban Sewa', amount: '250.00' }),
+        ],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+
+    // Hanya baris yang memakai akun terhapus yang menghasilkan instruksi.
+    expect(relinks).toEqual([
+      { lineItemId: 'L2', newMasterCoaId: null, newSuggestedCoaId: null, lostMapping: true },
+    ])
+    expect(plan.brokenLineCount).toBe(1)
+    expect(plan.relinkedLineCount).toBe(1) // L1 tetap tersambung
+    expect(plan.reports[0].brokenLines[0]).toEqual({
+      lineItemId: 'L2', rawName: 'Beban Sewa', amount: '250.00', kode: 'A-2',
+    })
+  })
+
+  it('laporan ter-demote mapped → review saat akunnya dihapus', () => {
+    const { plan } = buildReplacePlan(
+      base({
+        newKodeToId: survivorsExcept('A-2'),
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-2' })],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+    expect(plan.demotedReportIds).toEqual(['R1'])
+  })
+
+  it('menghapus akun yang tidak dipakai laporan → tidak ada dampak sama sekali', () => {
+    const { plan, relinks } = buildReplacePlan(
+      base({
+        newKodeToId: survivorsExcept('A-2'),
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' })],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+    expect(relinks).toEqual([])
+    expect(plan.brokenLineCount).toBe(0)
+    expect(plan.demotedReportIds).toEqual([])
+  })
+
+  it('history & saran COA milik akun terhapus terhitung di dampak', () => {
+    const { plan } = buildReplacePlan(
+      base({
+        newKodeToId: survivorsExcept('A-2'),
+        lines: [
+          line({ id: 'L1', reportId: 'R1', suggestedCoaId: 'OLD-A-2', status: 'unmatched' }),
+          line({ id: 'L2', reportId: 'R1', suggestedCoaId: 'OLD-A-1', status: 'unmatched' }),
+        ],
+        history: [
+          { rawName: 'Sewa', masterCoaId: 'OLD-A-2', confirmedCount: 3 },
+          { rawName: 'Kas', masterCoaId: 'OLD-A-1', confirmedCount: 9 },
+        ],
+        reports: [report('R1', 'review')],
+      })
+    )
+    expect(plan.suggestionsLost).toBe(1)
+    expect(plan.suggestionsRelinked).toBe(1)
+    expect(plan.historyLost).toBe(1)
+    expect(plan.historySaved).toBe(1)
+  })
+})
+
+describe('LineRelink.lostMapping', () => {
+  it('true hanya kalau mapping yang TADINYA ADA hilang', () => {
+    const { relinks } = buildReplacePlan(
+      base({
+        newKodeToId: new Map(),
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' })],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+    expect(relinks[0].lostMapping).toBe(true)
+  })
+
+  it('false untuk baris yang cuma kehilangan SARAN COA', () => {
+    // Baris ini belum pernah dipetakan; statusnya tidak boleh ikut direset.
+    const { relinks } = buildReplacePlan(
+      base({
+        newKodeToId: new Map(),
+        lines: [line({ id: 'L1', reportId: 'R1', suggestedCoaId: 'OLD-A-1', status: 'edited' })],
+        reports: [report('R1', 'review')],
+      })
+    )
+    expect(relinks[0].newMasterCoaId).toBeNull()
+    expect(relinks[0].lostMapping).toBe(false)
   })
 })

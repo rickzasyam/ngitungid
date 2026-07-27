@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-replace-dialog'
+import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
 import {
   FileSpreadsheet,
   Upload,
@@ -16,6 +17,9 @@ import {
   Scale,
   Gauge,
   Eye,
+  Pencil,
+  Plus,
+  Trash2,
   Globe,
   SlidersHorizontal,
   User,
@@ -29,6 +33,9 @@ import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
+  // Sudah dikirim GET /coa sejak awal (dipakai dropdown /coa-mapping); kini
+  // ikut dipakai CRUD manual untuk menyasar baris.
+  id: string
   kode: string
   nama: string
   posisi: string
@@ -372,6 +379,10 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
     oldCount: number
     warnings: string[]
   } | null>(null)
+  // CRUD manual per baris. `form` null = tertutup; `form.editing` null = tambah.
+  const [form, setForm] = useState<{ editing: CoaAccount | null } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ account: CoaAccount; impact: CoaImpact } | null>(null)
+  const [rowBusy, setRowBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -467,6 +478,46 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
     }
   }
 
+  // Hapus SELALU lewat dry-run dulu — laporan dampaknya datang dari server
+  // (mesin yang sama dengan ganti Excel), jadi angka yang disetujui admin
+  // mustahil berbeda dari yang dieksekusi.
+  const askDelete = async (account: CoaAccount) => {
+    setRowBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/coa/rows/${account.id}?dryRun=1`, { method: 'DELETE' })
+      const payload = (await res.json().catch(() => null)) as { error?: string; impact?: CoaImpact } | null
+      if (!res.ok || !payload?.impact) {
+        setError(payload?.error ?? 'Gagal menghitung dampak penghapusan.')
+        return
+      }
+      setPendingDelete({ account, impact: payload.impact })
+    } catch {
+      setError('Terjadi kesalahan jaringan. Coba lagi.')
+    } finally {
+      setRowBusy(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    setRowBusy(true)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/coa/rows/${pendingDelete.account.id}`, { method: 'DELETE' })
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        setError(payload?.error ?? 'Gagal menghapus akun.')
+        return
+      }
+      setPendingDelete(null)
+      await load()
+    } catch {
+      setError('Terjadi kesalahan jaringan. Coba lagi.')
+    } finally {
+      setRowBusy(false)
+    }
+  }
+
   const count = data?.count ?? 0
   const hasCoa = count > 0
   const previewRows = data?.accounts ?? []
@@ -542,6 +593,17 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
               {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           )}
+          {!readOnly && hasCoa && (
+            <button
+              type="button"
+              onClick={() => setForm({ editing: null })}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors duration-150 hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Tambah Akun
+            </button>
+          )}
           {!readOnly && (
             <button
               type="button"
@@ -564,6 +626,26 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
             </button>
           )}
         </div>
+      )}
+
+      {/* Form tambah/edit baris + konfirmasi hapus — staf saja. */}
+      {!readOnly && form && (
+        <CoaRowForm
+          clientId={clientId}
+          rows={data?.accounts ?? []}
+          editing={form.editing}
+          onDone={async () => { setForm(null); await load() }}
+          onCancel={() => setForm(null)}
+        />
+      )}
+      {!readOnly && pendingDelete && (
+        <CoaDeleteDialog
+          account={pendingDelete.account}
+          impact={pendingDelete.impact}
+          submitting={rowBusy}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
 
       {/* Konfirmasi ganti Master COA — hanya staf (readOnly tidak punya tombol
@@ -640,7 +722,7 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
             <table className="w-full" style={{ fontSize: 12 }}>
               <thead>
                 <tr>
-                  {['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Class CF'].map(col => (
+                  {[...['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Class CF'], ...(readOnly ? [] : ['Aksi'])].map(col => (
                     <th
                       key={col}
                       className="text-left px-4 py-2.5 font-semibold whitespace-nowrap sticky top-0"
@@ -704,6 +786,33 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
                         <span style={{ color: 'var(--color-text-muted)' }}>—</span>
                       )}
                     </td>
+                    {/* Aksi per baris — staf saja. Role user tidak melihat kolom
+                        ini sama sekali (tulis juga dijaga requireAkunting di API). */}
+                    {!readOnly && (
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setForm({ editing: row })}
+                            aria-label={`Edit akun ${row.kode} ${row.nama}`}
+                            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-150 hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                            style={{ color: 'var(--color-text-muted)' }}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => askDelete(row)}
+                            disabled={rowBusy}
+                            aria-label={`Hapus akun ${row.kode} ${row.nama}`}
+                            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-150 hover:bg-[#fef2f2] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                            style={{ color: '#dc2626' }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

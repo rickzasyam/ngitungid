@@ -240,7 +240,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // 4) Baris yang mapping-nya PUTUS: status ikut direset ke 'unmatched'.
   //    Kalau tidak, Extraction Review tetap menampilkannya "matched" padahal
   //    COA-nya sudah tidak ada, dan admin tidak punya petunjuk apa pun.
-  const brokenIds = relinks.filter(r => r.newMasterCoaId === null).map(r => r.lineItemId)
+  const brokenIds = relinks.filter(r => r.lostMapping).map(r => r.lineItemId)
   if (brokenIds.length > 0) {
     statements.push(
       db

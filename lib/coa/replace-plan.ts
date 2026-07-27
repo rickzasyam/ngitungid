@@ -86,9 +86,20 @@ export interface ReplacePlan {
 /** Baris ini akan disambung ke id baru, atau diputus (null). */
 export interface LineRelink {
   lineItemId: string
-  /** null = putus → master_coa_id null + status 'unmatched'. */
+  /** null = putus → master_coa_id null. */
   newMasterCoaId: string | null
   newSuggestedCoaId: string | null
+  /**
+   * Baris ini BENAR-BENAR kehilangan mapping yang tadinya ada
+   * (punya master_coa_id, sekarang tidak).
+   *
+   * Dibedakan dari `newMasterCoaId === null` karena yang terakhir juga benar
+   * untuk baris yang memang belum pernah dipetakan dan cuma kehilangan SARAN
+   * COA. Hanya baris ber-`lostMapping` yang statusnya boleh direset ke
+   * 'unmatched' — mereset baris lain adalah tulisan yang tidak perlu dan,
+   * untuk baris ber-status 'edited' tanpa mapping, salah.
+   */
+  lostMapping: boolean
 }
 
 export interface PlanInput {
@@ -171,7 +182,12 @@ export function buildReplacePlan(input: PlanInput): { plan: ReplacePlan; relinks
 
     // Hanya kirim instruksi untuk baris yang benar-benar berubah.
     if (l.masterCoaId !== newMaster || l.suggestedCoaId !== newSuggested) {
-      relinks.push({ lineItemId: l.id, newMasterCoaId: newMaster, newSuggestedCoaId: newSuggested })
+      relinks.push({
+        lineItemId: l.id,
+        newMasterCoaId: newMaster,
+        newSuggestedCoaId: newSuggested,
+        lostMapping: l.masterCoaId !== null && newMaster === null,
+      })
     }
   }
 
