@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import { ArrowLeftRight } from 'lucide-react'
+import { DarkTooltip } from './dashboard-utils'
 
 interface CashflowItem {
   month: string
@@ -15,6 +16,8 @@ interface CashflowItem {
 
 interface CashflowWaterfallChartProps {
   data: CashflowItem[]
+  /** Tahun dari periode yang dipilih — label tooltip. JANGAN hardcode. */
+  year: number
 }
 
 // Unified short formatter: handles positive, negative, and zero consistently
@@ -33,29 +36,7 @@ function formatRupiah(value: number): string {
   return value < 0 ? `-${formatted}` : formatted
 }
 
-function CashflowTooltip({ active, payload, label }: {
-  active?: boolean
-  payload?: Array<{ value: number; color?: string; name?: string }>
-  label?: string
-}) {
-  if (!active || !payload || !payload.length) return null
-
-  return (
-    <div
-      className="rounded-xl px-3 py-2"
-      style={{ background: '#2d2d2d', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}
-    >
-      <p className="text-xs font-medium mb-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{label} 2026</p>
-      {payload.map((entry, i) => (
-        <p key={i} className="text-sm font-semibold" style={{ color: entry.color || 'white' }}>
-          {entry.name}: {formatRupiah(entry.value)}
-        </p>
-      ))}
-    </div>
-  )
-}
-
-export function CashflowWaterfallChart({ data }: CashflowWaterfallChartProps) {
+export function CashflowWaterfallChart({ data, year }: CashflowWaterfallChartProps) {
   return (
     <div
       className="rounded-3xl p-6"
@@ -95,7 +76,7 @@ export function CashflowWaterfallChart({ data }: CashflowWaterfallChartProps) {
             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.4)' }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={formatRupiah} width={64} />
             <ReferenceLine y={0} stroke="#ffffff" strokeOpacity={0.25} />
-            <Tooltip cursor={false} trigger="hover" content={<CashflowTooltip />} />
+            <Tooltip cursor={false} trigger="hover" content={<DarkTooltip year={year} formatter={formatRupiah} />} />
             <Bar dataKey="operating" name="Operating" fill="#daf163" radius={[8, 8, 8, 8]}>
               {data.map((_, index) => (
                 <Cell key={`operating-${index}`} className="ng-bar-cell" />

@@ -15,9 +15,11 @@ interface PnlOverviewItem {
 
 interface PnlOverviewChartProps {
   data: PnlOverviewItem[]
+  /** Tahun dari periode yang dipilih — label tooltip. JANGAN hardcode. */
+  year: number
 }
 
-export function PnlOverviewChart({ data }: PnlOverviewChartProps) {
+export function PnlOverviewChart({ data, year }: PnlOverviewChartProps) {
   return (
     <div
       className="rounded-3xl p-6"
@@ -54,7 +56,7 @@ export function PnlOverviewChart({ data }: PnlOverviewChartProps) {
           <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={4} barCategoryGap="25%">
             <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.4)' }} />
             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={formatRupiahShort} width={64} />
-            <Tooltip cursor={false} trigger="hover" content={<DarkTooltip formatter={formatRupiahFull} />} />
+            <Tooltip cursor={false} trigger="hover" content={<DarkTooltip year={year} formatter={formatRupiahFull} />} />
             <Bar dataKey="pendapatan" name="Pendapatan" fill="#daf163" radius={[20, 20, 20, 20]} barSize={20}>
               {data.map((_, index) => (
                 <Cell key={`pendapatan-${index}`} className="ng-bar-cell" />

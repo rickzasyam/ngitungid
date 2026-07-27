@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell,
   Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { CustomTooltip, formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { PieTooltip, formatRupiahShort } from './dashboard-utils'
 import { PieChart as PieChartIcon } from 'lucide-react'
 
 interface ExpenseItem {
@@ -16,9 +16,12 @@ interface ExpenseItem {
 interface ExpenseBreakdownDonutProps {
   data: ExpenseItem[]
   totalExpenses: number
+  /** Rentang periode data aktual, mis. "Jan–Jun 2026". Komposisi ini agregat
+   *  SELURUH periode terpilih — dulu salah tertulis "Bulan Januari 2026". */
+  periodLabel: string
 }
 
-export function ExpenseBreakdownDonut({ data, totalExpenses }: ExpenseBreakdownDonutProps) {
+export function ExpenseBreakdownDonut({ data, totalExpenses, periodLabel }: ExpenseBreakdownDonutProps) {
   return (
     <div
       className="ng-card-lift rounded-3xl p-6"
@@ -33,7 +36,7 @@ export function ExpenseBreakdownDonut({ data, totalExpenses }: ExpenseBreakdownD
         </div>
         <div>
           <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Komposisi Biaya</h3>
-          <p className="text-xs" style={{ color: '#6b7280' }}>Bulan Januari 2026</p>
+          <p className="text-xs" style={{ color: '#6b7280' }}>{periodLabel}</p>
         </div>
       </div>
       <div className="flex items-center gap-6">
@@ -45,7 +48,7 @@ export function ExpenseBreakdownDonut({ data, totalExpenses }: ExpenseBreakdownD
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip wrapperStyle={{ zIndex: 50 }} content={<CustomTooltip formatter={formatRupiahFull} />} />
+              <Tooltip wrapperStyle={{ zIndex: 50 }} content={<PieTooltip total={totalExpenses} totalLabel="total biaya" />} />
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ pointerEvents: 'none' }}>

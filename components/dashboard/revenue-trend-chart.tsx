@@ -17,14 +17,20 @@ interface MonthlyDataItem {
 
 interface RevenueTrendChartProps {
   data: MonthlyDataItem[]
-  totalRevenue: number
-  monthsCount: number
+  /** Tahun dari periode yang dipilih — label tooltip. JANGAN hardcode. */
+  year: number
+  /** Rentang bulan data aktual + tahun, mis. "Jan–Jun 2026". */
+  periodLabel: string
 }
 
-function CombinedTooltip({ active, payload, label }: {
+// Gaya sama dengan DarkTooltip ("Overview Laba Rugi"): label bulan & nama seri
+// redup, HANYA nominalnya yang berwarna. Bedanya di sini format per-seri
+// (Rupiah untuk bar, % untuk garis NPM).
+function CombinedTooltip({ active, payload, label, year }: {
   active?: boolean
   payload?: Array<{ value: number; name?: string; color?: string }>
   label?: string
+  year?: number
 }) {
   if (!active || !payload || !payload.length) return null
 
@@ -33,20 +39,27 @@ function CombinedTooltip({ active, payload, label }: {
       className="rounded-xl px-3 py-2"
       style={{ background: '#2d2d2d', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
     >
-      <p className="text-xs font-medium mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{label} 2026</p>
-      {payload.map((entry, i) => (
-        <p key={i} className="text-xs font-semibold" style={{ color: entry.color || 'white' }}>
-          {entry.name}:{' '}
-          {entry.name === 'NPM %'
-            ? `${entry.value}%`
-            : formatRupiahFull(entry.value)}
-        </p>
-      ))}
+      <p className="text-xs font-medium mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}{year ? ` ${year}` : ''}</p>
+      {payload.map((entry, i) => {
+        const isNpm = entry.name === 'NPM %'
+        // Nominal berwarna warna seri (lime/lilac — kontras di latar gelap).
+        // NPM% memakai warna GARIS #374151 yang gelap & nyaru di tooltip gelap,
+        // jadi nilainya pakai abu terang khusus supaya terbaca.
+        const valueColor = isNpm ? '#cbd5e1' : (entry.color || 'white')
+        return (
+          <p key={i} className="text-xs font-semibold">
+            <span className="font-normal mr-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{entry.name}:</span>
+            <span style={{ color: valueColor }}>
+              {isNpm ? `${entry.value}%` : formatRupiahFull(entry.value)}
+            </span>
+          </p>
+        )
+      })}
     </div>
   )
 }
 
-export function RevenueTrendChart({ data }: RevenueTrendChartProps) {
+export function RevenueTrendChart({ data, year, periodLabel }: RevenueTrendChartProps) {
   const chartData = data
     .filter(d => d.revenue !== null)
     .map(d => ({
@@ -73,7 +86,7 @@ export function RevenueTrendChart({ data }: RevenueTrendChartProps) {
           <div>
             <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Tren Pendapatan &amp; Profitabilitas</h3>
             <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
-              Jan–Jun 2026 · Skala kiri: Rupiah · Skala kanan: Margin %
+              {periodLabel} · Skala kiri: Rupiah · Skala kanan: Margin %
             </p>
           </div>
         </div>
@@ -127,7 +140,7 @@ export function RevenueTrendChart({ data }: RevenueTrendChartProps) {
               width={36}
               tick={{ fontSize: 11, fill: 'rgba(55,65,81,0.5)' }}
             />
-            <Tooltip cursor={false} content={<CombinedTooltip />} />
+            <Tooltip cursor={false} content={<CombinedTooltip year={year} />} />
             <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#daf163" radius={[11, 11, 11, 11]} barSize={22} />
             <Bar yAxisId="left" dataKey="netProfit" name="Net Profit" fill="#bbb3f3" radius={[11, 11, 11, 11]} barSize={22} />
             <Line

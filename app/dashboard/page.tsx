@@ -91,9 +91,11 @@ function KPICard({
 export default function DashboardPage() {
   const { activeClient, isLoaded } = useRequireClient()
   const clientId = activeClient?.id ?? null
-  const [dashboardDateRange, setDashboardDateRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>({
-    from: new Date(2026, 0, 1),
-    to: new Date(2026, 11, 31),
+  // Default = TAHUN BERJALAN (bukan hardcode) supaya tidak nyangkut di satu
+  // tahun begitu kalender berganti.
+  const [dashboardDateRange, setDashboardDateRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>(() => {
+    const y = new Date().getFullYear()
+    return { from: new Date(y, 0, 1), to: new Date(y, 11, 31) }
   })
 
   const [data, setData] = useState<DashboardData | null>(null)
@@ -130,6 +132,18 @@ export default function DashboardPage() {
   // ── Turunan dari data API (bentuk sama seperti props chart) ──
   const monthly = data?.monthly ?? []
   const monthsCount = monthly.length
+
+  // Tahun & label periode DITURUNKAN dari periode yang dipilih + bulan yang
+  // benar-benar punya data — jangan pernah hardcode di komponen chart.
+  // Catatan: data bulanan hanya membawa NAMA bulan (tanpa tahun), jadi rentang
+  // yang melintasi pergantian tahun memakai tahun AWAL periode. Untuk presisi
+  // per-bulan, API perlu mengirim tahun di tiap titik data.
+  const year = (from ?? new Date()).getFullYear()
+  const periodLabel = monthsCount === 0
+    ? String(year)
+    : monthsCount === 1
+      ? `${monthly[0].month} ${year}`
+      : `${monthly[0].month}–${monthly[monthsCount - 1].month} ${year}`
   const totalRevenue = data?.totals?.revenue ?? 0
   const totalNetProfit = data?.totals?.netProfit ?? 0
   const fixedCostTotal = data?.totals?.fixedCost ?? 0
@@ -213,17 +227,17 @@ export default function DashboardPage() {
 
                 {/* 2. Revenue Trend */}
                 <div className="ng-rise" style={{ animationDelay: '150ms' }}>
-                  <RevenueTrendChart data={monthly12} totalRevenue={totalRevenue} monthsCount={monthsCount} />
+                  <RevenueTrendChart data={monthly12} year={year} periodLabel={periodLabel} />
                 </div>
 
                 {/* 3. P&L Overview */}
                 <div className="ng-rise" style={{ animationDelay: '220ms' }}>
-                  <PnlOverviewChart data={pnlOverview} />
+                  <PnlOverviewChart data={pnlOverview} year={year} />
                 </div>
 
                 {/* 4. Expense Breakdown + Top Receipts */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 ng-rise" style={{ animationDelay: '290ms' }}>
-                  <ExpenseBreakdownDonut data={expenseBreakdown} totalExpenses={totalExpenses} />
+                  <ExpenseBreakdownDonut data={expenseBreakdown} totalExpenses={totalExpenses} periodLabel={periodLabel} />
                   <div className="ng-card-lift rounded-3xl p-6" style={{ background: 'white', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}>
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)' }}>
@@ -257,7 +271,7 @@ export default function DashboardPage() {
                 {/* 6. Cash Flow Waterfall */}
                 {cashflow.length > 0 && (
                   <div className="ng-rise" style={{ animationDelay: '430ms' }}>
-                    <CashflowWaterfallChart data={cashflow} />
+                    <CashflowWaterfallChart data={cashflow} year={year} />
                   </div>
                 )}
 
