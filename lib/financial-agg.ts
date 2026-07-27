@@ -11,7 +11,29 @@
 
 export interface AggLine {
   amount: number
+  /**
+   * Nama untuk PENCOCOKAN — selalu `report_line_items.raw_name` (nama apa
+   * adanya dari PDF), JANGAN pernah diisi `master_coa.nama`.
+   *
+   * Dipakai predikat di aggregateBalanceSheet ('kas'|'bank', 'piutang',
+   * 'persediaan', 'dibayar dimuka', 'dagang') yang hasilnya mengalir ke rasio
+   * likuiditas, DSO/DIO/DPO, dan skor kesehatan. rawName tidak pernah berubah
+   * setelah ekstraksi, jadi angka historis kebal terhadap rename di Master COA.
+   * Kalau ini dialihkan ke master_coa.nama, mengganti label akun yang tampak
+   * tidak berbahaya bisa diam-diam menggeser rasio klien.
+   *
+   * Untuk yang tampil ke pengguna, pakai `displayName`.
+   */
   nama: string
+  /**
+   * Nama untuk TAMPILAN — `master_coa.nama` kalau baris sudah ter-mapping,
+   * fallback ke rawName kalau belum. Supaya satu baris tampil dengan nama yang
+   * sama di Dashboard, Analytics, dan Neraca Detail.
+   *
+   * Sengaja terpisah dari `nama`: tampilan boleh ikut berubah saat admin
+   * merapikan Master COA, pencocokan tidak boleh.
+   */
+  displayName: string
   kelompok: string
   subKelompok: string
   classCf: string | null

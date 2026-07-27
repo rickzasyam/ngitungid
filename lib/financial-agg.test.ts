@@ -14,6 +14,10 @@ import {
 const line = (over: Partial<AggLine> = {}): AggLine => ({
   amount: 0,
   nama: 'Akun',
+  // Default sengaja BERBEDA dari `nama`: kalau suatu saat ada fungsi agregasi
+  // yang diam-diam beralih memakai displayName, test pencocokan di bawah
+  // (yang override `nama` saja) akan langsung merah.
+  displayName: 'Nama Tampilan Berbeda',
   kelompok: 'Laba Rugi',
   subKelompok: 'Penjualan',
   classCf: null,
@@ -258,5 +262,40 @@ describe('monthLabel', () => {
     expect(monthLabel('2026-01-01')).toBe('Jan')
     expect(monthLabel('2026-03-31')).toBe('Mar')
     expect(monthLabel('2026-12-01')).toBe('Dec')
+  })
+})
+
+// ── Pemisahan nama pencocokan vs nama tampilan ───────────────
+// Penjaga regresi. Pencocokan akun (kas/piutang/persediaan/prepaid/hutang
+// dagang) HARUS memakai `nama` = rawName, supaya rasio & skor kesehatan tidak
+// ikut bergeser saat akun di-rename di Master COA. Kalau suatu saat ada yang
+// mengalihkannya ke displayName (nama kanonik Master COA), test di bawah merah.
+describe('aggregateBalanceSheet — mencocokkan lewat `nama` (rawName), BUKAN displayName', () => {
+  it('mengenali kas dari `nama` walau displayName tidak mengandung kata kunci', () => {
+    const bs = aggregateBalanceSheet([
+      bsLine({ nama: 'Kas Bank BCA', displayName: 'Aset Likuid Utama', amount: 1_000 }),
+    ])
+    // Ikut terhitung sebagai kas → pencocokan membaca `nama`.
+    expect(bs.kas).toBe(1_000)
+  })
+
+  it('TIDAK terpancing displayName yang mengandung kata kunci', () => {
+    const bs = aggregateBalanceSheet([
+      bsLine({ nama: 'Sewa Dibayar Tahunan', displayName: 'Kas & Setara Kas', amount: 500 }),
+    ])
+    // Kalau ini 500, berarti pencocokan sudah beralih ke displayName — bug.
+    expect(bs.kas).toBe(0)
+  })
+
+  it('rename di Master COA tidak menggeser piutang/persediaan/hutang dagang', () => {
+    const lines = [
+      bsLine({ nama: 'Piutang Usaha Marketplace', displayName: 'Nama Baru A', amount: 300 }),
+      bsLine({ nama: 'Persediaan Barang Jadi', displayName: 'Nama Baru B', amount: 200 }),
+      bsLine({ subKelompok: 'Hutang', nama: 'Hutang Dagang Supplier', displayName: 'Nama Baru C', amount: -150 }),
+    ]
+    const bs = aggregateBalanceSheet(lines)
+    expect(bs.piutang).toBe(300)
+    expect(bs.persediaan).toBe(200)
+    expect(bs.hutangUsaha).toBe(-150)
   })
 })

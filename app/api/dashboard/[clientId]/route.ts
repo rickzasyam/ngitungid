@@ -75,6 +75,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
       reportId: reportLineItems.reportId,
       amount: reportLineItems.amount,
       rawName: reportLineItems.rawName,
+      coaNama: masterCoa.nama,
       isSubtotal: reportLineItems.isSubtotal,
       status: reportLineItems.status,
       kelompok: masterCoa.kelompok,
@@ -90,7 +91,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
     const arr = linesByReport.get(it.reportId) ?? []
     arr.push({
       amount: Number(it.amount),
+      // SENGAJA rawName, bukan master_coa.nama — lihat doc AggLine.nama.
+      // Ini yang dicocokkan predikat 'kas'/'piutang'/dst di aggregateBalanceSheet,
+      // jadi rasio & skor kesehatan tetap stabil walau akun di-rename di Master
+      // COA. Yang tampil ke pengguna adalah displayName di bawah. Jangan
+      // "dirapikan" jadi satu field.
       nama: it.rawName,
+      displayName: it.coaNama ?? it.rawName,
       kelompok: it.kelompok ?? '',
       subKelompok: it.subKelompok ?? '',
       classCf: it.classCf,
@@ -140,11 +147,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
     .map(([name, value]) => ({ name, value, color: EXPENSE_COLORS[name] ?? '#7dd3fc' }))
 
   // ── Top receipts: agregasi baris pendapatan (positif) per nama, top 5 ──
+  // Dikelompokkan & ditampilkan dengan displayName (nama kanonik Master COA):
+  // baris yang sama bisa punya rawName berbeda antar bulan ("Penjualan Shopee"
+  // vs "Penjualan Shopee Official"), dan tanpa ini satu akun terpecah jadi dua
+  // entri Top-5.
   const receipts = new Map<string, number>()
   for (const r of pnlReports) {
     for (const l of contributing(linesOf(r.id))) {
       if (l.amount > 0 && classifyPnl(l.subKelompok) === 'revenue') {
-        receipts.set(l.nama, (receipts.get(l.nama) ?? 0) + l.amount)
+        receipts.set(l.displayName, (receipts.get(l.displayName) ?? 0) + l.amount)
       }
     }
   }

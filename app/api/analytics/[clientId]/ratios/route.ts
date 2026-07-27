@@ -56,6 +56,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
       reportId: reportLineItems.reportId,
       amount: reportLineItems.amount,
       rawName: reportLineItems.rawName,
+      coaNama: masterCoa.nama,
       isSubtotal: reportLineItems.isSubtotal,
       status: reportLineItems.status,
       kelompok: masterCoa.kelompok,
@@ -69,7 +70,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
   const by = new Map<string, AggLine[]>()
   for (const it of items) {
     const a = by.get(it.reportId) ?? []
-    a.push({ amount: Number(it.amount), nama: it.rawName, kelompok: it.kelompok ?? '', subKelompok: it.subKelompok ?? '', classCf: it.classCf, isSubtotal: it.isSubtotal, status: it.status })
+    // `nama` SENGAJA rawName (dipakai pencocokan rasio — lihat doc AggLine.nama);
+    // `displayName` yang dipakai untuk tampilan. Jangan disatukan.
+    a.push({ amount: Number(it.amount), nama: it.rawName, displayName: it.coaNama ?? it.rawName, kelompok: it.kelompok ?? '', subKelompok: it.subKelompok ?? '', classCf: it.classCf, isSubtotal: it.isSubtotal, status: it.status })
     by.set(it.reportId, a)
   }
   const linesOf = (id: string) => by.get(id) ?? []
@@ -102,7 +105,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
         .from(reportLineItems)
         .leftJoin(masterCoa, eq(reportLineItems.masterCoaId, masterCoa.id))
         .where(eq(reportLineItems.reportId, prev.id))
-      beginBsAgg = aggregateBalanceSheet(prevItems.map(it => ({ amount: Number(it.amount), nama: it.rawName, kelompok: it.kelompok ?? '', subKelompok: it.subKelompok ?? '', classCf: it.classCf, isSubtotal: it.isSubtotal, status: it.status })))
+      // Neraca awal: murni bahan hitungan (tidak pernah ditampilkan), jadi
+      // displayName tidak relevan di sini — `nama` tetap rawName seperti di atas.
+      beginBsAgg = aggregateBalanceSheet(prevItems.map(it => ({ amount: Number(it.amount), nama: it.rawName, displayName: it.rawName, kelompok: it.kelompok ?? '', subKelompok: it.subKelompok ?? '', classCf: it.classCf, isSubtotal: it.isSubtotal, status: it.status })))
     }
   }
 
@@ -175,8 +180,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ clientId
       if (!(l.kelompok ?? '').toLowerCase().includes('laba')) continue
       const cat = bdCatOf(l.subKelompok)
       if (!cat) continue
-      const key = `${l.subKelompok}||${l.nama}`
-      const cur = bdMap[cat].get(key) ?? { name: l.nama, subKelompok: l.subKelompok, amount: 0 }
+      // displayName (nama kanonik Master COA), bukan rawName: tabel ini
+      // menjumlahkan lintas bulan, dan rawName bisa beda antar bulan untuk akun
+      // yang sama → satu akun akan terpecah jadi beberapa baris.
+      const key = `${l.subKelompok}||${l.displayName}`
+      const cur = bdMap[cat].get(key) ?? { name: l.displayName, subKelompok: l.subKelompok, amount: 0 }
       cur.amount += l.amount
       bdMap[cat].set(key, cur)
     }
