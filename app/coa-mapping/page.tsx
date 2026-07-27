@@ -1070,11 +1070,22 @@ export default function COAMappingPage() {
 
                 {/* Unmapped section */}
                 <div
-                  className="ng-rise rounded-3xl p-4 sm:p-6"
+                  className="ng-rise rounded-3xl p-4 sm:p-6 relative"
                   style={{
                     background: 'white',
                     boxShadow: '0 4px 20px rgb(0,0,0,0.05)',
                     border: '1px solid #f0f0f0',
+                    // `.ng-rise` selesai dengan transform: translateY(0) (fill-mode
+                    // both) — transform non-none bikin section ini STACKING CONTEXT
+                    // sendiri. Akibatnya z-index kartu di dalamnya (lihat di bawah)
+                    // terkurung di sini dan tidak bisa mengalahkan section
+                    // "Ter-mapping Otomatis", yang juga ber-.ng-rise dan datang
+                    // BELAKANGAN di DOM → menang paint order. Itu sebabnya panel
+                    // dropdown ketutupan meski kartunya sudah z-30.
+                    // Jadi yang perlu diangkat adalah SECTION-nya, di level tempat
+                    // kedua subtree itu benar-benar bertemu. Hanya saat dropdown
+                    // terbuka, supaya section ini tidak permanen di atas elemen lain.
+                    zIndex: openDropdownId !== null ? 40 : undefined,
                   }}
                 >
                   <div className="flex items-start justify-between gap-3 mb-5 flex-wrap">
@@ -1161,7 +1172,9 @@ export default function COAMappingPage() {
                             animationDelay: `${index * 80}ms`,
                             // animate-slide-up (fill-mode both) meninggalkan transform yang membuat
                             // stacking context per-card — card dengan dropdown terbuka harus di atas
-                            // sibling berikutnya supaya panel dropdown tidak tertimpa
+                            // sibling berikutnya supaya panel dropdown tidak tertimpa.
+                            // Ini mengurus kartu-vs-kartu SAJA; kartu-vs-section
+                            // lain diurus z-index di wrapper section (lihat atas).
                             zIndex: openDropdownId === item.id ? 30 : 0,
                           }}
                         >

@@ -42,8 +42,6 @@ type CoaData = {
   accounts: CoaAccount[]
 }
 
-const PREVIEW_LIMIT = 8
-
 function formatCoaDate(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -414,7 +412,7 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
 
   const count = data?.count ?? 0
   const hasCoa = count > 0
-  const previewRows = data?.accounts.slice(0, PREVIEW_LIMIT) ?? []
+  const previewRows = data?.accounts ?? []
   const updatedAtLabel = formatCoaDate(data?.updatedAt ?? null)
 
   return (
@@ -555,15 +553,35 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
       {/* Preview struktur */}
       {hasCoa && showPreview && (
         <div className="mt-4 rounded-2xl overflow-hidden border animate-fade-in" style={{ borderColor: '#f0f0f0', background: '#fafafa' }}>
-          <div className="overflow-x-auto">
+          {/* Seluruh akun ditampilkan (dulu dipotong 8 baris). Gulir DI DALAM
+              card, bukan memanjangkan halaman: 100+ baris akan menenggelamkan
+              kartu Settings lain di bawahnya. Header dibuat sticky supaya nama
+              kolom tetap terbaca saat menggulir. tabIndex agar area ini bisa
+              digulir dengan keyboard. */}
+          <div
+            className="overflow-x-auto overflow-y-auto"
+            style={{ maxHeight: 'min(60vh, 520px)' }}
+            tabIndex={0}
+            role="region"
+            aria-label={`Struktur Master COA — ${count} akun`}
+          >
             <table className="w-full" style={{ fontSize: 12 }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+                <tr>
                   {['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Class CF'].map(col => (
                     <th
                       key={col}
-                      className="text-left px-4 py-2.5 font-semibold whitespace-nowrap"
-                      style={{ color: 'var(--color-text-muted)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.4 }}
+                      className="text-left px-4 py-2.5 font-semibold whitespace-nowrap sticky top-0"
+                      style={{
+                        color: 'var(--color-text-muted)',
+                        fontSize: 10.5,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.4,
+                        // Header sticky harus OPAK — kalau transparan, baris yang
+                        // lewat di belakangnya ikut terbaca.
+                        background: '#fafafa',
+                        borderBottom: '1px solid var(--color-border-subtle)',
+                      }}
                     >
                       {col}
                     </th>
@@ -620,7 +638,7 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
             </table>
           </div>
           <p className="px-4 py-2.5 text-[10.5px] border-t" style={{ color: 'var(--color-text-muted)', borderColor: '#f0f0f0' }}>
-            Menampilkan {previewRows.length} dari {count} akun · Preview struktur — data lengkap tersimpan per klien
+            Menampilkan semua {count} akun · Gulir untuk melihat seluruh struktur
           </p>
         </div>
       )}
