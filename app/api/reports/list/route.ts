@@ -40,6 +40,12 @@ export async function GET(req: Request) {
       hasPdf: sql<boolean>`${financialReports.sourcePdf} is not null`,
       lineCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal})`.mapWith(Number),
       mappedCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal} and ${reportLineItems.masterCoaId} is not null)`.mapWith(Number),
+      // Sisa akun yang masih perlu dipetakan — sumber badge sidebar COA Mapping.
+      // BUKAN `lineCount - mappedCount`: baris rejected tidak punya COA tapi juga
+      // tidak pernah perlu dipetakan, jadi selisih itu akan melaporkan sisa palsu
+      // yang tak pernah bisa dinolkan. Kriterianya sengaja dibuat identik dengan
+      // needsMapping() di lib/reports/mapping-status (subtotal & rejected keluar).
+      unmappedCount: sql<number>`count(${reportLineItems.id}) filter (where not ${reportLineItems.isSubtotal} and ${reportLineItems.status} <> 'rejected' and ${reportLineItems.masterCoaId} is null)`.mapWith(Number),
     })
     .from(financialReports)
     .leftJoin(reportLineItems, eq(reportLineItems.reportId, financialReports.id))

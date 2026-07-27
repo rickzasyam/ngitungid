@@ -6,6 +6,7 @@ import { requireAkunting } from '@/lib/api/guards'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
 import { normalizeName } from '@/lib/coa-match'
 import { buildLineItemValues } from '@/lib/reports/line-items'
+import { statusAfterExtract } from '@/lib/reports/mapping-status'
 
 // Gemini + neon-http + Buffer butuh Node runtime. maxDuration dinaikkan karena
 // ekstraksi PDF (paralel) bisa ~25s — default Vercel Hobby 10s terlalu pendek.
@@ -118,9 +119,14 @@ export async function POST(req: Request) {
         if (values.length > 0) {
           await db.insert(reportLineItems).values(values)
         }
+        // Auto-match yang menghabiskan seluruh baris = tidak ada sisa pekerjaan
+        // di /coa-mapping. Tanpa promosi di sini laporan seperti itu terkunci
+        // selamanya di 'review' (satu-satunya penulis 'mapped' dulu cuma route
+        // /mapping, yang hanya jalan kalau admin menekan Simpan) — bikin badge
+        // sidebar & label di halaman Laporan salah.
         await db
           .update(financialReports)
-          .set({ status: 'review', extractedAt: new Date() })
+          .set({ status: statusAfterExtract(values), extractedAt: new Date() })
           .where(eq(financialReports.id, report.id))
         return { id: report.id, reportType: type, lineCount: lines.length, autoMapped, suggested }
       } catch (err) {

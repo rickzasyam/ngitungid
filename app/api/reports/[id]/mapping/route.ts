@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { financialReports, masterCoa, reportLineItems, coaMappingHistory } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
+import { countUnmapped } from '@/lib/reports/mapping-status'
 
 export const runtime = 'nodejs'
 
@@ -133,19 +134,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
   )
 
-  // Sisa unmatched setelah request ini diterapkan.
-  // Baris subtotal (PENERIMAAN BERSIH, LABA KOTOR, TOTAL AKTIVA, …) dan baris
-  // yang ditolak TIDAK pernah dipetakan — /coa-mapping memfilternya keluar.
-  // Tanpa pengecualian ini `remaining` tidak pernah 0 dan status laporan tidak
-  // pernah berpindah ke 'mapped'.
+  // Sisa unmatched setelah request ini diterapkan — baris yang ikut di-update
+  // di batch ini dihitung sebagai sudah punya COA. Kriteria "masih perlu
+  // dipetakan" (subtotal & rejected dikecualikan) dipakai bareng dengan jalur
+  // upload/retry lewat lib/reports/mapping-status supaya keduanya tak menyimpang.
   const mappedNow = new Set(mappings.map(m => m.lineItemId))
-  const remaining = ownLines.filter(
-    l =>
-      !l.isSubtotal &&
-      l.status !== 'rejected' &&
-      l.masterCoaId === null &&
-      !mappedNow.has(l.id)
-  ).length
+  const remaining = countUnmapped(
+    ownLines.map(l => (mappedNow.has(l.id) ? { ...l, masterCoaId: 'pending', status: 'matched' } : l))
+  )
 
   // Tipe di-widen ke BatchItem: array-nya campur update ke dua tabel berbeda,
   // dan inference drizzle mengunci ke tabel statement pertama.

@@ -26,6 +26,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { useClient, ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import { ROLE_LABEL } from '@/lib/roles'
+import { sumUnmapped } from '@/lib/reports/mapping-status'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
 const CAPSULE_TRANSITION = 'transform .48s cubic-bezier(.34,1.42,.5,1), height .48s cubic-bezier(.34,1.42,.5,1)'
@@ -50,10 +51,14 @@ export function Sidebar() {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  // Jumlah laporan klien aktif yang belum selesai dipetakan (status bukan
-  // mapped/confirmed) → badge di item "COA Mapping". Menggantikan badge "1"
-  // yang dulu hardcoded di item Upload. Re-fetch saat klien/route berubah
+  // Jumlah AKUN yang belum dipetakan di seluruh laporan klien aktif (semua
+  // periode) → badge di item "COA Mapping". Re-fetch saat klien/route berubah
   // supaya badge menyusut setelah admin menyelesaikan mapping.
+  //
+  // Dulu badge ini menghitung JUMLAH LAPORAN berstatus bukan mapped/confirmed —
+  // satuan yang berbeda dari halaman /coa-mapping (yang menghitung akun), jadi
+  // badge "9" bisa muncul di sebelah halaman yang bilang "0 akun belum
+  // dipetakan". Sekarang keduanya menghitung hal yang sama.
   const [pendingMapping, setPendingMapping] = useState(0)
   const workspaceRef = useRef<HTMLDivElement>(null)
 
@@ -88,8 +93,8 @@ export function Sidebar() {
     let alive = true
     fetch(`/api/reports/list?clientId=${activeClient.id}`)
       .then(r => (r.ok ? r.json() : { reports: [] }))
-      .then((d: { reports?: { status: string }[] }) => {
-        if (alive) setPendingMapping((d.reports ?? []).filter(r => r.status !== 'mapped' && r.status !== 'confirmed').length)
+      .then((d: { reports?: { unmappedCount: number }[] }) => {
+        if (alive) setPendingMapping(sumUnmapped(d.reports ?? []))
       })
       .catch(() => { if (alive) setPendingMapping(0) })
     return () => { alive = false }

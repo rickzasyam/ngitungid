@@ -8,6 +8,7 @@ import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
 import { normalizeName } from '@/lib/coa-match'
 import { buildLineItemValues } from '@/lib/reports/line-items'
+import { statusAfterExtract } from '@/lib/reports/mapping-status'
 import { retryState, STALE_EXTRACTING_MS } from '@/lib/reports/retry-policy'
 
 // Gemini + Buffer butuh Node runtime; durasi sama dengan route upload.
@@ -130,10 +131,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (values.length > 0) {
       statements.push(db.insert(reportLineItems).values(values))
     }
+    // Sama seperti jalur upload: auto-match yang lengkap langsung 'mapped',
+    // supaya hasil retry tidak ikut nyangkut di 'review'.
     statements.push(
       db
         .update(financialReports)
-        .set({ status: 'review', extractedAt: new Date() })
+        .set({ status: statusAfterExtract(values), extractedAt: new Date() })
         .where(eq(financialReports.id, reportId))
     )
 
