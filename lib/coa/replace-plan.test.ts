@@ -1,0 +1,302 @@
+import { describe, it, expect } from 'vitest'
+import { buildReplacePlan, historyToReinsert, type PlanInput } from './replace-plan'
+
+// id lama dibuat mudah dibaca: OLD-<kode>.
+const oldAcc = (kode: string) => ({ id: `OLD-${kode}`, kode })
+
+const line = (o: Partial<PlanInput['lines'][number]> & { id: string; reportId: string }) => ({
+  masterCoaId: null,
+  suggestedCoaId: null,
+  isSubtotal: false,
+  status: 'matched',
+  rawName: `raw-${o.id}`,
+  amount: '1000.00',
+  ...o,
+})
+
+const report = (id: string, status = 'mapped') => ({
+  id,
+  reportType: 'laba_rugi',
+  periodStart: '2026-03-01',
+  periodEnd: '2026-03-31',
+  status,
+})
+
+const base = (over: Partial<PlanInput> = {}): PlanInput => ({
+  oldAccounts: [oldAcc('A-1'), oldAcc('A-2')],
+  newKodeToId: new Map([
+    ['A-1', 'NEW-A-1'],
+    ['A-2', 'NEW-A-2'],
+  ]),
+  ambiguousKode: [],
+  lines: [],
+  history: [],
+  reports: [],
+  ...over,
+})
+
+describe('buildReplacePlan — re-link by kode', () => {
+  it('kode yang masih ada → mapping tersambung ke id BARU', () => {
+    const { plan, relinks } = buildReplacePlan(
+      base({
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' })],
+        reports: [report('R1')],
+      })
+    )
+
+    expect(plan.relinkedLineCount).toBe(1)
+    expect(plan.brokenLineCount).toBe(0)
+    expect(relinks).toEqual([
+      { lineItemId: 'L1', newMasterCoaId: 'NEW-A-1', newSuggestedCoaId: null },
+    ])
+    // Id BERUBAH walau kode sama — inti dari re-link ini.
+    expect(relinks[0].newMasterCoaId).not.toBe('OLD-A-1')
+  })
+
+  it('kode yang hilang di file baru → putus (null) dan masuk laporan dampak', () => {
+    const { plan, relinks } = buildReplacePlan(
+      base({
+        newKodeToId: new Map([['A-1', 'NEW-A-1']]), // A-2 dihapus dari Excel
+        lines: [
+          line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' }),
+          line({ id: 'L2', reportId: 'R1', masterCoaId: 'OLD-A-2', rawName: 'Beban Sewa', amount: '250.00' }),
+        ],
+        reports: [report('R1')],
+      })
+    )
+
+    expect(plan.missingKode).toEqual(['A-2'])
+    expect(plan.brokenLineCount).toBe(1)
+    expect(relinks).toContainEqual({ lineItemId: 'L2', newMasterCoaId: null, newSuggestedCoaId: null })
+
+    const impact = plan.reports[0]
+    expect(impact.relinkedCount).toBe(1)
+    expect(impact.brokenLines).toEqual([
+      { lineItemId: 'L2', rawName: 'Beban Sewa', amount: '250.00', kode: 'A-2' },
+    ])
+  })
+
+  it('kode hasil auto-suffix (ambigu) TIDAK di-re-link walau kode-nya ada', () => {
+    const { plan, relinks } = buildReplacePlan(
+      base({
+        // 'A-1' ada di file baru, tapi dobel → tidak deterministik.
+        newKodeToId: new Map([
+          ['A-1', 'NEW-A-1'],
+          ['A-1-2', 'NEW-A-1-2'],
+          ['A-2', 'NEW-A-2'],
+        ]),
+        ambiguousKode: ['A-1'],
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' })],
+        reports: [report('R1')],
+      })
+    )
+
+    expect(plan.ambiguousKode).toEqual(['A-1'])
+    expect(plan.matchedKode).not.toContain('A-1')
+    expect(plan.missingKode).toContain('A-1')
+    expect(plan.brokenLineCount).toBe(1)
+    expect(relinks).toEqual([{ lineItemId: 'L1', newMasterCoaId: null, newSuggestedCoaId: null }])
+  })
+
+  it('suggested_coa_id ikut disambung / dihitung saat hilang', () => {
+    const { plan } = buildReplacePlan(
+      base({
+        newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+        lines: [
+          line({ id: 'L1', reportId: 'R1', suggestedCoaId: 'OLD-A-1', status: 'unmatched' }),
+          line({ id: 'L2', reportId: 'R1', suggestedCoaId: 'OLD-A-2', status: 'unmatched' }),
+        ],
+        reports: [report('R1', 'review')],
+      })
+    )
+    expect(plan.suggestionsRelinked).toBe(1)
+    expect(plan.suggestionsLost).toBe(1)
+  })
+})
+
+describe('buildReplacePlan — demote status laporan', () => {
+  it("'mapped' yang kehilangan sebagian mapping → 'review'", () => {
+    const { plan } = buildReplacePlan(
+      base({
+        newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+        lines: [
+          line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' }),
+          line({ id: 'L2', reportId: 'R1', masterCoaId: 'OLD-A-2' }),
+        ],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+    expect(plan.reports[0].statusAfter).toBe('review')
+    expect(plan.demotedReportIds).toEqual(['R1'])
+  })
+
+  it("tetap 100% ter-mapping → tetap 'mapped', tidak ikut di-demote", () => {
+    const { plan } = buildReplacePlan(
+      base({
+        lines: [
+          line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' }),
+          line({ id: 'L2', reportId: 'R1', masterCoaId: 'OLD-A-2' }),
+        ],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+    expect(plan.reports[0].statusAfter).toBe('mapped')
+    expect(plan.demotedReportIds).toEqual([])
+  })
+
+  it('baris subtotal & rejected tidak membuat laporan ter-demote', () => {
+    const { plan } = buildReplacePlan(
+      base({
+        newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+        lines: [
+          line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' }),
+          // subtotal & rejected memang tidak pernah punya COA
+          line({ id: 'L2', reportId: 'R1', isSubtotal: true, status: 'matched' }),
+          line({ id: 'L3', reportId: 'R1', status: 'rejected' }),
+        ],
+        reports: [report('R1', 'mapped')],
+      })
+    )
+    expect(plan.demotedReportIds).toEqual([])
+    expect(plan.reports[0].statusAfter).toBe('mapped')
+  })
+
+  it("status 'confirmed' TIDAK disentuh walau mapping-nya putus", () => {
+    const { plan } = buildReplacePlan(
+      base({
+        newKodeToId: new Map(),
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' })],
+        reports: [report('R1', 'confirmed')],
+      })
+    )
+    expect(plan.reports[0].statusAfter).toBe('confirmed')
+    expect(plan.demotedReportIds).toEqual([])
+  })
+
+  it("'review' tidak ikut naik jadi 'mapped' gara-gara replace", () => {
+    const { plan } = buildReplacePlan(
+      base({
+        lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' })],
+        reports: [report('R1', 'review')],
+      })
+    )
+    expect(plan.reports[0].statusAfter).toBe('review')
+  })
+})
+
+describe('historyToReinsert — riwayat auto-match', () => {
+  const history = [
+    { rawName: 'Penjualan Shopee', masterCoaId: 'OLD-A-1', confirmedCount: 3 },
+    { rawName: 'Beban Sewa', masterCoaId: 'OLD-A-2', confirmedCount: 1 },
+  ]
+
+  it('kode yang masih ada → terselamatkan, menunjuk id baru', () => {
+    const saved = historyToReinsert({
+      oldAccounts: [oldAcc('A-1'), oldAcc('A-2')],
+      newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+      ambiguousKode: [],
+      history,
+    })
+    expect(saved).toEqual([
+      { rawName: 'Penjualan Shopee', masterCoaId: 'NEW-A-1', confirmedCount: 3 },
+    ])
+  })
+
+  it('kode ambigu tidak diselamatkan (tebakan lebih buruk dari kosong)', () => {
+    const saved = historyToReinsert({
+      oldAccounts: [oldAcc('A-1')],
+      newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+      ambiguousKode: ['A-1'],
+      history: [history[0]],
+    })
+    expect(saved).toEqual([])
+  })
+
+  it('hitungan saved/lost di plan cocok dengan yang benar-benar di-insert', () => {
+    const input = base({
+      newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+      history,
+      reports: [],
+    })
+    const { plan } = buildReplacePlan(input)
+    expect(plan.historySaved).toBe(1)
+    expect(plan.historyLost).toBe(1)
+    expect(historyToReinsert(input)).toHaveLength(plan.historySaved)
+  })
+})
+
+describe('buildReplacePlan — kemurnian (dasar dry-run)', () => {
+  // Dry-run memanggil planner yang SAMA dengan jalur commit lalu berhenti
+  // sebelum statement apa pun disusun. Yang bisa bocor cuma kalau planner
+  // memutasi input; kunci itu di sini.
+  it('tidak memutasi input sama sekali', () => {
+    const input = base({
+      newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+      lines: [
+        line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-1' }),
+        line({ id: 'L2', reportId: 'R1', masterCoaId: 'OLD-A-2' }),
+      ],
+      history: [{ rawName: 'Kas', masterCoaId: 'OLD-A-1', confirmedCount: 4 }],
+      reports: [report('R1', 'mapped')],
+    })
+    const snapshot = JSON.stringify({
+      oldAccounts: input.oldAccounts,
+      lines: input.lines,
+      history: input.history,
+      reports: input.reports,
+      newKodeToId: [...input.newKodeToId],
+    })
+
+    buildReplacePlan(input)
+    buildReplacePlan(input) // dipanggil dua kali: dry-run lalu commit
+
+    expect(
+      JSON.stringify({
+        oldAccounts: input.oldAccounts,
+        lines: input.lines,
+        history: input.history,
+        reports: input.reports,
+        newKodeToId: [...input.newKodeToId],
+      })
+    ).toBe(snapshot)
+  })
+
+  it('dua pemanggilan berturut-turut memberi hasil identik', () => {
+    const input = base({
+      newKodeToId: new Map([['A-1', 'NEW-A-1']]),
+      lines: [line({ id: 'L1', reportId: 'R1', masterCoaId: 'OLD-A-2' })],
+      reports: [report('R1', 'mapped')],
+    })
+    const a = buildReplacePlan(input)
+    const b = buildReplacePlan(input)
+    // Inti janji ke admin: angka di layar konfirmasi = angka yang dieksekusi.
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a))
+  })
+})
+
+describe('buildReplacePlan — ringkasan kode', () => {
+  it('memisahkan matched / missing / added', () => {
+    const { plan } = buildReplacePlan(
+      base({
+        oldAccounts: [oldAcc('A-1'), oldAcc('A-2')],
+        newKodeToId: new Map([
+          ['A-1', 'NEW-A-1'],
+          ['B-9', 'NEW-B-9'],
+        ]),
+      })
+    )
+    expect(plan.matchedKode).toEqual(['A-1'])
+    expect(plan.missingKode).toEqual(['A-2'])
+    expect(plan.addedKode).toEqual(['B-9'])
+  })
+
+  it('laporan yang tidak menyentuh COA sama sekali tidak masuk laporan dampak', () => {
+    const { plan } = buildReplacePlan(
+      base({
+        lines: [line({ id: 'L1', reportId: 'R1', status: 'unmatched' })], // tanpa COA
+        reports: [report('R1', 'review')],
+      })
+    )
+    expect(plan.reports).toEqual([])
+  })
+})

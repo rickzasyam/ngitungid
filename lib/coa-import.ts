@@ -19,6 +19,18 @@ export interface CoaParseResult {
   // Non-blocking: mis. kode dobel yang di-suffix otomatis. Import tetap lanjut.
   // Optional — early-return (error) path tidak mengisinya; konsumen pakai `?? []`.
   warnings?: string[]
+  /**
+   * Kode DASAR yang muncul lebih dari sekali di file (sebelum di-suffix).
+   * Contoh: file punya dua baris "24-0001" → hasilnya "24-0001" & "24-0001-2",
+   * dan "24-0001" masuk daftar ini.
+   *
+   * Dipakai re-link saat ganti Master COA: baris mana yang "asli" pemegang kode
+   * itu ditentukan semata oleh urutan baris di Excel, jadi menyambungkan mapping
+   * lama ke salah satunya adalah tebakan. Kode di daftar ini SENGAJA tidak
+   * di-re-link — lebih baik admin memetakan ulang secara sadar daripada diam-diam
+   * menyambung ke akun yang salah. Optional, alasan sama dengan `warnings`.
+   */
+  ambiguousKode?: string[]
 }
 
 type Field = 'kode' | 'nama' | 'posisi' | 'kelompok' | 'subKelompok' | 'classCf'
@@ -199,6 +211,7 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
   const rows: ParsedCoaRow[] = []
   const errors: string[] = []
   const suffixedKode: string[] = []
+  const ambiguousKode = new Set<string>()
   const seenKode = new Set<string>()
 
   const pick = (row: unknown[], field: Field): string =>
@@ -238,6 +251,8 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
       while (seenKode.has(`${values.kode}-${n}`)) n++
       kode = `${values.kode}-${n}`
       suffixedKode.push(`${values.kode} → ${kode}`)
+      // Kode dasarnya jadi ambigu: pemegang "aslinya" cuma ditentukan urutan baris.
+      ambiguousKode.add(values.kode)
     }
     seenKode.add(kode)
 
@@ -267,5 +282,5 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
     )
   }
 
-  return { rows, errors, warnings }
+  return { rows, errors, warnings, ambiguousKode: [...ambiguousKode] }
 }

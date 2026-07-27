@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-replace-dialog'
 import {
   FileSpreadsheet,
   Upload,
@@ -361,6 +362,16 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  // Langkah konfirmasi: file yang dipilih ditahan dulu, dry-run dijalankan, dan
+  // baru di-commit kalau admin menekan Lanjutkan. `pending` null = tidak ada
+  // dialog terbuka.
+  const [pending, setPending] = useState<{
+    file: File
+    impact: CoaImpact
+    newCount: number
+    oldCount: number
+    warnings: string[]
+  } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -389,20 +400,66 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
     setError(null)
     setWarning(null)
     try {
+      // Selalu dry-run dulu. Untuk klien yang belum punya COA sama sekali
+      // dampaknya nol dan dialog dilewati — konfirmasi cuma relevan kalau ada
+      // sesuatu yang bisa rusak.
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('dryRun', '1')
+      const res = await fetch(`/api/clients/${clientId}/coa`, { method: 'POST', body: fd })
+      const payload = (await res.json().catch(() => null)) as
+        | { error?: string; details?: string[]; warnings?: string[]; impact?: CoaImpact; newCount?: number; oldCount?: number }
+        | null
+      if (!res.ok) {
+        const details = payload?.details
+        setError(details?.length ? details.join(' · ') : (payload?.error ?? 'Gagal memproses Master COA.'))
+        return
+      }
+      const impact = payload?.impact
+      const touchesSomething =
+        !!impact && (impact.relinkedLineCount > 0 || impact.brokenLineCount > 0 || impact.historySaved + impact.historyLost > 0)
+      if (impact && touchesSomething) {
+        setPending({
+          file,
+          impact,
+          newCount: payload?.newCount ?? 0,
+          oldCount: payload?.oldCount ?? 0,
+          warnings: payload?.warnings ?? [],
+        })
+        return
+      }
+      await commitReplace(file)
+    } catch {
+      setError('Terjadi kesalahan jaringan. Coba lagi.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const commitReplace = async (file: File) => {
+    setUploading(true)
+    setError(null)
+    try {
       const fd = new FormData()
       fd.append('file', file)
       const res = await fetch(`/api/clients/${clientId}/coa`, { method: 'POST', body: fd })
       const payload = (await res.json().catch(() => null)) as
-        | { error?: string; details?: string[]; warnings?: string[] }
+        | { error?: string; details?: string[]; warnings?: string[]; impact?: CoaImpact }
         | null
       if (!res.ok) {
         const details = payload?.details
         setError(details?.length ? details.join(' · ') : (payload?.error ?? 'Gagal upload Master COA.'))
         return
       }
+      setPending(null)
       await load()
       setShowPreview(true)
-      setWarning(payload?.warnings?.length ? payload.warnings.join(' · ') : null)
+      const broken = payload?.impact?.brokenLineCount ?? 0
+      const notes = [...(payload?.warnings ?? [])]
+      if (broken > 0) {
+        notes.push(`${broken} baris kehilangan mapping — petakan ulang di COA Mapping.`)
+      }
+      setWarning(notes.length ? notes.join(' · ') : null)
     } catch {
       setError('Terjadi kesalahan jaringan. Coba lagi.')
     } finally {
@@ -507,6 +564,21 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
             </button>
           )}
         </div>
+      )}
+
+      {/* Konfirmasi ganti Master COA — hanya staf (readOnly tidak punya tombol
+          Ganti sama sekali, dan tulis tetap dijaga requireAkunting di API). */}
+      {!readOnly && pending && (
+        <CoaReplaceDialog
+          fileName={pending.file.name}
+          impact={pending.impact}
+          newCount={pending.newCount}
+          oldCount={pending.oldCount}
+          warnings={pending.warnings}
+          submitting={uploading}
+          onConfirm={() => commitReplace(pending.file)}
+          onCancel={() => setPending(null)}
+        />
       )}
 
       {/* Error banner */}
