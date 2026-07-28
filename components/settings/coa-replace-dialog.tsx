@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ModalPortal } from '@/components/ui/modal-portal'
+import { ModalShell } from '@/components/ui/modal-portal'
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp, Link2, Loader2, Unlink } from 'lucide-react'
 
 // Layar konfirmasi "Ganti Master COA". Dulu tombol Ganti Excel langsung POST —
@@ -112,22 +112,11 @@ export function CoaReplaceDialog({
   const demoted = impact.demotedReportIds.length
 
   return (
-    <ModalPortal>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(26,26,26,0.45)' }}
-      role="presentation"
-      onClick={e => {
-        if (e.target === e.currentTarget && !submitting) onCancel()
-      }}
+    <ModalShell
+      labelledBy="coa-replace-title"
+      className="max-w-2xl"
+      onDismiss={submitting ? null : onCancel}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="coa-replace-title"
-        className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-3xl overflow-hidden"
-        style={{ background: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)' }}
-      >
         {/* Header */}
         <div className="flex-shrink-0 px-5 sm:px-6 py-4 border-b" style={{ borderColor: '#f0f0f0' }}>
           <h2 id="coa-replace-title" className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>
@@ -267,8 +256,6 @@ export function CoaReplaceDialog({
             {submitting ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" />Mengganti…</>) : 'Lanjutkan Ganti'}
           </button>
         </div>
-      </div>
-    </div>
-    </ModalPortal>
+    </ModalShell>
   )
 }

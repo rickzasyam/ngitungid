@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Info, Loader2, Plus } from 'lucide-react'
-import { ModalPortal } from '@/components/ui/modal-portal'
+import { ModalShell } from '@/components/ui/modal-portal'
+import { StyledSelect } from '@/components/ui/styled-select'
 import { classificationWarnings } from '@/lib/coa/classification-health'
 import type { CoaImpact } from './coa-replace-dialog'
 
@@ -93,26 +94,31 @@ function LockedSelect({
           </button>
         </div>
       ) : (
-        <select
-          value={selectValue}
-          onChange={e => {
-            if (e.target.value === NEW_VALUE) { setCreating(true); onChange('') } else onChange(e.target.value)
-          }}
-          className="w-full mt-1 px-3 py-2 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-          style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-primary)' }}
-        >
-          {/* Placeholder WAJIB ada & sengaja dibedakan bentuknya (diapit em-dash)
-              dari nilai nyata. Tanpa ini, `value=""` tidak cocok dengan opsi mana
-              pun sehingga browser menampilkan opsi PERTAMA — dan karena daftarnya
-              diurutkan, yang tampil adalah "-", sebuah nilai NYATA milik 2 akun.
-              Akibatnya form kosong terlihat seperti sudah memilih "-". */}
-          {allowEmpty
-            ? <option value="">— tidak diisi —</option>
-            : <option value="">— pilih {label} —</option>}
-          {!isKnown && value !== '' && <option value={value}>{value}</option>}
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-          <option value={NEW_VALUE}>+ nilai baru…</option>
-        </select>
+        <div className="mt-1">
+          <StyledSelect
+            ariaLabel={label}
+            value={selectValue}
+            // Placeholder ADALAH teks tombol saat belum ada nilai — bukan sebuah
+            // opsi. Itu yang menjaga pembedaannya dari nilai NYATA "-": keduanya
+            // tidak pernah berada di ruang yang sama.
+            placeholder={allowEmpty ? '— tidak diisi —' : `— pilih ${label} —`}
+            options={[
+              ...(allowEmpty
+                ? [{ value: '', label: '— tidak diisi —', kind: 'placeholder' as const }]
+                : []),
+              // Nilai lama yang tak ada di daftar (mis. sisa import) tetap
+              // ditampilkan supaya mengedit kolom LAIN tidak diam-diam menghapusnya.
+              ...(!isKnown && value !== '' ? [{ value, label: value }] : []),
+              ...options.map(o => ({ value: o, label: o })),
+              { value: NEW_VALUE, label: '+ nilai baru…', kind: 'action' as const },
+            ]}
+            onChange={v => {
+              if (v === NEW_VALUE) { setCreating(true); onChange('') } else onChange(v)
+            }}
+            searchable={options.length > 8}
+            searchPlaceholder={`Cari ${label.toLowerCase()}…`}
+          />
+        </div>
       )}
       {creating && (
         <p className="text-[10.5px] mt-1" style={{ color: '#b45309' }}>
@@ -218,20 +224,11 @@ export function CoaRowForm({
   }
 
   return (
-    <ModalPortal>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(26,26,26,0.45)' }}
-      role="presentation"
-      onClick={e => { if (e.target === e.currentTarget && !saving) onCancel() }}
+    <ModalShell
+      labelledBy="coa-row-title"
+      className="max-w-lg"
+      onDismiss={saving ? null : onCancel}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="coa-row-title"
-        className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-3xl overflow-hidden"
-        style={{ background: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)' }}
-      >
         <div className="flex-shrink-0 px-5 sm:px-6 py-4 border-b" style={{ borderColor: '#f0f0f0' }}>
           <h2 id="coa-row-title" className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>
             {editing ? 'Edit Akun' : 'Tambah Akun'}
@@ -259,15 +256,20 @@ export function CoaRowForm({
               <span className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>
                 Posisi <span style={{ color: '#dc2626' }}>*</span>
               </span>
-              <select
-                value={posisi}
-                onChange={e => setPosisi(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-primary)' }}
-              >
-                <option value="Debit">Debit</option>
-                <option value="Kredit">Kredit</option>
-              </select>
+              {/* Ikut StyledSelect walau cuma 2 opsi — kalau satu field tetap
+                  memakai <select> native, bentuk & tinggi kontrolnya beda
+                  sendiri di dalam form yang sama. */}
+              <div className="mt-1">
+                <StyledSelect
+                  ariaLabel="Posisi"
+                  value={posisi}
+                  onChange={setPosisi}
+                  options={[
+                    { value: 'Debit', label: 'Debit' },
+                    { value: 'Kredit', label: 'Kredit' },
+                  ]}
+                />
+              </div>
             </label>
           </div>
 
@@ -350,9 +352,7 @@ export function CoaRowForm({
             {saving ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" />Menyimpan…</>) : (editing ? 'Simpan' : <><Plus className="w-3.5 h-3.5" />Tambah</>)}
           </button>
         </div>
-      </div>
-    </div>
-    </ModalPortal>
+    </ModalShell>
   )
 }
 
@@ -389,20 +389,11 @@ export function CoaDeleteDialog({
   const affected = impact.reports.filter(r => r.brokenCount > 0)
 
   return (
-    <ModalPortal>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(26,26,26,0.45)' }}
-      role="presentation"
-      onClick={e => { if (e.target === e.currentTarget && !submitting) onCancel() }}
+    <ModalShell
+      labelledBy="coa-del-title"
+      className="max-w-xl"
+      onDismiss={submitting ? null : onCancel}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="coa-del-title"
-        className="w-full max-w-xl max-h-[85vh] flex flex-col rounded-3xl overflow-hidden"
-        style={{ background: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)' }}
-      >
         <div className="flex-shrink-0 px-5 sm:px-6 py-4 border-b" style={{ borderColor: '#f0f0f0' }}>
           <h2 id="coa-del-title" className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>
             Hapus akun COA?
@@ -489,8 +480,6 @@ export function CoaDeleteDialog({
             {submitting ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" />Menghapus…</>) : 'Hapus Akun'}
           </button>
         </div>
-      </div>
-    </div>
-    </ModalPortal>
+    </ModalShell>
   )
 }

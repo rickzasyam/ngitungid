@@ -31,3 +31,63 @@ export function ModalPortal({ children }: { children: React.ReactNode }) {
   if (!mounted) return null
   return createPortal(children, document.body)
 }
+
+/**
+ * Backdrop + kotak pemusat untuk dialog.
+ *
+ * Backdrop menutupi SELURUH viewport (`inset-0`) supaya seluruh app terblokir,
+ * termasuk sidebar. Kotak pemusatnya sendiri dimulai dari `--app-content-left`
+ * sehingga dialog duduk di tengah AREA KONTEN — lihat globals.css untuk alasan
+ * variabel itu berbasis CSS dan kenapa ia tidak bisa basi saat sidebar dilipat
+ * atau viewport diubah.
+ */
+export function ModalShell({
+  children,
+  onDismiss,
+  labelledBy,
+  className = 'max-w-lg',
+}: {
+  children: React.ReactNode
+  /** null = tidak bisa ditutup lewat klik backdrop (mis. sedang menyimpan). */
+  onDismiss: (() => void) | null
+  labelledBy: string
+  /** kelas lebar untuk kotak dialog, mis. 'max-w-2xl'. */
+  className?: string
+}) {
+  return (
+    <ModalPortal>
+      <div
+        className="fixed inset-0 z-50 animate-fade-in"
+        style={{ background: 'rgba(26,26,26,0.45)' }}
+        role="presentation"
+        onClick={e => {
+          if (e.target === e.currentTarget) onDismiss?.()
+        }}
+      >
+        <div
+          className="absolute inset-y-0 right-0 flex items-center justify-center p-4"
+          style={{
+            left: 'var(--app-content-left, 0px)',
+            // Sidebar melebar/menyempit dengan transisi 300ms; samakan supaya
+            // dialog ikut bergeser mulus, bukan meloncat.
+            transition: 'left 300ms ease-in-out',
+          }}
+          role="presentation"
+          onClick={e => {
+            if (e.target === e.currentTarget) onDismiss?.()
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelledBy}
+            className={`w-full ${className} max-h-[85vh] flex flex-col rounded-3xl overflow-hidden`}
+            style={{ background: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)' }}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  )
+}

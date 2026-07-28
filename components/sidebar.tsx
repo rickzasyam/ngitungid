@@ -218,6 +218,10 @@ export function Sidebar() {
 
       <aside
         id="app-sidebar"
+        // Dibaca CSS untuk menghitung --app-content-left (lihat globals.css):
+        // dialog dipusatkan ke AREA KONTEN, bukan viewport. Sengaja atribut DOM,
+        // bukan variabel yang di-set lewat JS — lihat alasannya di globals.css.
+        data-collapsed={isCollapsed ? 'true' : 'false'}
         className={`
           h-screen flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out
           fixed inset-y-0 left-0 md:relative md:inset-auto z-50 md:z-auto

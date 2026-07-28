@@ -144,6 +144,35 @@ html {
   --sidebar-ring: #daf163;
 }
 
+/* === Offset area konten (untuk memusatkan dialog) ==========================
+   Dialog dipusatkan ke AREA KONTEN, bukan viewport: ada sidebar tetap di kiri,
+   jadi memusatkan ke viewport membuat dialog terlihat meleset ke kiri terhadap
+   kanvas putih. Backdrop-nya TETAP menutupi seluruh viewport (semantik modal:
+   seluruh app terblokir) — yang digeser hanya kotak dialognya.
+
+   Sengaja CSS murni, bukan variabel yang di-set dari JS:
+   - Sidebar dilipat  → atribut data-collapsed berubah → selektor di bawah ikut
+     berubah pada frame yang sama. Tidak ada state React kedua yang bisa basi.
+   - Viewport diubah  → media query yang menanganinya, tanpa listener resize
+     yang bisa lupa dipasang/dilepas.
+   - Halaman tanpa sidebar (mis. /login) → `:has(#app-sidebar)` tidak cocok,
+     nilainya tetap 0 dan dialog dipusatkan penuh ke viewport.
+   Di bawah md, sidebar off-canvas (fixed + translate) sehingga tidak memakan
+   ruang konten → tetap 0. Angka lebarnya HARUS sama dengan yang dipakai
+   components/sidebar.tsx. */
+:root {
+  --app-content-left: 0px;
+}
+
+@media (min-width: 768px) {
+  :root:has(#app-sidebar) {
+    --app-content-left: 240px;
+  }
+  :root:has(#app-sidebar[data-collapsed='true']) {
+    --app-content-left: 72px;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     color-scheme: dark;

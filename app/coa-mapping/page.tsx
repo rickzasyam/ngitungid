@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { groupUnmappedByReportType, isUnreadableName } from '@/lib/reports/group-unmapped'
+import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import type { ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import {
@@ -288,139 +289,42 @@ function COADropdown({
   searchQuery: string
   onSearchChange: (q: string) => void
 }) {
-  const filteredGroups = groups.map(group => ({
-    ...group,
-    options: group.options.filter(opt =>
-      opt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      opt.kode.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-  })).filter(group => group.options.length > 0)
+  // Tampilan & perilaku dropdown-nya kini milik <StyledSelect> (components/ui).
+  // Dulu markup-nya tinggal di sini, lalu form CRUD Master COA butuh dropdown
+  // yang sama — menyalinnya akan melahirkan dua tampilan yang bisa menyimpang,
+  // jadi diekstrak. Yang tersisa di sini hanya pemetaan bentuk data COA.
+  const options = useMemo<StyledOption[]>(
+    () =>
+      groups.flatMap(g =>
+        g.options.map(o => ({ value: o.id, label: o.name, badge: o.kode, group: g.group }))
+      ),
+    [groups]
+  )
+  const byId = useMemo(() => new Map(groups.flatMap(g => g.options).map(o => [o.id, o])), [groups])
 
   return (
-    <div className="relative flex-1">
-      {/* Trigger */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-2xl text-left transition-all duration-200"
-        style={{
-          background: 'white',
-          border: isOpen
-            ? '1.5px solid var(--color-accent-secondary)'
-            : value
-              ? '1.5px solid var(--color-accent-primary)'
-              : '1.5px solid #e5e5e5',
-          boxShadow: isOpen ? '0 0 0 3px rgba(167,139,250,0.1)' : 'none',
+    <div className="flex-1">
+      <StyledSelect
+        options={options}
+        value={value?.id ?? ''}
+        onChange={id => {
+          const opt = byId.get(id)
+          if (opt) onSelect(opt)
         }}
-      >
-        {value ? (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
-              style={{ background: '#f0f0f0', color: '#6b7280' }}
-            >
-              {value.kode}
-            </span>
-            <span className="text-sm font-medium truncate" style={{ color: '#2d2d2d' }}>
-              {value.name}
-            </span>
-          </div>
-        ) : (
-          <span className="flex-1 text-sm" style={{ color: '#9ca3af' }}>
-            Pilih dari Master COA...
-          </span>
-        )}
-        <ChevronDown
-          className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-          style={{
-            color: '#9ca3af',
-            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-          }}
-        />
-      </button>
-
-      {/* Dropdown panel */}
-      {isOpen && (
-        <div
-          className="absolute top-full left-0 right-0 mt-1.5 rounded-2xl overflow-hidden z-50"
-          style={{
-            background: 'white',
-            border: '1px solid #e5e5e5',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            maxHeight: '240px',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {/* Search */}
-          <div className="p-2 flex-shrink-0" style={{ borderBottom: '1px solid #f0f0f0' }}>
-            <div
-              className="flex items-center gap-2 px-2 py-1.5 rounded-xl"
-              style={{ background: '#f8f8f8' }}
-            >
-              <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#9ca3af' }} />
-              <input
-                autoFocus
-                value={searchQuery}
-                onChange={e => onSearchChange(e.target.value)}
-                placeholder="Cari nama atau kode COA..."
-                className="flex-1 text-xs outline-none bg-transparent"
-                style={{ color: '#2d2d2d' }}
-              />
-            </div>
-          </div>
-
-          {/* Options */}
-          <div className="overflow-y-auto flex-1">
-            {groups.length === 0 ? (
-              <div className="px-3 py-4 text-center">
-                <p className="text-xs" style={{ color: '#9ca3af' }}>
-                  Master COA klien ini masih kosong
-                </p>
-              </div>
-            ) : filteredGroups.length === 0 ? (
-              <div className="px-3 py-4 text-center">
-                <p className="text-xs" style={{ color: '#9ca3af' }}>Tidak ditemukan</p>
-              </div>
-            ) : (
-              filteredGroups.map(group => (
-                <div key={group.group}>
-                  <div
-                    className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider"
-                    style={{ color: '#9ca3af', background: '#fafafa' }}
-                  >
-                    {group.group}
-                  </div>
-                  {group.options.map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => onSelect(opt)}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-inset ${
-                        value?.id === opt.id ? 'bg-[#f9fff3]' : 'hover:bg-[#f8f8f8]'
-                      }`}
-                      style={{ borderBottom: '1px solid #f8f8f8' }}
-                    >
-                      <span
-                        className="text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded"
-                        style={{ background: '#f0f0f0', color: '#6b7280' }}
-                      >
-                        {opt.kode}
-                      </span>
-                      <span className="text-xs flex-1" style={{ color: '#2d2d2d' }}>
-                        {opt.name}
-                      </span>
-                      {value?.id === opt.id && (
-                        <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-accent-primary)' }} />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+        placeholder="Pilih dari Master COA..."
+        ariaLabel="Pilih akun Master COA"
+        searchable
+        searchPlaceholder="Cari nama atau kode COA..."
+        emptyText={groups.length === 0 ? 'Master COA klien ini masih kosong' : 'Tidak ditemukan'}
+        isOpen={isOpen}
+        onOpenChange={next => {
+          // Induk memakai satu id "dropdown yang terbuka"; onToggle sudah
+          // membalik state itu, jadi cukup panggil saat nilainya berubah.
+          if (next !== isOpen) onToggle()
+        }}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+      />
     </div>
   )
 }
