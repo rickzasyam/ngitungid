@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Info, Loader2, Plus } from 'lucide-react'
+import { ModalPortal } from '@/components/ui/modal-portal'
 import { classificationWarnings } from '@/lib/coa/classification-health'
 import type { CoaImpact } from './coa-replace-dialog'
 
@@ -64,7 +65,7 @@ function LockedSelect({
   // Nilai yang tidak ada di daftar (mis. hasil import lama) tetap harus bisa
   // ditampilkan & dipertahankan — kalau tidak, membuka form untuk mengedit
   // kolom LAIN diam-diam mengganti nilai ini.
-  const selectValue = creating ? NEW_VALUE : isKnown ? value : value
+  const selectValue = creating ? NEW_VALUE : value
 
   return (
     <label className="block">
@@ -84,7 +85,7 @@ function LockedSelect({
           />
           <button
             type="button"
-            onClick={() => { setCreating(false); onChange(options[0] ?? '') }}
+            onClick={() => { setCreating(false); onChange('') }}
             className="px-2.5 py-2 rounded-xl text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
             style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)' }}
           >
@@ -100,7 +101,14 @@ function LockedSelect({
           className="w-full mt-1 px-3 py-2 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
           style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-primary)' }}
         >
-          {allowEmpty && <option value="">— tidak diisi —</option>}
+          {/* Placeholder WAJIB ada & sengaja dibedakan bentuknya (diapit em-dash)
+              dari nilai nyata. Tanpa ini, `value=""` tidak cocok dengan opsi mana
+              pun sehingga browser menampilkan opsi PERTAMA — dan karena daftarnya
+              diurutkan, yang tampil adalah "-", sebuah nilai NYATA milik 2 akun.
+              Akibatnya form kosong terlihat seperti sudah memilih "-". */}
+          {allowEmpty
+            ? <option value="">— tidak diisi —</option>
+            : <option value="">— pilih {label} —</option>}
           {!isKnown && value !== '' && <option value={value}>{value}</option>}
           {options.map(o => <option key={o} value={o}>{o}</option>)}
           <option value={NEW_VALUE}>+ nilai baru…</option>
@@ -148,18 +156,38 @@ export function CoaRowForm({
   const cfOpts = useMemo(() => distinctOf(rows, 'classCf'), [rows])
 
   useEffect(() => {
-    cancelRef.current?.focus()
+    cancelRef.current?.focus({ preventScroll: true })
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !saving) onCancel() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onCancel, saving])
 
+  // Field mana yang sudah BENAR-BENAR dipilih penggunanya.
+  const [touched, setTouched] = useState<Record<'kelompok' | 'subKelompok' | 'classCf', boolean>>({
+    kelompok: false,
+    subKelompok: false,
+    classCf: false,
+  })
+  const touch = (f: 'kelompok' | 'subKelompok' | 'classCf') =>
+    setTouched(prev => (prev[f] ? prev : { ...prev, [f]: true }))
+
   // Peringatan dihitung dari fungsi klasifikasi ASLI (classifyPnl/classifyBs +
   // ambang classCf), bukan daftar hardcoded — kalau aturan klasifikasi berubah,
   // peringatan ini ikut benar sendiri tanpa disinkronkan manual.
+  //
+  // TAPI hanya ditampilkan untuk field yang sudah disentuh. Sebelumnya form yang
+  // baru dibuka langsung memunculkan "Kelompok "" tidak dikenali" — peringatan
+  // yang muncul sebelum pengguna melakukan apa pun melatih orang mengabaikannya,
+  // sehingga peringatan yang benar-benar penting ikut tidak dibaca. Field wajib
+  // yang dibiarkan kosong tetap tertangkap validasi biasa saat submit.
   const warnings = useMemo(
-    () => classificationWarnings({ kelompok, subKelompok, classCf: classCf === '' ? null : classCf }),
-    [kelompok, subKelompok, classCf]
+    () =>
+      classificationWarnings({
+        kelompok,
+        subKelompok,
+        classCf: classCf === '' ? null : classCf,
+      }).filter(w => touched[w.field]),
+    [kelompok, subKelompok, classCf, touched]
   )
 
   const kodeChanged = editing !== null && kode.trim() !== editing.kode
@@ -190,6 +218,7 @@ export function CoaRowForm({
   }
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
       style={{ background: 'rgba(26,26,26,0.45)' }}
@@ -266,9 +295,9 @@ export function CoaRowForm({
             />
           </label>
 
-          <LockedSelect label="Kelompok" value={kelompok} options={kelompokOpts} onChange={setKelompok} required />
-          <LockedSelect label="Sub Kelompok" value={subKelompok} options={subOpts} onChange={setSubKelompok} required />
-          <LockedSelect label="Class CF" value={classCf} options={cfOpts} onChange={setClassCf} allowEmpty hint="Kosongkan kalau akun ini tidak muncul di Arus Kas." />
+          <LockedSelect label="Kelompok" value={kelompok} options={kelompokOpts} onChange={v => { touch('kelompok'); setKelompok(v) }} required />
+          <LockedSelect label="Sub Kelompok" value={subKelompok} options={subOpts} onChange={v => { touch('subKelompok'); setSubKelompok(v) }} required />
+          <LockedSelect label="Class CF" value={classCf} options={cfOpts} onChange={v => { touch('classCf'); setClassCf(v) }} allowEmpty hint="Kosongkan kalau akun ini tidak muncul di Arus Kas." />
 
           {warnings.length > 0 && (
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
@@ -323,6 +352,7 @@ export function CoaRowForm({
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
 
@@ -350,7 +380,7 @@ export function CoaDeleteDialog({
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    cancelRef.current?.focus()
+    cancelRef.current?.focus({ preventScroll: true })
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !submitting) onCancel() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -359,6 +389,7 @@ export function CoaDeleteDialog({
   const affected = impact.reports.filter(r => r.brokenCount > 0)
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
       style={{ background: 'rgba(26,26,26,0.45)' }}
@@ -460,5 +491,6 @@ export function CoaDeleteDialog({
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }

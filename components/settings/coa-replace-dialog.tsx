@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ModalPortal } from '@/components/ui/modal-portal'
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp, Link2, Loader2, Unlink } from 'lucide-react'
 
 // Layar konfirmasi "Ganti Master COA". Dulu tombol Ganti Excel langsung POST —
@@ -99,7 +100,7 @@ export function CoaReplaceDialog({
   // Esc menutup; fokus awal ke Batal — aksi teraman jadi default, karena
   // Lanjutkan mengubah data laporan yang sudah dipetakan.
   useEffect(() => {
-    cancelRef.current?.focus()
+    cancelRef.current?.focus({ preventScroll: true })
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !submitting) onCancel()
     }
@@ -111,6 +112,7 @@ export function CoaReplaceDialog({
   const demoted = impact.demotedReportIds.length
 
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
       style={{ background: 'rgba(26,26,26,0.45)' }}
@@ -267,5 +269,6 @@ export function CoaReplaceDialog({
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
