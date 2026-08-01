@@ -144,6 +144,24 @@ html {
   --sidebar-ring: #daf163;
 }
 
+/* === Placeholder input =====================================================
+   Preflight Tailwind v4 menurunkan warna placeholder dari `currentColor` dengan
+   campuran transparan, dan pada input ber-latar --color-muted-bg (#f0f0f0)
+   hasilnya ikut warna teks yang diwarisi. Dipatok eksplisit ke #616b7a —
+   nilai PALING REDUP yang masih lolos WCAG AA (4,5:1) di SEMUA latar yang
+   dipakai app ini: 5,40:1 di atas putih, 5,17:1 di atas #fafafa, dan 4,73:1
+   di atas --color-muted-bg #f0f0f0 (latar terburuk). #6b7280 sempat dicoba
+   tapi hanya 4,24:1 di atas #f0f0f0 — gagal. Tetap jauh lebih redup dari
+   teks nilai (#2d2d2d, 13,77:1) sehingga "belum diisi" terbaca sebagai
+   keadaan yang berbeda, bukan sekadar teks biasa.
+   `opacity: 1` wajib — sebagian browser masih menerapkan opacity default
+   sendiri di atas warna ini. */
+input::placeholder,
+textarea::placeholder {
+  color: #616b7a;
+  opacity: 1;
+}
+
 /* === Offset area konten (untuk memusatkan dialog) ==========================
    Dialog dipusatkan ke AREA KONTEN, bukan viewport: ada sidebar tetap di kiri,
    jadi memusatkan ke viewport membuat dialog terlihat meleset ke kiri terhadap

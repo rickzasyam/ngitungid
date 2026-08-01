@@ -105,7 +105,13 @@ export function StyledSelect({
   /** Indeks opsi yang benar-benar bisa dipilih (semua, kecuali header semu). */
   const selectable = filtered
 
-  const selected = options.find(o => o.value === value && o.kind !== 'action')
+  // Opsi ber-kind 'placeholder' ("— tidak diisi —") mewakili KETIADAAN nilai,
+  // bukan sebuah nilai. Karena itu ia TIDAK dianggap `selected`: trigger jatuh
+  // ke teks placeholder dengan gaya placeholder, sama seperti field wajib yang
+  // belum dipilih. Sebelumnya Class CF kosong tampil gelap seperti nilai sah
+  // (13,77:1) sementara Kelompok kosong tampil redup — dua perlakuan berbeda
+  // untuk keadaan yang sama persis.
+  const selected = options.find(o => o.value === value && o.kind !== 'action' && o.kind !== 'placeholder')
 
   // ── Posisi panel ─────────────────────────────────────────────────────────
   // Panel di-portal ke <body> dan diposisikan `fixed` dari rect trigger.
@@ -241,7 +247,7 @@ export function StyledSelect({
             {selected.badge && (
               <span
                 className="text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
-                style={{ background: '#f0f0f0', color: '#6b7280' }}
+                style={{ background: '#f0f0f0', color: '#616b7a' }}
               >
                 {selected.badge}
               </span>
@@ -254,13 +260,13 @@ export function StyledSelect({
           /* Placeholder sengaja abu-abu & memakai teks berbingkai em-dash,
              supaya tidak pernah tertukar dengan nilai NYATA yang kebetulan
              pendek seperti "-". */
-          <span className="flex-1 text-sm truncate" style={{ color: '#9ca3af' }}>
+          <span className="flex-1 text-sm truncate" style={{ color: '#616b7a' }}>
             {placeholder}
           </span>
         )}
         <ChevronDown
           className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-          style={{ color: '#9ca3af', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          style={{ color: '#616b7a', transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
         />
       </button>
 
@@ -291,7 +297,7 @@ export function StyledSelect({
             {searchable && (
               <div className="p-2 flex-shrink-0" style={{ borderBottom: '1px solid #f0f0f0' }}>
                 <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl" style={{ background: '#f8f8f8' }}>
-                  <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#9ca3af' }} />
+                  <Search className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#616b7a' }} />
                   <input
                     autoFocus
                     value={query}
@@ -308,7 +314,7 @@ export function StyledSelect({
             <div className="overflow-y-auto flex-1">
               {selectable.length === 0 ? (
                 <div className="px-3 py-4 text-center">
-                  <p className="text-xs" style={{ color: '#9ca3af' }}>{emptyText}</p>
+                  <p className="text-xs" style={{ color: '#616b7a' }}>{emptyText}</p>
                 </div>
               ) : (
                 selectable.map((opt, i) => {
@@ -320,7 +326,7 @@ export function StyledSelect({
                       {showGroup && (
                         <div
                           className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider"
-                          style={{ color: '#9ca3af', background: '#fafafa' }}
+                          style={{ color: '#616b7a', background: '#fafafa' }}
                         >
                           {opt.group}
                         </div>
@@ -340,21 +346,26 @@ export function StyledSelect({
                         {opt.badge && (
                           <span
                             className="text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0"
-                            style={{ background: '#f0f0f0', color: '#6b7280' }}
+                            style={{ background: '#f0f0f0', color: '#616b7a' }}
                           >
                             {opt.badge}
                           </span>
                         )}
                         <span
-                          className="text-sm truncate"
+                          // font-medium menyamakan BOBOT dengan nilai terpilih di
+                          // trigger. Warnanya sudah sama (#2d2d2d, 13,77:1), tapi
+                          // dulu opsi panel 400 sementara trigger 500 — itu yang
+                          // membuat isi panel terbaca lebih pudar padahal
+                          // kontrasnya identik.
+                          className="text-sm truncate font-medium"
                           style={{
                             color:
                               opt.kind === 'action'
                                 ? 'var(--color-accent-secondary-fg, #6d5fd0)'
                                 : opt.kind === 'placeholder'
-                                  ? '#9ca3af'
+                                  ? '#616b7a'
                                   : '#2d2d2d',
-                            fontWeight: opt.kind === 'action' ? 600 : 400,
+                            fontWeight: opt.kind === 'action' ? 600 : undefined,
                           }}
                         >
                           {opt.label}

@@ -82,7 +82,7 @@ function LockedSelect({
             onChange={e => onChange(e.target.value)}
             placeholder={`${label} baru…`}
             className="flex-1 px-3 py-2 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-            style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)' }}
+            style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-primary)' }}
           />
           <button
             type="button"
@@ -249,7 +249,11 @@ export function CoaRowForm({
                 value={kode}
                 onChange={e => setKode(e.target.value)}
                 className="w-full mt-1 px-3 py-2 rounded-xl text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)' }}
+                // `color` WAJIB eksplisit: <body> memakai warna teks untuk kanvas
+                // GELAP (#e5e5e5), dan input tanpa color sendiri mewarisinya —
+                // di atas kartu putih itu berarti teks yang DIKETIK pun nyaris
+                // tak terlihat (rasio 1,11:1), bukan cuma placeholder-nya.
+                style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-primary)' }}
               />
             </label>
             <label className="block">
@@ -293,7 +297,7 @@ export function CoaRowForm({
               value={nama}
               onChange={e => setNama(e.target.value)}
               className="w-full mt-1 px-3 py-2 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-              style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)' }}
+              style={{ background: 'var(--color-muted-bg)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-primary)' }}
             />
           </label>
 
