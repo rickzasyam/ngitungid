@@ -191,42 +191,25 @@ textarea::placeholder {
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    color-scheme: dark;
-    --background: #222124;
-    --foreground: #e5e5e5;
-    --card: #2d2d2d;
-    --card-foreground: #e5e5e5;
-    --popover: #2d2d2d;
-    --popover-foreground: #e5e5e5;
-    --primary: #daf163;
-    --primary-foreground: #1a1a1a;
-    --secondary: #3d3d3d;
-    --secondary-foreground: #e5e5e5;
-    --muted: #5d5d5d;
-    --muted-foreground: #a0a0a0;
-    --accent: #daf163;
-    --accent-foreground: #1a1a1a;
-    --destructive: #F87171;
-    --border: #3d3d3d;
-    --input: #3d3d3d;
-    --ring: #daf163;
-    --chart-1: #daf163;
-    --chart-2: #bbb3f3;
-    --chart-3: #3B82F6;
-    --chart-4: #8B5CF6;
-    --chart-5: #06B6D4;
-    --sidebar: #222124;
-    --sidebar-foreground: #e5e5e5;
-    --sidebar-primary: #daf163;
-    --sidebar-primary-foreground: #1a1a1a;
-    --sidebar-accent: #daf163;
-    --sidebar-accent-foreground: #1a1a1a;
-    --sidebar-border: #333333;
-    --sidebar-ring: #daf163;
-  }
-}
+/* === App ini SENGAJA LIGHT-ONLY ==========================================
+   JANGAN menambahkan kembali blok @media (prefers-color-scheme: dark) atau
+   sejenisnya tanpa merancang dark mode secara menyeluruh.
+
+   Riwayatnya: blok itu dulu membalik --foreground jadi #e5e5e5 saat OS
+   pengguna dark mode, PADAHAL seluruh kartu app di-hardcode putih dan tak
+   satu pun ikut berubah. Akibatnya setiap teks yang tidak menetapkan `color`
+   sendiri mewarisi teks terang di atas latar putih — terukur 1,11:1, praktis
+   tak terbaca. Gejalanya muncul berulang lintas beberapa sesi (teks ketikan
+   di form CRUD Master COA, placeholder dropdown, opsi panel) dan sempat
+   ditambal satu per satu sebelum penyebab tunggalnya ketemu.
+
+   Karena tidak ada kode yang pernah menambahkan kelas `.light`, blok itu
+   aktif otomatis hanya dari setelan OS — tidak perlu tindakan siapa pun untuk
+   merusak tampilan. Itu sebabnya ia DIHAPUS, bukan dinetralkan dengan
+   `.light`: menetralkan hanya menyembunyikan blok mati yang bisa hidup lagi.
+
+   Konsekuensi yang disengaja: `--foreground` selalu #2d2d2d (teks gelap),
+   cocok dengan kartu putih di Layer 2/3. Dark mode = proyek tersendiri. */
 
 @layer base {
   * {
