@@ -23,7 +23,7 @@ type DashboardData = {
   monthly?: MonthPoint[]
   totals?: { revenue: number; netProfit: number; fixedCost: number; varCost: number }
   expenseBreakdown?: { name: string; value: number; color: string }[]
-  balanceSheet?: { totalAset: number; aktivaLancar: number; aktivaTetap: number; aktivaLainnya: number; totalHutang: number; totalModal: number } | null
+  balanceSheet?: { totalAset: number; aktivaLancar: number; aktivaTetap: number; aktivaTidakBerwujud: number; aktivaLainnya: number; totalHutang: number; totalModal: number } | null
   workingCapital?: { label: string; value: number; icon: string }[]
   cashflow?: { month: string; operating: number; investing: number; funding: number }[]
   topReceipts?: { name: string; amount: number }[]

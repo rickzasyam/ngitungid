@@ -7,7 +7,7 @@
 // aggregateBalanceSheet yang juga signed (sejak fix 2026-07-14 — dulu Math.abs,
 // salah utk akun kontra).
 
-import { classifyBs } from './financial-agg'
+import { classifyBs, AKTIVA_CATS, PASIVA_CATS, BS_CAT_LABEL, BALANCE_TOLERANCE, type BsCat } from './financial-agg'
 
 export interface CompareLine {
   kode: string // join key antar checkpoint (unique per klien di master_coa)
@@ -19,23 +19,24 @@ export interface CompareLine {
   status: string
 }
 
-// Union kategori section neraca — dipakai lintas helper detail di bawah.
-export type BsSectionKey = 'aktivaLancar' | 'aktivaTetap' | 'aktivaLainnya' | 'hutang' | 'modal' | 'other'
+// Union kategori section neraca — sama persis dengan kategori agregasi, jadi
+// diturunkan dari sana alih-alih ditulis ulang.
+export type BsSectionKey = BsCat
 
+// Urutan & label ikut AKTIVA_CATS/PASIVA_CATS di lib/financial-agg — menambah
+// kategori aset di sana otomatis memunculkan section-nya di sini.
+// 'other' ditaruh paling akhir: subKelompok neraca yang tidak dikenali
+// classifyBs ditampilkan TERPISAH (di luar TOTAL AKTIVA/PASIVA) supaya tidak
+// hilang diam-diam; kalau muncul, identitas kemungkinan tidak seimbang dan
+// banner balance check menjelaskannya.
 const SECTION_DEF: { key: BsSectionKey; label: string }[] = [
-  { key: 'aktivaLancar', label: 'Aktiva Lancar' },
-  { key: 'aktivaTetap', label: 'Aktiva Tetap' },
-  { key: 'aktivaLainnya', label: 'Aktiva Lainnya' },
-  { key: 'hutang', label: 'Hutang' },
-  { key: 'modal', label: 'Modal' },
-  // subKelompok neraca yang tidak dikenali classifyBs — ditampilkan terpisah
-  // (di luar TOTAL AKTIVA/PASIVA) supaya tidak hilang diam-diam; kalau muncul,
-  // identitas kemungkinan tidak seimbang dan banner UI menjelaskannya.
-  { key: 'other', label: 'Tidak Terklasifikasi' },
+  ...AKTIVA_CATS.map(key => ({ key: key as BsSectionKey, label: BS_CAT_LABEL[key] })),
+  ...PASIVA_CATS.map(key => ({ key: key as BsSectionKey, label: BS_CAT_LABEL[key] })),
+  { key: 'other', label: BS_CAT_LABEL.other },
 ]
 
-export const AKTIVA_KEYS: BsSectionKey[] = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
-export const PASIVA_KEYS: BsSectionKey[] = ['hutang', 'modal']
+export const AKTIVA_KEYS: BsSectionKey[] = [...AKTIVA_CATS]
+export const PASIVA_KEYS: BsSectionKey[] = [...PASIVA_CATS]
 
 // ── Detail Neraca N-checkpoint (fitur "Detail Neraca" — tabel gaya P&L) ──
 // Tiap akun punya saldo per checkpoint. Neraca point-in-time → nilai = saldo
@@ -52,6 +53,22 @@ export interface NeracaDetailResult {
   sections: DetailSection[]
   totalAktiva: number[] // per periode
   totalPasiva: number[]
+  balance: NeracaBalance
+}
+
+/** Cek identitas Aktiva = Pasiva per periode. INFORMASI, bukan blocker:
+ *  laporan yang tidak seimbang tetap boleh disimpan, dipetakan, dan dianalisis —
+ *  yang berubah hanya admin jadi tahu ada yang perlu diperiksa. */
+export interface NeracaBalance {
+  /** totalAktiva − totalPasiva per periode. */
+  diff: number[]
+  balanced: boolean[]
+  tolerance: number
+  /** Akun 'Tidak Terklasifikasi' per periode — petunjuk penyebab paling
+   *  actionable, karena itu satu-satunya sisi yang bisa admin perbaiki
+   *  langsung lewat Master COA. */
+  unclassifiedCount: number[]
+  unclassifiedTotal: number[]
 }
 
 export function buildNeracaDetail(periodLines: CompareLine[][]): NeracaDetailResult {
@@ -81,5 +98,19 @@ export function buildNeracaDetail(periodLines: CompareLine[][]): NeracaDetailRes
   const sumKeys = (keys: BsSectionKey[]) =>
     Array.from({ length: nP }, (_, i) => sections.filter(s => keys.includes(s.key)).reduce((t, s) => t + s.totals[i], 0))
 
-  return { sections, totalAktiva: sumKeys(AKTIVA_KEYS), totalPasiva: sumKeys(PASIVA_KEYS) }
+  const totalAktiva = sumKeys(AKTIVA_KEYS)
+  const totalPasiva = sumKeys(PASIVA_KEYS)
+
+  const otherSection = sections.find(s => s.key === 'other')
+  const balance: NeracaBalance = {
+    diff: totalAktiva.map((a, i) => a - totalPasiva[i]),
+    balanced: totalAktiva.map((a, i) => Math.abs(a - totalPasiva[i]) <= BALANCE_TOLERANCE),
+    tolerance: BALANCE_TOLERANCE,
+    unclassifiedCount: Array.from({ length: nP }, (_, i) =>
+      otherSection ? otherSection.accounts.filter(a => a.values[i] !== 0).length : 0
+    ),
+    unclassifiedTotal: Array.from({ length: nP }, (_, i) => otherSection?.totals[i] ?? 0),
+  }
+
+  return { sections, totalAktiva, totalPasiva, balance }
 }

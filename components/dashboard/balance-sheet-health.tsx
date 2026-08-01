@@ -2,15 +2,33 @@
 
 import { Wallet, Users, Clock, Package, Layers } from 'lucide-react'
 import { formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { AKTIVA_CATS, BS_CAT_LABEL, type AktivaCat } from '@/lib/financial-agg'
 
 interface BalanceSheetData {
   totalAset: number
   aktivaLancar: number
   aktivaTetap: number
+  aktivaTidakBerwujud: number
   aktivaLainnya: number
   totalHutang: number
   totalModal: number
 }
+
+/** Warna per kategori aset. Kuncinya diambil dari AKTIVA_CATS supaya TypeScript
+ *  memaksa daftar ini lengkap — menambah kategori di lib/financial-agg langsung
+ *  membuat file ini gagal kompilasi sampai warnanya ditentukan. */
+const ASET_COLOR: Record<AktivaCat, string> = {
+  aktivaLancar: '#daf163',
+  aktivaTetap: '#bbb3f3',
+  aktivaTidakBerwujud: '#fdba74',
+  aktivaLainnya: '#7dd3fc',
+}
+
+const ASET_SEGMENTS = AKTIVA_CATS.map(key => ({
+  key,
+  label: BS_CAT_LABEL[key],
+  color: ASET_COLOR[key],
+}))
 
 interface WorkingCapitalMetric {
   label: string
@@ -84,16 +102,31 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
                 mengambang di atas bar. Bentuk pil tetap terjaga karena tiap
                 segmen sudah punya border-radius per-sudut sendiri di bawah. */}
             <div className="flex rounded-full h-4" style={{ gap: '2px' }}>
-              <BarSegment value={balanceSheet.aktivaLancar} color="#daf163" label="Aktiva Lancar" radius="999px 0 0 999px" />
-              <BarSegment value={balanceSheet.aktivaTetap} color="#bbb3f3" label="Aktiva Tetap" radius="0" />
-              <BarSegment value={balanceSheet.aktivaLainnya} color="#7dd3fc" label="Aktiva Lainnya" radius="0 999px 999px 0" />
+              {/* Segmen diturunkan dari AKTIVA_CATS (lib/financial-agg) — dulu
+                  tiga <BarSegment> hardcoded, sehingga kategori aset baru tidak
+                  pernah muncul di bar walau sudah ikut Total Aset. Radius
+                  dihitung dari posisi supaya ujung pil tetap benar berapa pun
+                  jumlah segmennya. */}
+              {ASET_SEGMENTS.map((seg, i) => (
+                <BarSegment
+                  key={seg.key}
+                  value={balanceSheet[seg.key]}
+                  color={seg.color}
+                  label={seg.label}
+                  radius={
+                    ASET_SEGMENTS.length === 1
+                      ? '999px'
+                      : i === 0
+                        ? '999px 0 0 999px'
+                        : i === ASET_SEGMENTS.length - 1
+                          ? '0 999px 999px 0'
+                          : '0'
+                  }
+                />
+              ))}
             </div>
             <div className="flex items-center gap-4 mt-2 flex-wrap">
-              {[
-                { label: 'Aktiva Lancar', value: balanceSheet.aktivaLancar, color: '#daf163' },
-                { label: 'Aktiva Tetap', value: balanceSheet.aktivaTetap, color: '#bbb3f3' },
-                { label: 'Lainnya', value: balanceSheet.aktivaLainnya, color: '#7dd3fc' },
-              ].map(item => (
+              {ASET_SEGMENTS.map(seg => ({ label: seg.label, value: balanceSheet[seg.key], color: seg.color })).map(item => (
                 <div key={item.label} className="flex items-center gap-1.5">
                   <span className="rounded-full flex-shrink-0" style={{ width: '7px', height: '7px', background: item.color }} />
                   <span className="text-[10px]" style={{ color: '#6b7280' }}>{item.label}</span>

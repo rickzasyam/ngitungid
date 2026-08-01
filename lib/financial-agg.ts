@@ -94,25 +94,127 @@ export function aggregatePnl(lines: AggLine[]): PnlAgg {
 }
 
 // ── Neraca ────────────────────────────────────────────────────
-type BsCat = 'aktivaLancar' | 'aktivaTetap' | 'aktivaLainnya' | 'hutang' | 'modal' | 'other'
+
+/**
+ * SATU-SATUNYA daftar kategori aset. Semua tempat yang menjumlahkan atau
+ * merender sisi aktiva WAJIB diturunkan dari sini — `totalAset` di bawah,
+ * `AKTIVA_KEYS` di lib/neraca-compare, daftar section di app/analytics, dan
+ * segmen bar di components/dashboard/balance-sheet-health.
+ *
+ * Dulu keempatnya adalah array literal yang berdiri sendiri, sehingga menambah
+ * satu kategori bisa "berhasil" di satu tempat dan hilang diam-diam di tempat
+ * lain tanpa error — persis yang terjadi saat Aktiva Tidak Berwujud
+ * ditambahkan. Urutannya juga urutan tampil.
+ */
+export const AKTIVA_CATS = ['aktivaLancar', 'aktivaTetap', 'aktivaTidakBerwujud', 'aktivaLainnya'] as const
+export const PASIVA_CATS = ['hutang', 'modal'] as const
+
+export type AktivaCat = (typeof AKTIVA_CATS)[number]
+export type BsCat = AktivaCat | (typeof PASIVA_CATS)[number] | 'other'
+
+export const BS_CAT_LABEL: Record<BsCat, string> = {
+  aktivaLancar: 'Aktiva Lancar',
+  aktivaTetap: 'Aktiva Tetap',
+  aktivaTidakBerwujud: 'Aktiva Tidak Berwujud',
+  aktivaLainnya: 'Aktiva Lainnya',
+  hutang: 'Hutang',
+  modal: 'Modal',
+  other: 'Tidak Terklasifikasi',
+}
 
 export function classifyBs(subKelompok: string): BsCat {
   const s = norm(subKelompok)
-  if (s.includes('lancar') && (s.includes('aktiva') || s.includes('aset'))) return 'aktivaLancar'
-  if (s.includes('tetap') && (s.includes('aktiva') || s.includes('aset'))) return 'aktivaTetap'
-  if ((s.includes('aktiva') || s.includes('aset')) && s.includes('lain')) return 'aktivaLainnya'
-  if (s.includes('hutang') || s.includes('kewajiban')) return 'hutang'
+  // 'asset' (Inggris) ikut: "Assets" TIDAK mengandung "aset" karena dobel-s,
+  // jadi tanpa ini COA berbahasa Inggris lolos dari catch-all sisi aset.
+  const isAset = s.includes('aktiva') || s.includes('aset') || s.includes('asset')
+
+  // URUTAN PENTING — "tidak berwujud" HARUS dicek SEBELUM "tetap".
+  // Penamaan "Aktiva Tetap Tidak Berwujud" lazim di COA Indonesia dan
+  // mengandung KEDUA kata kunci. Yang menentukan secara akuntansi adalah sifat
+  // wujudnya, bukan kata "tetap": aset tak berwujud (goodwill, merek, lisensi,
+  // software) disajikan sebagai pos tersendiri di neraca — PSAK 19, terpisah
+  // dari aset tetap PSAK 16. Kalau "tetap" dicek lebih dulu, seluruh aset tak
+  // berwujud akan tertelan Aktiva Tetap dan kategorinya tidak pernah terisi.
+  // 'intangible' berdiri sendiri tanpa syarat isAset — tidak ada pos kewajiban
+  // maupun modal yang memakai kata itu, jadi tak ambigu.
+  if (s.includes('intangible') || (isAset && (s.includes('tidak berwujud') || s.includes('tak berwujud')))) {
+    return 'aktivaTidakBerwujud'
+  }
+  if (isAset && s.includes('lancar')) return 'aktivaLancar'
+  if (isAset && s.includes('tetap')) return 'aktivaTetap'
+  if (isAset && s.includes('lain')) return 'aktivaLainnya'
+
+  // Sisi pasiva. 'utang' sengaja tanpa H di depan: itu ejaan baku EYD, dan
+  // substring-nya juga cocok untuk "Hutang" — satu kata kunci menutup dua ejaan.
+  // 'liabilitas' ditambahkan karena istilah itu dipakai PSAK modern.
+  if (s.includes('utang') || s.includes('liabilitas') || s.includes('kewajiban')) return 'hutang'
   if (s.includes('modal') || s.includes('ekuitas')) return 'modal'
+
+  // CATCH-ALL sisi aset: apa pun yang menyebut dirinya aktiva/aset TAPI tidak
+  // cocok kategori mana pun tetap masuk Total Aset lewat Aktiva Lainnya —
+  // JANGAN dibiarkan jatuh ke 'other'. Aset yang hilang dari Total Aset
+  // langsung memecah identitas Aktiva = Pasiva, dan itu jauh lebih berbahaya
+  // daripada salah menempatkannya di sub-kategori.
+  //
+  // Sengaja SETELAH pengecekan pasiva: kata kewajiban/modal adalah sinyal yang
+  // lebih kuat, sehingga "Kewajiban atas Aset Sewa" tetap jadi hutang. Yang
+  // dikorbankan hanyalah aset sejati yang namanya memuat kata kewajiban —
+  // kasus patologis yang belum pernah muncul.
+  //
+  // TIDAK ada catch-all serupa di sisi pasiva: di sana tak ada penanda tunggal
+  // yang tak ambigu seperti "aset", jadi menebak justru berisiko.
+  if (isAset) return 'aktivaLainnya'
   return 'other'
 }
 
 export interface BalanceSheetAgg {
   aktivaLancar: number
   aktivaTetap: number
+  aktivaTidakBerwujud: number
   aktivaLainnya: number
   totalAset: number
   totalHutang: number
   totalModal: number
+}
+
+/**
+ * Ambang identitas Aktiva = Pasiva, dalam rupiah absolut.
+ *
+ * Rp 1.000 dipilih dari data nyata: selisih yang murni pembulatan PDF terukur
+ * ±1 rupiah di seluruh periode, sedangkan kesalahan klasifikasi nyata terkecil
+ * yang pernah terjadi adalah Rp 9.000.000 (Aktiva Tidak Berwujud Graphicook
+ * yang hilang dari Total Aset). Jadi ambang ini ~1.000× di atas noise yang
+ * teramati namun masih 9.000× di bawah kesalahan sungguhan — mustahil menelan
+ * kesalahan sekelas itu.
+ *
+ * Sengaja ABSOLUT, bukan persentase: 0,01% dari total aset Graphicook sudah
+ * ±580.000, terlalu longgar untuk manfaat yang tidak seberapa, dan ambangnya
+ * ikut membesar justru pada klien yang angkanya paling besar.
+ */
+export const BALANCE_TOLERANCE = 1000
+
+export interface BalanceCheck {
+  /** totalAset − (totalHutang + totalModal). Positif = aset berlebih. */
+  diff: number
+  balanced: boolean
+  tolerance: number
+  /** Baris neraca yang subKelompok-nya tak dikenali — penyebab paling lazim. */
+  unclassifiedCount: number
+  unclassifiedTotal: number
+}
+
+export function checkBalance(
+  bs: BalanceSheetAgg,
+  unclassified: { count: number; total: number }
+): BalanceCheck {
+  const diff = bs.totalAset - (bs.totalHutang + bs.totalModal)
+  return {
+    diff,
+    balanced: Math.abs(diff) <= BALANCE_TOLERANCE,
+    tolerance: BALANCE_TOLERANCE,
+    unclassifiedCount: unclassified.count,
+    unclassifiedTotal: unclassified.total,
+  }
 }
 
 export interface WorkingCapitalItem {
@@ -124,6 +226,7 @@ export interface WorkingCapitalItem {
 /** Agregasi neraca dari baris SATU laporan neraca (point-in-time). */
 export function aggregateBalanceSheet(lines: AggLine[]): {
   balanceSheet: BalanceSheetAgg
+  balance: BalanceCheck
   workingCapital: WorkingCapitalItem[]
   kas: number
   piutang: number
@@ -145,10 +248,23 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
 
   const aktivaLancar = sumCat('aktivaLancar')
   const aktivaTetap = sumCat('aktivaTetap')
+  const aktivaTidakBerwujud = sumCat('aktivaTidakBerwujud')
   const aktivaLainnya = sumCat('aktivaLainnya')
   const totalHutang = sumCat('hutang')
   const totalModal = sumCat('modal')
-  const totalAset = aktivaLancar + aktivaTetap + aktivaLainnya
+  // DITURUNKAN dari AKTIVA_CATS, bukan dijumlah manual: menambah kategori aset
+  // baru otomatis ikut ke Total Aset tanpa perlu ingat memperbarui baris ini.
+  const totalAset = AKTIVA_CATS.reduce((sum, cat) => sum + sumCat(cat), 0)
+
+  // Baris neraca yang subKelompok-nya tidak dikenali sama sekali. Setelah
+  // catch-all aset, ini hanya bisa berisi hal yang tidak menyebut dirinya
+  // aktiva/aset maupun kewajiban/modal — petunjuk paling actionable saat
+  // identitas Aktiva = Pasiva tidak seimbang.
+  const unclassifiedLines = c.filter(l => classifyBs(l.subKelompok) === 'other')
+  const unclassified = {
+    count: unclassifiedLines.length,
+    total: unclassifiedLines.reduce((s, l) => s + l.amount, 0),
+  }
 
   // Akun spesifik dalam Aktiva Lancar (match by nama).
   const inLancar = c.filter(l => classifyBs(l.subKelompok) === 'aktivaLancar')
@@ -173,8 +289,19 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
   // "Hutang" (tanpa pisah lancar/jk-panjang) → pakai total hutang sebagai proxy.
   const hutangLancar = totalHutang
 
+  const balanceSheet: BalanceSheetAgg = {
+    aktivaLancar,
+    aktivaTetap,
+    aktivaTidakBerwujud,
+    aktivaLainnya,
+    totalAset,
+    totalHutang,
+    totalModal,
+  }
+
   return {
-    balanceSheet: { aktivaLancar, aktivaTetap, aktivaLainnya, totalAset, totalHutang, totalModal },
+    balanceSheet,
+    balance: checkBalance(balanceSheet, unclassified),
     workingCapital: [
       { label: 'Kas & Setara Kas', value: kas, icon: 'cash' },
       { label: 'Piutang Usaha', value: piutang, icon: 'receivable' },

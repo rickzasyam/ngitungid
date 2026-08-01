@@ -49,13 +49,26 @@ describe('classificationWarnings', () => {
     expect(w[0].field).toBe('kelompok')
   })
 
-  it('subKelompok Neraca yang jatuh ke other → peringatan', () => {
-    // Kasus nyata: "Aktiva Tidak Berwujud" tidak mengandung kata "lain",
-    // sehingga classifyBs mengembalikan 'other' dan akunnya hilang dari totalAset.
-    const w = classificationWarnings({ kelompok: 'Neraca', subKelompok: 'Aktiva Tidak Berwujud', classCf: null })
+  it('subKelompok Neraca yang benar-benar tak dikenali → peringatan', () => {
+    const w = classificationWarnings({ kelompok: 'Neraca', subKelompok: 'Suspense', classCf: null })
     expect(w).toHaveLength(1)
     expect(w[0].field).toBe('subKelompok')
     expect(w[0].message).toContain('Total Aset')
+  })
+
+  it('"Aktiva Tidak Berwujud" TIDAK lagi diperingatkan — kini kategori sendiri', () => {
+    // Dulu jatuh ke 'other' (tidak mengandung kata "lain") sehingga 2 akun
+    // Graphicook senilai 9.000.000 hilang dari Total Aset. Sejak jadi kategori
+    // keempat, ini kombinasi yang sah.
+    expect(
+      classificationWarnings({ kelompok: 'Neraca', subKelompok: 'Aktiva Tidak Berwujud', classCf: null })
+    ).toEqual([])
+  })
+
+  it('catch-all: subKelompok ber-"aset" apa pun tidak lagi diperingatkan', () => {
+    expect(
+      classificationWarnings({ kelompok: 'Neraca', subKelompok: 'Aset Hak Guna', classCf: null })
+    ).toEqual([])
   })
 
   it('subKelompok Laba Rugi yang jatuh ke other → peringatan', () => {

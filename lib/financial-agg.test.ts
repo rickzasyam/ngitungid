@@ -299,3 +299,123 @@ describe('aggregateBalanceSheet — mencocokkan lewat `nama` (rawName), BUKAN di
     expect(bs.hutangUsaha).toBe(-150)
   })
 })
+
+// ── Aktiva Tidak Berwujud: kategori aset KEEMPAT ─────────────
+describe('classifyBs — aktivaTidakBerwujud', () => {
+  it.each([
+    ['Aktiva Tidak Berwujud', 'aktivaTidakBerwujud'],
+    ['Aset Tak Berwujud', 'aktivaTidakBerwujud'],
+    ['Intangible Assets', 'aktivaTidakBerwujud'],
+  ])('"%s" → %s', (sub, cat) => {
+    expect(classifyBs(sub)).toBe(cat)
+  })
+
+  it('URUTAN: "Aktiva Tetap Tidak Berwujud" → tidak berwujud, BUKAN aktivaTetap', () => {
+    // Mengandung dua kata kunci sekaligus. Sifat wujud yang menentukan
+    // (PSAK 19 vs PSAK 16) — kalau "tetap" menang, kategori ini tak pernah terisi.
+    expect(classifyBs('Aktiva Tetap Tidak Berwujud')).toBe('aktivaTidakBerwujud')
+  })
+
+  it('regresi: bucket lama TIDAK berubah perilakunya', () => {
+    expect(classifyBs('Aktiva Lancar')).toBe('aktivaLancar')
+    expect(classifyBs('Aset Lancar')).toBe('aktivaLancar')
+    expect(classifyBs('Aktiva Tetap')).toBe('aktivaTetap')
+    expect(classifyBs('Aktiva Lain-Lain')).toBe('aktivaLainnya')
+    expect(classifyBs('Hutang')).toBe('hutang')
+    expect(classifyBs('Modal')).toBe('modal')
+  })
+})
+
+describe('classifyBs — catch-all sisi aset & kata kunci pasiva', () => {
+  it('apa pun yang menyebut dirinya aktiva/aset TIDAK jatuh ke other', () => {
+    for (const sub of ['Aktiva Pajak Tangguhan', 'Aset Hak Guna', 'Aset Biologis', 'Aktiva Sewa']) {
+      const cat = classifyBs(sub)
+      expect(cat).not.toBe('other')
+      expect(cat).toBe('aktivaLainnya')
+    }
+  })
+
+  it('"Utang" tanpa H dikenali (ejaan baku EYD)', () => {
+    expect(classifyBs('Utang Usaha')).toBe('hutang')
+    expect(classifyBs('Utang Jangka Panjang')).toBe('hutang')
+  })
+
+  it('"Liabilitas" dikenali (istilah PSAK modern)', () => {
+    expect(classifyBs('Liabilitas Jangka Pendek')).toBe('hutang')
+  })
+
+  it('kata kewajiban menang atas kata aset pada frasa campuran', () => {
+    // "Kewajiban atas Aset Sewa" adalah kewajiban, bukan aset.
+    expect(classifyBs('Kewajiban atas Aset Sewa')).toBe('hutang')
+  })
+
+  it('yang benar-benar tak bertanda tetap other', () => {
+    expect(classifyBs('-')).toBe('other')
+    expect(classifyBs('Suspense')).toBe('other')
+  })
+})
+
+describe('aggregateBalanceSheet — totalAset menyertakan bucket baru', () => {
+  it('aktivaTidakBerwujud ikut Total Aset', () => {
+    const r = aggregateBalanceSheet([
+      bsLine({ nama: 'Kas', amount: 500 }),
+      bsLine({ subKelompok: 'Aktiva Tidak Berwujud', nama: 'Goodwill', amount: 300 }),
+    ])
+    expect(r.balanceSheet.aktivaTidakBerwujud).toBe(300)
+    expect(r.balanceSheet.totalAset).toBe(800)
+  })
+
+  it('kasus nyata Graphicook: 9.000.000 yang dulu hilang kini masuk Total Aset', () => {
+    const r = aggregateBalanceSheet([
+      bsLine({ nama: 'Kas', amount: 5_800_824_266 }),
+      bsLine({ subKelompok: 'Aktiva Tidak Berwujud', nama: 'Software', amount: 9_000_000 }),
+      bsLine({ subKelompok: 'Hutang', nama: 'Hutang Dagang', amount: 2_000_000_000 }),
+      bsLine({ subKelompok: 'Modal', nama: 'Modal Disetor', amount: 3_809_824_267 }),
+    ])
+    expect(r.balanceSheet.totalAset).toBe(5_809_824_266)
+    // Sebelum perbaikan selisihnya −9.000.001; sekarang −1 (pembulatan).
+    expect(r.balance.diff).toBe(-1)
+    expect(r.balance.balanced).toBe(true)
+  })
+})
+
+describe('checkBalance — toleransi Rp 1.000', () => {
+  const bs = (aset: number, pasiva: number) =>
+    aggregateBalanceSheet([
+      bsLine({ nama: 'Kas', amount: aset }),
+      bsLine({ subKelompok: 'Modal', nama: 'Modal', amount: pasiva }),
+    ]).balance
+
+  it('selisih 0 → balance', () => {
+    expect(bs(1000, 1000).balanced).toBe(true)
+  })
+
+  it('selisih 1 rupiah (pembulatan PDF) → balance', () => {
+    expect(bs(1_000_001, 1_000_000).diff).toBe(1)
+    expect(bs(1_000_001, 1_000_000).balanced).toBe(true)
+  })
+
+  it('TEPAT di ambang (1.000) → masih balance', () => {
+    expect(bs(1_001_000, 1_000_000).diff).toBe(1000)
+    expect(bs(1_001_000, 1_000_000).balanced).toBe(true)
+  })
+
+  it('SATU rupiah di atas ambang → tidak balance', () => {
+    expect(bs(1_001_001, 1_000_000).balanced).toBe(false)
+  })
+
+  it('ambang berlaku dua arah (aset kurang)', () => {
+    expect(bs(1_000_000, 1_001_001).balanced).toBe(false)
+    expect(bs(1_000_000, 1_000_500).balanced).toBe(true)
+  })
+
+  it('akun tak terklasifikasi ikut dilaporkan sebagai petunjuk', () => {
+    const r = aggregateBalanceSheet([
+      bsLine({ nama: 'Kas', amount: 1000 }),
+      bsLine({ subKelompok: 'Suspense', nama: 'Entah', amount: 750 }),
+      bsLine({ subKelompok: 'Modal', nama: 'Modal', amount: 1000 }),
+    ])
+    expect(r.balance.unclassifiedCount).toBe(1)
+    expect(r.balance.unclassifiedTotal).toBe(750)
+  })
+})

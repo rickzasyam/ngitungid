@@ -3,11 +3,13 @@
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { ChevronUp, ChevronDown, ChevronRight, AlertTriangle, Loader2, Inbox } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
+import { useClient } from '@/lib/client-context'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { Sparkline } from '@/components/analytics/sparkline'
 import { RatioCard, TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from '@/components/analytics/ratio-card'
 import { MetricDrawer, type ComputedMetrics, type TrendArrays, type DrawerHealth } from '@/components/analytics/metric-drawer'
 import { assessHealth, healthVerdict, type RatioValues } from '@/lib/financial-health'
+import { AKTIVA_CATS, PASIVA_CATS } from '@/lib/financial-agg'
 
 // ── API response shapes (GET /api/analytics/[clientId]/ratios) ─
 type MonthPoint = { m: string; rev: number; np: number; gp: number; exp: number }
@@ -42,6 +44,14 @@ type NeracaDetailApi = {
   sections?: NdSection[]
   totalAktiva?: number[]
   totalPasiva?: number[]
+  /** Optional: response lama (sebelum balance check) tidak membawanya. */
+  balance?: {
+    diff: number[]
+    balanced: boolean[]
+    tolerance: number
+    unclassifiedCount: number[]
+    unclassifiedTotal: number[]
+  }
 }
 
 type Preset = '3m' | '6m' | 'all' | 'custom'
@@ -69,8 +79,10 @@ const fmtFull = (v: number) => {
 }
 const pctOf = (v: number, total: number) => (total === 0 ? null : (v / total) * 100)
 const fmtPct0 = (v: number | null) => (v === null ? '—' : Math.round(v) + '%')
-const ND_AKTIVA_KEYS = ['aktivaLancar', 'aktivaTetap', 'aktivaLainnya']
-const ND_PASIVA_KEYS = ['hutang', 'modal']
+// Diturunkan dari sumber tunggal di lib/financial-agg — dulu array literal
+// tersendiri yang gampang ketinggalan saat kategori aset bertambah.
+const ND_AKTIVA_KEYS: string[] = [...AKTIVA_CATS]
+const ND_PASIVA_KEYS: string[] = [...PASIVA_CATS]
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const toYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -227,6 +239,8 @@ function SegCtrl<T extends string>({
 // ════════════════════════════════════════════════════════════════
 export default function AnalyticsPage() {
   const { activeClient, isLoaded } = useRequireClient()
+  // Balance check hanya untuk staf — lihat alasannya di banner Detail Neraca.
+  const { isStaff } = useClient()
   const clientId = activeClient?.id ?? null
 
   // Period selection
@@ -995,7 +1009,15 @@ export default function AnalyticsPage() {
                           const aktivaSecs = nd.sections.filter(s => ND_AKTIVA_KEYS.includes(s.key))
                           const pasivaSecs = nd.sections.filter(s => ND_PASIVA_KEYS.includes(s.key))
                           const otherSec = nd.sections.find(s => s.key === 'other')
-                          const unbalanced = periods.some((_, i) => Math.abs(TA[i] - TP[i]) > 100)
+                          // Balance check datang dari server (lib/neraca-compare),
+                          // bukan dihitung ulang di sini dengan ambang sendiri —
+                          // dulu baris ini memakai `> 100` yang tidak nyambung
+                          // dengan definisi mana pun. Fallback hanya untuk
+                          // response lama yang belum membawa `balance`.
+                          const bal = nd.balance
+                          const unbalanced = bal
+                            ? bal.balanced.some(b => !b)
+                            : periods.some((_, i) => Math.abs(TA[i] - TP[i]) > 1000)
                           const toggle = (k: string) => setNeracaExpanded(p => ({ ...p, [k]: !p[k] }))
 
                           const sectionBlock = (sec: NdSection, denom: number[] | null) => {
@@ -1062,16 +1084,37 @@ export default function AnalyticsPage() {
 
                           return (
                             <>
-                              {unbalanced && (
+                              {/* Balance check STAF SAJA. Buat klien, selisih
+                                  pembulatan beberapa rupiah cuma menimbulkan
+                                  keraguan pada laporannya sendiri padahal mereka
+                                  tak punya wewenang memperbaikinya; buat admin,
+                                  angka yang sama adalah petunjuk kerja. */}
+                              {isStaff && unbalanced && bal && (
                                 <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
                                   <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
-                                  <span style={{ fontSize: 12, color: '#6b7280' }}>
-                                    <span style={{ fontWeight: 700, color: '#b45309' }}>Total Aktiva ≠ Total Pasiva di sebagian periode.</span>{' '}
-                                    Periksa mapping / subKelompok COA — kemungkinan ada akun neraca yang belum terpetakan atau salah klasifikasi.
-                                  </span>
+                                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                                    <span style={{ fontWeight: 700, color: '#b45309' }}>Total Aktiva ≠ Total Pasiva.</span>{' '}
+                                    Selisih di luar toleransi {fmtFull(bal.tolerance)}:
+                                    <span style={{ display: 'block', marginTop: 4 }}>
+                                      {periods.map((p, i) => (
+                                        bal.balanced[i] ? null : (
+                                          <span key={i} style={{ display: 'inline-block', marginRight: 12, fontVariantNumeric: 'tabular-nums' }}>
+                                            <strong style={{ color: '#1f2430' }}>{p.label}</strong>{' '}
+                                            <strong style={{ color: '#b45309' }}>{fmtFull(bal.diff[i])}</strong>
+                                            {bal.unclassifiedCount[i] > 0 && (
+                                              <span> · {bal.unclassifiedCount[i]} akun tak terklasifikasi ({fmtFull(bal.unclassifiedTotal[i])})</span>
+                                            )}
+                                          </span>
+                                        )
+                                      ))}
+                                    </span>
+                                    <span style={{ display: 'block', marginTop: 4 }}>
+                                      Laporan tetap bisa dipakai — periksa subKelompok COA di Settings kalau ada akun tak terklasifikasi.
+                                    </span>
+                                  </div>
                                 </div>
                               )}
-                              {otherSec && (
+                              {isStaff && otherSec && (
                                 <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
                                   <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
                                   <span style={{ fontSize: 12, color: '#6b7280' }}>
