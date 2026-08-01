@@ -64,7 +64,27 @@ html {
   --color-accent-peach: #fdba74;      /* Peach — warning states */
   --color-accent-mint: #6ee7b7;       /* Mint — soft success states */
   --color-text-primary: #2d2d2d;
-  --color-text-muted: #6b7280;
+  /* Teks sekunder. #556070 dipilih dari pengukuran di SEMUA latar nyata app:
+     6,38:1 di putih … 5,03:1 di #dfe5ec (kolom terakhir tabel Detail Neraca,
+     latar paling gelap yang dipakai teks muted). Dulu ada DUA muted yang
+     bersaing dan dua-duanya gagal AA: token ini #6b7280 (terburuk 3,81:1) dan
+     literal #9ca3af yang tersebar 68× (terburuk 2,00:1). Keduanya kini satu
+     token. Pilihan sengaja tidak diambil dari nilai paling redup yang lolos
+     (#5c6673, terburuk 4,59:1) — marginnya cuma 2% di atas ambang. */
+  --color-text-muted: #556070;
+  /* Teks pada kontrol NONAKTIF. Sengaja tetap redup dan sengaja TIDAK memenuhi
+     4,5:1 — WCAG 1.4.3 mengecualikan komponen nonaktif, dan justru redup itu
+     yang menyampaikan "belum bisa ditekan". Dipisah dari --color-text-muted
+     supaya perbedaan maksudnya eksplisit, bukan literal tanpa keterangan. */
+  --color-text-disabled: #9ca3af;
+  /* Pasangan GELAP tiap warna aksen, untuk dipakai sebagai TEKS/IKON.
+     Aksen itu sendiri adalah warna BIDANG (latar menu aktif, tombol, border,
+     progress bar) dengan teks hitam di atasnya — bukan warna teks. Nilai di
+     bawah bukan hex baru: ketiganya sudah dipakai app (badge Settings, TONES
+     di ratio-card), Upload satu-satunya tempat yang belum ikut konvensi ini. */
+  --color-accent-primary-text: #4d7c0f;   /* pasangan lime  #daf163 */
+  --color-accent-secondary-text: #6d5fc8; /* pasangan lilac #bbb3f3 */
+  --color-accent-sky-text: #0369a1;       /* pasangan sky   #7dd3fc */
   --color-border-subtle: #e5e5e5;
   --color-muted-bg: #f0f0f0;
   --color-muted-dark: #d4d4d4;

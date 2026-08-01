@@ -85,7 +85,7 @@ export function RevenueTrendChart({ data, year, periodLabel }: RevenueTrendChart
           </div>
           <div>
             <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Tren Pendapatan &amp; Profitabilitas</h3>
-            <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
               {periodLabel} · Skala kiri: Rupiah · Skala kanan: Margin %
             </p>
           </div>
@@ -94,15 +94,15 @@ export function RevenueTrendChart({ data, year, periodLabel }: RevenueTrendChart
         <div className="flex items-center gap-4 flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <span className="rounded-full" style={{ width: '10px', height: '10px', background: '#daf163', display: 'inline-block' }} />
-            <span className="text-xs" style={{ color: '#6b7280' }}>Revenue</span>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Revenue</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="rounded-full" style={{ width: '10px', height: '10px', background: '#bbb3f3', display: 'inline-block' }} />
-            <span className="text-xs" style={{ color: '#6b7280' }}>Net Profit</span>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Net Profit</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span style={{ width: '16px', height: '2px', background: '#374151', display: 'inline-block', borderRadius: '1px' }} />
-            <span className="text-xs" style={{ color: '#6b7280' }}>NPM %</span>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>NPM %</span>
           </div>
         </div>
       </div>
@@ -119,7 +119,7 @@ export function RevenueTrendChart({ data, year, periodLabel }: RevenueTrendChart
               dataKey="month"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
             />
             <YAxis
               yAxisId="left"
@@ -127,7 +127,7 @@ export function RevenueTrendChart({ data, year, periodLabel }: RevenueTrendChart
               tickLine={false}
               tickFormatter={formatRupiahShort}
               width={64}
-              tick={{ fontSize: 11, fill: '#9ca3af' }}
+              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
             />
             <YAxis
               yAxisId="right"

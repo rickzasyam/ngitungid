@@ -181,7 +181,7 @@ export default function DashboardPage() {
           <div className="flex-shrink-0 px-4 sm:px-6 py-5 border-b flex items-center justify-between" style={{ borderColor: '#f0f0f0' }}>
             <div>
               <h1 className="text-xl font-bold" style={{ color: '#2d2d2d' }}>Dashboard</h1>
-              <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>{activeClient.name} · Ringkasan performa keuangan</p>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{activeClient.name} · Ringkasan performa keuangan</p>
             </div>
             <div style={{ width: '280px' }} className="hidden sm:block">
               <DateRangePicker value={dashboardDateRange} onChange={setDashboardDateRange} placeholder="Pilih periode" />
@@ -191,7 +191,7 @@ export default function DashboardPage() {
           {/* Scrollable content */}
           <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
             {loading ? (
-              <div className="flex items-center justify-center gap-2 h-full" style={{ color: '#9ca3af' }}>
+              <div className="flex items-center justify-center gap-2 h-full" style={{ color: 'var(--color-text-muted)' }}>
                 <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Memuat data…</span>
               </div>
             ) : loadError ? (
@@ -203,7 +203,7 @@ export default function DashboardPage() {
                     <Inbox className="w-6 h-6" style={{ color: '#8aa32e' }} />
                   </div>
                   <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Belum ada data untuk periode ini</p>
-                  <p className="text-xs" style={{ color: '#6b7280' }}>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                     Upload & petakan laporan {activeClient.name} lebih dulu — angka dashboard dihitung dari laporan yang sudah dipetakan ke COA.
                   </p>
                 </div>
@@ -245,13 +245,13 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Top 5 Sumber Penerimaan</h3>
-                        <p className="text-xs" style={{ color: '#6b7280' }}>Kontribusi terbesar pada periode ini</p>
+                        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Kontribusi terbesar pada periode ini</p>
                       </div>
                     </div>
                     {topReceipts.length > 0 ? (
                       <TopReceiptsBubble items={topReceipts} total={totalRevenue} compact />
                     ) : (
-                      <p className="text-xs py-8 text-center" style={{ color: '#9ca3af' }}>Belum ada baris pendapatan terpetakan.</p>
+                      <p className="text-xs py-8 text-center" style={{ color: 'var(--color-text-muted)' }}>Belum ada baris pendapatan terpetakan.</p>
                     )}
                   </div>
                 </div>
@@ -264,7 +264,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="ng-rise rounded-3xl p-6" style={{ animationDelay: '360ms', background: 'white', border: '1px solid #f0f0f0' }}>
                     <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Kesehatan Neraca</p>
-                    <p className="text-xs" style={{ color: '#9ca3af' }}>Belum ada laporan Neraca terpetakan untuk periode ini.</p>
+                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Belum ada laporan Neraca terpetakan untuk periode ini.</p>
                   </div>
                 )}
 

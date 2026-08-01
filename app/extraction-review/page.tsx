@@ -269,7 +269,7 @@ function ExtractionReviewInner() {
         <Header currentStep={2} />
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center gap-2" style={{ background: '#f8f8f8', color: '#9ca3af' }}>
+          <div className="flex-1 flex items-center justify-center gap-2" style={{ background: '#f8f8f8', color: 'var(--color-text-muted)' }}>
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-sm">Memuat hasil ekstraksi…</span>
           </div>
@@ -285,7 +285,7 @@ function ExtractionReviewInner() {
               <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>
                 {loadError ?? 'Belum ada laporan untuk direview'}
               </p>
-              <p className="text-xs mb-4" style={{ color: '#6b7280' }}>
+              <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
                 {noPeriod
                   ? 'Buka halaman ini lewat tombol "Proses Laporan" di Upload.'
                   : 'Upload & proses laporan untuk periode ini dulu.'}
@@ -310,13 +310,13 @@ function ExtractionReviewInner() {
               <div className="px-5 py-4 border-b flex items-center justify-between flex-shrink-0" style={{ borderColor: '#f0f0f0' }}>
                 <div className="min-w-0">
                   <h3 className="text-sm font-bold" style={{ color: '#2d2d2d' }}>Dokumen PDF</h3>
-                  <p className="text-xs mt-0.5 truncate max-w-[240px]" style={{ color: '#6b7280' }}>
+                  <p className="text-xs mt-0.5 truncate max-w-[240px]" style={{ color: 'var(--color-text-muted)' }}>
                     {activeReport?.sourceFileName ?? '—'}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0" style={{ background: '#f0f0f0' }}>
-                  <Eye className="w-3.5 h-3.5" style={{ color: '#6b7280' }} />
-                  <span className="text-xs font-medium" style={{ color: '#6b7280' }}>Preview</span>
+                  <Eye className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Preview</span>
                 </div>
               </div>
 
@@ -330,7 +330,7 @@ function ExtractionReviewInner() {
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
                       background: activeTab === tab.id ? 'var(--color-accent-primary)' : '#f0f0f0',
-                      color: activeTab === tab.id ? 'var(--color-bg-main)' : '#6b7280',
+                      color: activeTab === tab.id ? 'var(--color-bg-main)' : 'var(--color-text-muted)',
                     }}
                   >
                     <tab.Icon className="w-3.5 h-3.5" />
@@ -340,7 +340,7 @@ function ExtractionReviewInner() {
                         className="text-[10px] font-bold px-1 rounded-full"
                         style={{
                           background: activeTab === tab.id ? 'var(--color-bg-main)' : '#d4d4d4',
-                          color: activeTab === tab.id ? 'var(--color-accent-primary)' : '#6b7280',
+                          color: activeTab === tab.id ? 'var(--color-accent-primary)' : 'var(--color-text-muted)',
                         }}
                       >
                         {tab.count}
@@ -364,10 +364,10 @@ function ExtractionReviewInner() {
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center">
                       <FileText className="w-10 h-10 mx-auto mb-3" style={{ color: '#d4d4d4' }} />
-                      <p className="text-sm font-medium" style={{ color: '#6b7280' }}>
+                      <p className="text-sm font-medium" style={{ color: 'var(--color-text-muted)' }}>
                         {TAB_META[activeTab].label} belum diupload
                       </p>
-                      <p className="text-xs mt-1" style={{ color: '#9ca3af' }}>Upload file di halaman sebelumnya</p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Upload file di halaman sebelumnya</p>
                     </div>
                   </div>
                 )}
@@ -380,7 +380,7 @@ function ExtractionReviewInner() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="min-w-0">
                     <h3 className="text-sm font-bold" style={{ color: '#2d2d2d' }}>Hasil Ekstraksi AI</h3>
-                    <p className="text-xs mt-0.5 truncate" style={{ color: '#6b7280' }}>
+                    <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
                       {activeClient.name} · {TAB_META[activeTab].label} · {formatPeriode(start, end)}
                     </p>
                   </div>
@@ -406,8 +406,8 @@ function ExtractionReviewInner() {
                   </div>
                   {rejectedCount > 0 && (
                     <div className="flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: '#f9f9f9' }}>
-                      <XCircle className="w-3 h-3" style={{ color: '#6b7280' }} />
-                      <span className="text-xs font-medium" style={{ color: '#6b7280' }}>{rejectedCount} ditolak</span>
+                      <XCircle className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} />
+                      <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>{rejectedCount} ditolak</span>
                     </div>
                   )}
                 </div>
@@ -421,7 +421,7 @@ function ExtractionReviewInner() {
                       className="px-3 py-1 rounded-full text-xs font-medium transition-all"
                       style={{
                         background: filterStatus === f ? 'var(--color-bg-main)' : '#f0f0f0',
-                        color: filterStatus === f ? 'white' : '#6b7280',
+                        color: filterStatus === f ? 'white' : 'var(--color-text-muted)',
                       }}
                     >
                       {f === 'all' ? 'Semua' : f === 'unmatched' ? 'Perlu Review' : 'Matched'}
@@ -431,7 +431,7 @@ function ExtractionReviewInner() {
                   <button
                     onClick={() => setShowSubtotals(!showSubtotals)}
                     className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all"
-                    style={{ background: showSubtotals ? '#f0f0f0' : 'transparent', color: '#6b7280', border: '1px solid #e5e5e5' }}
+                    style={{ background: showSubtotals ? '#f0f0f0' : 'transparent', color: 'var(--color-text-muted)', border: '1px solid #e5e5e5' }}
                   >
                     {showSubtotals ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     {showSubtotals ? 'Sembunyikan subtotal' : 'Tampilkan subtotal'}
@@ -456,7 +456,7 @@ function ExtractionReviewInner() {
                 style={{ gridTemplateColumns: '1fr 1fr 100px 80px 80px', background: '#f8f8f8', borderBottom: '1px solid #e5e5e5' }}
               >
                 {['Nama di PDF', 'COA Master', 'Jumlah (Rp)', 'Conf.', 'Aksi'].map(h => (
-                  <span key={h} className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#9ca3af' }}>{h}</span>
+                  <span key={h} className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>{h}</span>
                 ))}
               </div>
 
@@ -482,7 +482,7 @@ function ExtractionReviewInner() {
                       {/* Col 1: Raw name */}
                       <div className="flex items-center gap-2 pr-2 min-w-0">
                         {line.isSubtotal && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#f0f0f0', color: '#9ca3af' }}>SUB</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#f0f0f0', color: 'var(--color-text-muted)' }}>SUB</span>
                         )}
                         <span
                           className="text-xs truncate"
@@ -511,7 +511,7 @@ function ExtractionReviewInner() {
                               <Check className="w-2.5 h-2.5" style={{ color: 'var(--color-bg-main)' }} />
                             </button>
                             <button onClick={() => setEditingId(null)} className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0" style={{ background: '#f0f0f0' }}>
-                              <X className="w-2.5 h-2.5" style={{ color: '#6b7280' }} />
+                              <X className="w-2.5 h-2.5" style={{ color: 'var(--color-text-muted)' }} />
                             </button>
                           </div>
                         ) : (
@@ -520,7 +520,7 @@ function ExtractionReviewInner() {
                               <>
                                 <span className="text-xs truncate" style={{ color: '#2d2d2d' }}>{line.editedName ?? line.suggestedCOA}</span>
                                 {line.masterCOACode && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#f0f0f0', color: '#9ca3af' }}>{line.masterCOACode}</span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: '#f0f0f0', color: 'var(--color-text-muted)' }}>{line.masterCOACode}</span>
                                 )}
                               </>
                             ) : line.isSubtotal ? (
@@ -559,7 +559,7 @@ function ExtractionReviewInner() {
                               aria-label={`Edit COA untuk ${line.rawName}`}
                               className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                             >
-                              <Edit3 className="w-3 h-3" style={{ color: '#6b7280' }} />
+                              <Edit3 className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} />
                             </button>
                             <button
                               onClick={() => handleReject(line.id)}
@@ -578,7 +578,7 @@ function ExtractionReviewInner() {
                             aria-label={`Batalkan penolakan ${line.rawName}`}
                             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                           >
-                            <RotateCcw className="w-3 h-3" style={{ color: '#6b7280' }} />
+                            <RotateCcw className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} />
                           </button>
                         )}
                       </div>
@@ -588,14 +588,14 @@ function ExtractionReviewInner() {
 
                 {visibleLines.length === 0 && (
                   <div className="py-16 text-center">
-                    <p className="text-sm" style={{ color: '#9ca3af' }}>Tidak ada baris untuk filter ini.</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Tidak ada baris untuk filter ini.</p>
                   </div>
                 )}
               </div>
 
               {/* Bottom action bar */}
               <div className="px-5 py-4 border-t flex items-center justify-between flex-shrink-0" style={{ borderColor: '#f0f0f0', background: 'white' }}>
-                <p className="text-xs" style={{ color: '#6b7280' }}>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   {visibleLines.length} baris ditampilkan
                   {activeReport?.extractedAt ? ` · Diekstrak ${formatExtractedAt(activeReport.extractedAt)}` : ''}
                 </p>
@@ -603,7 +603,7 @@ function ExtractionReviewInner() {
                   <Link
                     href="/upload"
                     className="px-4 py-2 rounded-full text-xs font-medium transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                    style={{ color: '#6b7280', border: '1px solid #e5e5e5' }}
+                    style={{ color: 'var(--color-text-muted)', border: '1px solid #e5e5e5' }}
                   >
                     ← Kembali ke Upload
                   </Link>

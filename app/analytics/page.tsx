@@ -206,7 +206,7 @@ function SectionHeader({ title, subtitle, accent }: { title: string; subtitle: s
       <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: accent }} />
       <div>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>{title}</span>
-        <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>{subtitle}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 8 }}>{subtitle}</span>
       </div>
     </div>
   )
@@ -225,7 +225,7 @@ function SegCtrl<T extends string>({
             padding: '4px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 11,
             background: value === opt.value ? 'white' : 'transparent',
             fontWeight: value === opt.value ? 700 : 500,
-            color: value === opt.value ? '#1f2430' : '#6b7280',
+            color: value === opt.value ? '#1f2430' : 'var(--color-text-muted)',
             boxShadow: value === opt.value ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
           }}
         >
@@ -505,7 +505,7 @@ export default function AnalyticsPage() {
           <div className="flex-shrink-0 flex items-center justify-between" style={{ padding: '15px 22px', borderBottom: '1px solid #f0f0f0' }}>
             <div>
               <h1 style={{ fontSize: 18, fontWeight: 700, color: '#1f2430', margin: 0 }}>Analytics</h1>
-              <p style={{ fontSize: 11, color: '#6b7280', margin: '2px 0 0' }}>
+              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
                 {activeClient.name} · Analisis keuangan mendalam
               </p>
             </div>
@@ -526,7 +526,7 @@ export default function AnalyticsPage() {
                       padding: '5px 12px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12,
                       background: preset === p.value ? 'var(--color-accent-primary)' : 'transparent',
                       fontWeight: preset === p.value ? 700 : 500,
-                      color: preset === p.value ? 'var(--color-accent-primary-fg)' : '#6b7280',
+                      color: preset === p.value ? 'var(--color-accent-primary-fg)' : 'var(--color-text-muted)',
                       boxShadow: preset === p.value ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                     }}
                   >
@@ -547,14 +547,14 @@ export default function AnalyticsPage() {
           {/* ── Scrollable body ──────────────────────────────────── */}
           <main className="flex-1 overflow-y-auto" style={{ background: '#f3f4f6' }}>
             {busy ? (
-              <div className="flex items-center justify-center gap-2 h-full" style={{ color: '#9ca3af' }}>
+              <div className="flex items-center justify-center gap-2 h-full" style={{ color: 'var(--color-text-muted)' }}>
                 <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Memuat data…</span>
               </div>
             ) : loadError ? (
               <div className="flex items-center justify-center h-full"><p className="text-sm" style={{ color: '#dc2626' }}>{loadError}</p></div>
             ) : noRange ? (
               <div className="flex items-center justify-center h-full p-6">
-                <p className="text-sm" style={{ color: '#9ca3af' }}>Pilih rentang tanggal untuk melihat analitik.</p>
+                <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Pilih rentang tanggal untuk melihat analitik.</p>
               </div>
             ) : !view ? (
               <div className="flex items-center justify-center h-full p-6">
@@ -563,7 +563,7 @@ export default function AnalyticsPage() {
                     <Inbox className="w-6 h-6" style={{ color: '#8aa32e' }} />
                   </div>
                   <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Belum ada data untuk periode ini</p>
-                  <p className="text-xs" style={{ color: '#6b7280' }}>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                     Analytics dihitung dari laporan Laba Rugi & Neraca {activeClient.name} yang sudah dipetakan ke COA. Upload & petakan lebih dulu, atau pilih periode lain.
                   </p>
                 </div>
@@ -639,9 +639,9 @@ export default function AnalyticsPage() {
                         const t = TONES[item.tone]
                         return (
                           <div key={item.label} style={{ flex: 1, padding: '13px 15px', borderRadius: 13, background: 'white', border: '1px solid #ececec', borderTop: `3px solid ${t.bar}` }}>
-                            <div style={{ fontSize: 10.5, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>{item.label}</div>
+                            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 4 }}>{item.label}</div>
                             <div style={{ fontSize: 24, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>{item.value}</div>
-                            <div style={{ fontSize: 10, color: '#9ca3af' }}>{item.sub}</div>
+                            <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{item.sub}</div>
                           </div>
                         )
                       })}
@@ -670,7 +670,7 @@ export default function AnalyticsPage() {
                                   <span style={{ fontSize: 9, fontWeight: 700, color: s.fg, textTransform: 'uppercase' }}>{s.label}</span>
                                   <span style={{ fontSize: 11, fontWeight: 700, color: s.fg }}>{alert.title}</span>
                                 </div>
-                                <div style={{ fontSize: 10.5, color: '#6b7280', lineHeight: 1.4 }}>{alert.desc}</div>
+                                <div style={{ fontSize: 10.5, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>{alert.desc}</div>
                               </div>
                               <ChevronRight style={{ width: 14, height: 14, color: s.fg, flexShrink: 0, marginTop: 2 }} />
                             </div>
@@ -708,7 +708,7 @@ export default function AnalyticsPage() {
                             style={{ padding: 14, borderRadius: 13, border: '1px solid #efefef', cursor: 'pointer' }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>{card.label}</span>
+                              <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>{card.label}</span>
                               <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.dot }} />
                             </div>
                             <div style={{ fontSize: 22, fontWeight: 700, color: '#1f2430', letterSpacing: -0.5, marginBottom: 8 }}>{card.value}</div>
@@ -725,7 +725,7 @@ export default function AnalyticsPage() {
                                     </span>
                                   </div>
                                 )}
-                                <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 1 }}>MoM</div>
+                                <div style={{ fontSize: 9, color: 'var(--color-text-muted)', marginTop: 1 }}>MoM</div>
                               </div>
                               <Sparkline values={card.arr.length >= 2 ? card.arr : [0, 1]} color={t.bar} width={78} height={26} />
                             </div>
@@ -824,7 +824,7 @@ export default function AnalyticsPage() {
                         <div>
                           <span style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>Persediaan perlu perhatian.</span>
                           {' '}
-                          <span style={{ fontSize: 12, color: '#6b7280' }}>
+                          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                             DIO {fmtDays(view.ratios.dio)} — {fmtRp(view.bs.persediaan)} persediaan mengikat kas.
                           </span>
                           {' '}
@@ -847,7 +847,7 @@ export default function AnalyticsPage() {
                         <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #daf163, #bef264)' }} />
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Laporan</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af' }}>Laba Rugi &amp; Neraca per periode · filter tanggalnya terpisah dari rasio di atas</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Laba Rugi &amp; Neraca per periode · filter tanggalnya terpisah dari rasio di atas</div>
                         </div>
                       </div>
                       <div style={{ width: 248 }}>
@@ -858,7 +858,7 @@ export default function AnalyticsPage() {
 
                   {detailLoading ? (
                     <SectionCard>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9ca3af', fontSize: 12, padding: '6px 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-text-muted)', fontSize: 12, padding: '6px 0' }}>
                         <Loader2 className="w-4 h-4 animate-spin" /> Memuat detail…
                       </div>
                     </SectionCard>
@@ -875,7 +875,7 @@ export default function AnalyticsPage() {
                             <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #daf163, #bef264)' }} />
                             <div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Laba Rugi</div>
-                              <div style={{ fontSize: 11, color: '#9ca3af' }}>{detailPnlView ? detailPnlView.rangeLabel : '—'}</div>
+                              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{detailPnlView ? detailPnlView.rangeLabel : '—'}</div>
                             </div>
                           </div>
                           {detailPnlView && (
@@ -895,19 +895,19 @@ export default function AnalyticsPage() {
                         </div>
 
                         {!detailPnlView ? (
-                          <p style={{ fontSize: 12, color: '#6b7280', padding: '6px 0' }}>Belum ada laporan Laba Rugi ter-mapping untuk rentang ini.</p>
+                          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '6px 0' }}>Belum ada laporan Laba Rugi ter-mapping untuk rentang ini.</p>
                         ) : (
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
                             <thead>
                               <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
-                                <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 180 }}>Akun</th>
+                                <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', minWidth: 180 }}>Akun</th>
                                 {detailPnlView.pnlCols.map(col => (
-                                  <th key={col.label} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{col.label}</th>
+                                  <th key={col.label} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{col.label}</th>
                                 ))}
-                                <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', borderLeft: '1px solid #f0f0f0' }}>Δ</th>
-                                <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', textAlign: 'center' }}>Tren</th>
-                                <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', background: '#f3f4f6', borderLeft: '2px solid #efefef', whiteSpace: 'nowrap' }}>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', borderLeft: '1px solid #f0f0f0' }}>Δ</th>
+                                <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>Tren</th>
+                                <th style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', background: '#f3f4f6', borderLeft: '2px solid #efefef', whiteSpace: 'nowrap' }}>
                                   {detailPnlView.pnlTotal.label}
                                 </th>
                               </tr>
@@ -918,7 +918,7 @@ export default function AnalyticsPage() {
                                 const isExpandable = rowSub.length > 0
                                 const isExp = !!expanded[row.key] && isExpandable
                                 const rowBg = (row.bold && !row.pct) ? '#fcfcfd' : 'white'
-                                const color = row.pct ? '#6b7280' : row.muted ? '#9ca3af' : '#1f2430'
+                                const color = row.pct ? 'var(--color-text-muted)' : row.muted ? 'var(--color-text-muted)' : '#1f2430'
                                 const fw = row.pct ? 500 : row.bold ? 700 : 400
                                 const fi = row.pct ? 'italic' as const : 'normal' as const
                                 const bl = row.accent ? `3px solid ${row.accent}` : '3px solid transparent'
@@ -935,7 +935,7 @@ export default function AnalyticsPage() {
                                       <td style={{ padding: '9px 12px', borderLeft: bl }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                           {isExpandable && (
-                                            <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                                            <ChevronRight style={{ width: 13, height: 13, color: 'var(--color-text-muted)', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
                                           )}
                                           <span style={{ fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>{row.neg && '−'}{row.label}</span>
                                         </div>
@@ -945,7 +945,7 @@ export default function AnalyticsPage() {
                                           {cellVal(row, col, stmtMode)}
                                         </td>
                                       ))}
-                                      <td style={{ padding: '9px 10px', textAlign: 'right', borderLeft: '1px solid #f0f0f0', fontSize: 11, fontWeight: 600, color: delta === null ? '#9ca3af' : delta.isGood ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                                      <td style={{ padding: '9px 10px', textAlign: 'right', borderLeft: '1px solid #f0f0f0', fontSize: 11, fontWeight: 600, color: delta === null ? 'var(--color-text-muted)' : delta.isGood ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
                                         {delta === null ? '—' : (delta.isGood ? '+' : '') + delta.pct.toFixed(1).replace('.', ',') + '%'}
                                       </td>
                                       <td style={{ padding: '9px 6px', textAlign: 'center' }}>
@@ -959,20 +959,20 @@ export default function AnalyticsPage() {
                                     </tr>
                                     {isExp && rowSub.map((sub, si) => (
                                       <tr key={row.key + '-' + si} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
-                                        <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280', borderLeft: '3px solid transparent' }}>
-                                          └ {sub.label} <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: 4 }}>{(sub.portion * 100).toFixed(0)}%</span>
+                                        <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: 'var(--color-text-muted)', borderLeft: '3px solid transparent' }}>
+                                          └ {sub.label} <span style={{ fontSize: 10, color: 'var(--color-text-muted)', marginLeft: 4 }}>{(sub.portion * 100).toFixed(0)}%</span>
                                         </td>
                                         {detailPnlView.pnlCols.map(col => {
                                           const subVal = row.getVal(col) * sub.portion
                                           return (
-                                            <td key={col.label} style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280' }}>
+                                            <td key={col.label} style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: 'var(--color-text-muted)' }}>
                                               {stmtMode === 'pct' ? fmtPct(subVal / col.rev * 100) : fmtRp(subVal)}
                                             </td>
                                           )
                                         })}
                                         <td style={{ padding: '7px 10px', borderLeft: '1px solid #f0f0f0' }} />
                                         <td />
-                                        <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6b7280', background: '#fafafa', borderLeft: '2px solid #efefef' }}>
+                                        <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: 'var(--color-text-muted)', background: '#fafafa', borderLeft: '2px solid #efefef' }}>
                                           {stmtMode === 'pct'
                                             ? fmtPct(row.getVal(detailPnlView.pnlTotal) * sub.portion / detailPnlView.pnlTotal.rev * 100)
                                             : fmtRp(row.getVal(detailPnlView.pnlTotal) * sub.portion)}
@@ -994,14 +994,14 @@ export default function AnalyticsPage() {
                           <div style={{ width: 4, height: 20, borderRadius: 99, flexShrink: 0, background: 'linear-gradient(180deg, #7dd3fc, #38bdf8)' }} />
                           <div>
                             <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2430' }}>Detail Neraca</div>
-                            <div style={{ fontSize: 11, color: '#9ca3af' }}>Saldo akhir per periode · % = porsi dari total section · klik kelompok untuk detail akun</div>
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Saldo akhir per periode · % = porsi dari total section · klik kelompok untuk detail akun</div>
                           </div>
                         </div>
 
                         {(() => {
                           const nd = detailNeraca
                           if (!nd?.hasData || !nd.sections?.length || !nd.periods.length || !nd.totalAktiva || !nd.totalPasiva) {
-                            return <p style={{ fontSize: 12, color: '#6b7280', padding: '6px 0' }}>Belum ada laporan Neraca ter-mapping untuk rentang ini.</p>
+                            return <p style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '6px 0' }}>Belum ada laporan Neraca ter-mapping untuk rentang ini.</p>
                           }
                           const periods = nd.periods
                           const nPer = periods.length
@@ -1034,15 +1034,15 @@ export default function AnalyticsPage() {
                                 >
                                   <td style={{ padding: '9px 12px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                      <ChevronRight style={{ width: 13, height: 13, color: '#9ca3af', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                                      <ChevronRight style={{ width: 13, height: 13, color: 'var(--color-text-muted)', flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
                                       <span style={{ fontSize: 12, fontWeight: 700, color: '#1f2430' }}>{sec.label}</span>
-                                      <span style={{ fontSize: 10, color: '#9ca3af' }}>{sec.accounts.length} akun</span>
+                                      <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{sec.accounts.length} akun</span>
                                     </div>
                                   </td>
                                   {periods.map((_, i) => (
                                     <td key={i} style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#fafafa', borderLeft: '2px solid #efefef' } : {}) }}>
                                       <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2430', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(sec.totals[i])}</div>
-                                      {denom && <div style={{ fontSize: 9.5, color: '#9ca3af' }}>{fmtPct0(pctOf(sec.totals[i], denom[i]))}</div>}
+                                      {denom && <div style={{ fontSize: 9.5, color: 'var(--color-text-muted)' }}>{fmtPct0(pctOf(sec.totals[i], denom[i]))}</div>}
                                     </td>
                                   ))}
                                   <td style={{ padding: '8px 6px', textAlign: 'center' }}>
@@ -1051,10 +1051,10 @@ export default function AnalyticsPage() {
                                 </tr>
                                 {isExp && sec.accounts.map(a => (
                                   <tr key={a.kode} style={{ background: '#f7f8fa', borderBottom: '1px solid #f0f0f0' }}>
-                                    <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>└ {a.name}</td>
+                                    <td style={{ padding: '7px 12px 7px 38px', fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>└ {a.name}</td>
                                     {periods.map((_, i) => (
                                       <td key={i} style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#fafafa', borderLeft: '2px solid #efefef' } : {}) }}>
-                                        <div style={{ fontSize: 11, color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(a.values[i])}</div>
+                                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(a.values[i])}</div>
                                         <div style={{ fontSize: 9, color: '#c0c4cc' }}>{fmtPct0(pctOf(a.values[i], sec.totals[i]))}</div>
                                       </td>
                                     ))}
@@ -1073,7 +1073,7 @@ export default function AnalyticsPage() {
                               {arr.map((v, i) => (
                                 <td key={i} style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#dfe5ec' } : {}) }}>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2430', fontVariantNumeric: 'tabular-nums' }}>{fmtFull(v)}</div>
-                                  <div style={{ fontSize: 9.5, color: '#9ca3af' }}>100%</div>
+                                  <div style={{ fontSize: 9.5, color: 'var(--color-text-muted)' }}>100%</div>
                                 </td>
                               ))}
                               <td style={{ padding: '10px 6px', textAlign: 'center' }}>
@@ -1092,7 +1092,7 @@ export default function AnalyticsPage() {
                               {isStaff && unbalanced && bal && (
                                 <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
                                   <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
-                                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                                     <span style={{ fontWeight: 700, color: '#b45309' }}>Total Aktiva ≠ Total Pasiva.</span>{' '}
                                     Selisih di luar toleransi {fmtFull(bal.tolerance)}:
                                     <span style={{ display: 'block', marginTop: 4 }}>
@@ -1117,7 +1117,7 @@ export default function AnalyticsPage() {
                               {isStaff && otherSec && (
                                 <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
                                   <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
-                                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                                     <span style={{ fontWeight: 700, color: '#b45309' }}>{otherSec.accounts.length} akun tidak terklasifikasi</span>{' '}
                                     — subKelompok COA-nya tidak dikenali sebagai Aktiva/Hutang/Modal, ditampilkan terpisah &amp; TIDAK ikut total.
                                   </span>
@@ -1127,11 +1127,11 @@ export default function AnalyticsPage() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 240 + nPer * 110 }}>
                                   <thead>
                                     <tr style={{ background: '#fafafa', borderBottom: '2px solid #efefef' }}>
-                                      <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', minWidth: 180 }}>Akun</th>
+                                      <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', minWidth: 180 }}>Akun</th>
                                       {periods.map((p, i) => (
-                                        <th key={p.periodStart} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#f3f4f6', borderLeft: '2px solid #efefef' } : {}) }}>{p.label}</th>
+                                        <th key={p.periodStart} style={{ textAlign: 'right', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', ...(i === nPer - 1 ? { background: '#f3f4f6', borderLeft: '2px solid #efefef' } : {}) }}>{p.label}</th>
                                       ))}
-                                      <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: '#6b7280', textAlign: 'center' }}>Tren</th>
+                                      <th style={{ width: 68, padding: '8px 6px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>Tren</th>
                                     </tr>
                                   </thead>
                                   <tbody>

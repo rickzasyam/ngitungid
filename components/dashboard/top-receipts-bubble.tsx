@@ -52,7 +52,7 @@ export function TopReceiptsBubble({ items, compact = false, total }: TopReceipts
   if (top5.length === 0) {
     return (
       <div className="flex items-center justify-center h-40">
-        <p className="text-sm" style={{ color: '#9ca3af' }}>Belum ada data penerimaan</p>
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Belum ada data penerimaan</p>
       </div>
     )
   }
@@ -150,7 +150,7 @@ export function TopReceiptsBubble({ items, compact = false, total }: TopReceipts
                       border: style.border ? `1px solid ${style.border}` : 'none',
                     }}
                   />
-                  <span className="text-xs truncate" style={{ color: '#6b7280' }}>{item.name}</span>
+                  <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{item.name}</span>
                 </div>
                 <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#222124' }}>
                   {pct.toFixed(1)}%

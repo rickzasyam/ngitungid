@@ -316,12 +316,12 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
       >
         <Calendar
           className="w-4 h-4 flex-shrink-0"
-          style={{ color: value?.from ? '#bbb3f3' : '#9ca3af' }}
+          style={{ color: value?.from ? '#bbb3f3' : 'var(--color-text-muted)' }}
         />
         <span
           className="flex-1 text-sm"
           style={{
-            color: value?.from ? '#2d2d2d' : '#9ca3af',
+            color: value?.from ? '#2d2d2d' : 'var(--color-text-muted)',
             fontWeight: value?.from ? 500 : 400,
           }}
         >
@@ -335,7 +335,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#e5e5e5'}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#f0f0f0'}
           >
-            <X className="w-2.5 h-2.5" style={{ color: '#6b7280' }} />
+            <X className="w-2.5 h-2.5" style={{ color: 'var(--color-text-muted)' }} />
           </span>
         )}
       </button>

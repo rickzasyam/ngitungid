@@ -292,7 +292,7 @@ export function DeleteClientModal({
 
       <div className="flex items-center gap-2 pt-4">
         <button type="button" onClick={onClose} disabled={busy} className="flex-1 px-5 py-3 rounded-full text-sm font-medium transition-colors hover:bg-(--color-border-subtle) disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)" style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}>Batal</button>
-        <button type="button" onClick={submit} disabled={!matched || busy} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-critical) focus-visible:ring-offset-2" style={{ background: matched && !busy ? '#dc2626' : '#e5e7eb', color: matched && !busy ? 'white' : '#9ca3af' }}>
+        <button type="button" onClick={submit} disabled={!matched || busy} className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-full text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-critical) focus-visible:ring-offset-2" style={{ background: matched && !busy ? '#dc2626' : '#e5e7eb', color: matched && !busy ? 'white' : 'var(--color-text-disabled)' }}>
           {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Menghapus…</> : <><Trash2 className="w-4 h-4" /> Hapus Permanen</>}
         </button>
       </div>
@@ -384,14 +384,14 @@ export function AssignClientModal({
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-6 justify-center" style={{ color: '#9ca3af', fontSize: 12 }}>
+        <div className="flex items-center gap-2 py-6 justify-center" style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>
           <Loader2 className="w-4 h-4 animate-spin" /> Memuat akun…
         </div>
       ) : (
         <>
           <div className="space-y-1 max-h-64 overflow-y-auto -mx-1 px-1">
             {staff.length === 0 ? (
-              <p className="text-xs text-center py-6" style={{ color: '#9ca3af' }}>Belum ada akun akunting. Buat dulu di Settings → Kelola Akun.</p>
+              <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-muted)' }}>Belum ada akun akunting. Buat dulu di Settings → Kelola Akun.</p>
             ) : staff.map(u => {
               const on = selected.has(u.id)
               return (

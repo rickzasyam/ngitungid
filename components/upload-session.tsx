@@ -33,6 +33,11 @@ interface DateRange {
   to: Date | undefined
 }
 
+// accentColor = warna BIDANG (border, tint, progress bar, ring fokus).
+// accentText  = pasangan GELAP hue yang sama, khusus untuk TEKS & IKON —
+// aksen mentah di atas putih cuma 1,25-1,93:1 (lime praktis tak terbaca).
+// Konvensi ini sudah dipakai app di badge Settings & TONES ratio-card; kartu
+// Upload satu-satunya yang belum ikut.
 const REPORT_TYPES = [
   {
     id: 'pnl',
@@ -41,6 +46,7 @@ const REPORT_TYPES = [
     description: 'Pendapatan, HPP, biaya operasional, dan laba bersih',
     Icon: BarChart3,
     accentColor: '#daf163',
+    accentText: 'var(--color-accent-primary-text)',
     accentBg: '#f7fde8',
     accentBorder: '#d9f99d',
   },
@@ -51,6 +57,7 @@ const REPORT_TYPES = [
     description: 'Aktiva, hutang, dan modal perusahaan',
     Icon: BookOpen,
     accentColor: '#bbb3f3',
+    accentText: 'var(--color-accent-secondary-text)',
     accentBg: '#f3f2ff',
     accentBorder: '#ddd6fe',
   },
@@ -61,6 +68,7 @@ const REPORT_TYPES = [
     description: 'Aktivitas operasi, investasi, dan pendanaan',
     Icon: ArrowLeftRight,
     accentColor: '#7dd3fc',
+    accentText: 'var(--color-accent-sky-text)',
     accentBg: '#f0f9ff',
     accentBorder: '#bae6fd',
   },
@@ -213,7 +221,7 @@ export function UploadSession({
               <div className="text-sm font-semibold truncate" style={{ color: '#2d2d2d' }}>
                 {activeClient?.name}
               </div>
-              <div className="text-xs" style={{ color: '#6b7280' }}>
+              <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 {activeClient?.type}
               </div>
             </div>
@@ -324,13 +332,13 @@ export function UploadSession({
                         className="flex items-center justify-center flex-shrink-0"
                         style={{ width: 36, height: 36, borderRadius: 10, background: `${report.accentColor}20` }}
                       >
-                        <report.Icon style={{ width: 16, height: 16, color: report.accentColor }} />
+                        <report.Icon style={{ width: 16, height: 16, color: report.accentText }} />
                       </div>
                       <span className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>
                         {report.label}
                       </span>
                     </div>
-                    <p className="text-xs" style={{ color: report.accentColor, fontWeight: 600 }}>
+                    <p className="text-xs" style={{ color: report.accentText, fontWeight: 600 }}>
                       {report.sublabel}
                     </p>
                   </div>
@@ -485,7 +493,7 @@ export function UploadSession({
           className="ng-chip-in flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold flex-shrink-0 transition-all duration-300 enabled:hover:-translate-y-px enabled:active:scale-[.96] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--color-accent-primary)"
           style={{
             background: isReadyToProcess && !isProcessing ? 'var(--color-accent-primary)' : '#e5e5e5',
-            color: isReadyToProcess && !isProcessing ? 'var(--color-bg-main)' : '#9ca3af',
+            color: isReadyToProcess && !isProcessing ? 'var(--color-bg-main)' : 'var(--color-text-disabled)',
             boxShadow: isReadyToProcess && !isProcessing ? '0 4px 16px rgba(218,241,99,0.4)' : 'none',
           }}
         >

@@ -251,7 +251,7 @@ function TrendBars({ values, color, months }: { values: number[]; color: string;
               <div style={{ height: BAR_MAX_H, width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                 <div style={{ width: scroll ? 22 : '62%', height: h, borderRadius: '4px 4px 0 0', background: isLast ? color : color + '66', minHeight: 8 }} />
               </div>
-              <span style={{ fontSize: 8.5, color: '#9ca3af', whiteSpace: 'nowrap' }}>{months[i]}</span>
+              <span style={{ fontSize: 8.5, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{months[i]}</span>
             </div>
           )
         })}
@@ -315,13 +315,13 @@ export function MetricDrawer({
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               }}>
                 <span style={{ fontSize: 22, fontWeight: 700, color: '#1f2430', lineHeight: 1 }}>{score}</span>
-                <span style={{ fontSize: 9, color: '#9ca3af' }}>/100</span>
+                <span style={{ fontSize: 9, color: 'var(--color-text-muted)' }}>/100</span>
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', marginBottom: 2 }}>SKOR KESEHATAN KEUANGAN</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: 2 }}>SKOR KESEHATAN KEUANGAN</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#1f2430', marginBottom: 2 }}>{healthVerdict(score)}</div>
-              <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>4 dimensi dianalisis · 19 rasio keuangan</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>4 dimensi dianalisis · 19 rasio keuangan</div>
             </div>
           </div>
 
@@ -349,7 +349,7 @@ export function MetricDrawer({
                   <div style={{ height: 5, background: 'rgba(0,0,0,0.06)', borderRadius: 99, marginBottom: 6, overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: dim.score + '%', background: t.bar, borderRadius: 99 }} />
                   </div>
-                  <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.4 }}>{dim.reason}</div>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>{dim.reason}</div>
                 </button>
               )
             })}
@@ -369,20 +369,20 @@ export function MetricDrawer({
               <h2 style={{ fontSize: 21, fontWeight: 700, color: '#1f2430', margin: 0 }}>{dim.label}</h2>
               <Pill tone={dim.tone} label={dim.status} />
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>{dim.reason}</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>{dim.reason}</div>
           </div>
 
           {/* Score card */}
           <div style={{ background: '#fafafa', borderRadius: 12, border: '1px solid #ececec', padding: '14px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>SKOR DIMENSI</div>
-            <div style={{ fontSize: 36, fontWeight: 700, color: '#1f2430', marginBottom: 8, lineHeight: 1 }}>{dim.score}<span style={{ fontSize: 14, color: '#9ca3af' }}>/100</span></div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 4 }}>SKOR DIMENSI</div>
+            <div style={{ fontSize: 36, fontWeight: 700, color: '#1f2430', marginBottom: 8, lineHeight: 1 }}>{dim.score}<span style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>/100</span></div>
             <div style={{ height: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 99, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: dim.score + '%', background: t.bar, borderRadius: 99 }} />
             </div>
           </div>
 
           {/* Metric list */}
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>METRIK PENDUKUNG</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 8 }}>METRIK PENDUKUNG</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {dim.metrics.map(mk => {
               const m = registry[mk]
@@ -400,12 +400,12 @@ export function MetricDrawer({
                 >
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#1f2430', marginBottom: 2 }}>{m.label}</div>
-                    <div style={{ fontSize: 10, color: '#9ca3af' }}>Benchmark {m.benchmark}</div>
+                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>Benchmark {m.benchmark}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 15, fontWeight: 700, color: '#1f2430' }}>{m.value}</span>
                     <Pill tone={m.tone} label={m.status} />
-                    <ChevronRight style={{ width: 14, height: 14, color: '#9ca3af' }} />
+                    <ChevronRight style={{ width: 14, height: 14, color: 'var(--color-text-muted)' }} />
                   </div>
                 </button>
               )
@@ -416,7 +416,7 @@ export function MetricDrawer({
     }
 
     // ── View C: Metric detail ─────────────────────────────────
-    if (!metric) return <div style={{ color: '#9ca3af', fontSize: 13 }}>Metrik tidak ditemukan.</div>
+    if (!metric) return <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Metrik tidak ditemukan.</div>
     const t = TONES[metric.tone]
     return (
       <div>
@@ -441,7 +441,7 @@ export function MetricDrawer({
         </div>
 
         {/* Komponen perhitungan */}
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>KOMPONEN PERHITUNGAN</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 8 }}>KOMPONEN PERHITUNGAN</div>
         <div style={{ border: '1px solid #ececec', borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
           {metric.comp.map(([lbl, val], i) => (
             <div key={i} style={{
@@ -449,7 +449,7 @@ export function MetricDrawer({
               padding: '8px 12px', borderBottom: i < metric.comp.length - 1 ? '1px solid #f3f4f6' : 'none',
               background: i % 2 === 0 ? 'white' : '#fafafa',
             }}>
-              <span style={{ fontSize: 12, color: '#6b7280' }}>{lbl}</span>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{lbl}</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#1f2430' }}>{val}</span>
             </div>
           ))}
@@ -467,7 +467,7 @@ export function MetricDrawer({
         </div>
 
         {/* Rekomendasi */}
-        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>REKOMENDASI AKSI</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 8 }}>REKOMENDASI AKSI</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {metric.recos.map((rec, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -513,7 +513,7 @@ export function MetricDrawer({
               background: '#fafafa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <X style={{ width: 14, height: 14, color: '#6b7280' }} />
+            <X style={{ width: 14, height: 14, color: 'var(--color-text-muted)' }} />
           </button>
         </div>
         {renderContent()}

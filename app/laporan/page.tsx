@@ -89,10 +89,10 @@ function MapProgress({ mapped, total }: { mapped: number; total: number }) {
   return (
     <div style={{ minWidth: 120 }}>
       <div className="flex items-center justify-between" style={{ marginBottom: 3 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: total > 0 ? '#374151' : '#9ca3af' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: total > 0 ? '#374151' : 'var(--color-text-muted)' }}>
           {total > 0 ? `${mapped}/${total}` : '—'}
         </span>
-        {total > 0 && <span style={{ fontSize: 10, color: '#9ca3af' }}>{pct}%</span>}
+        {total > 0 && <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{pct}%</span>}
       </div>
       <div style={{ height: 5, borderRadius: 99, background: '#eef0f2', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width .3s' }} />
@@ -139,7 +139,7 @@ function PdfPreview({ report, onClose }: { report: ReportMeta; onClose: () => vo
             </div>
             <div className="min-w-0">
               <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1f2430' }}>{TYPE_LABEL[report.reportType]}</div>
-              <div className="truncate" style={{ fontSize: 11.5, color: '#9ca3af', maxWidth: 440 }} title={report.sourceFileName}>{report.sourceFileName}</div>
+              <div className="truncate" style={{ fontSize: 11.5, color: 'var(--color-text-muted)', maxWidth: 440 }} title={report.sourceFileName}>{report.sourceFileName}</div>
             </div>
           </div>
           <button
@@ -147,7 +147,7 @@ function PdfPreview({ report, onClose }: { report: ReportMeta; onClose: () => vo
             onClick={onClose}
             aria-label="Tutup preview"
             className="inline-flex items-center justify-center rounded-full flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-            style={{ width: 34, height: 34, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' }}
+            style={{ width: 34, height: 34, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-muted)', cursor: 'pointer' }}
           >
             <X className="w-4 h-4" />
           </button>
@@ -318,7 +318,7 @@ export default function LaporanPage() {
   }
   for (const g of groups) g.items.sort((x, y) => TYPE_ORDER[x.reportType] - TYPE_ORDER[y.reportType])
 
-  const th: React.CSSProperties = { textAlign: 'left', padding: '9px 14px', fontSize: 11, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { textAlign: 'left', padding: '9px 14px', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '12px 14px', fontSize: 13, color: '#1f2430', verticalAlign: 'middle' }
 
   const ghostBtn = (disabled: boolean): React.CSSProperties => ({
@@ -348,7 +348,7 @@ export default function LaporanPage() {
         <div className="flex-shrink-0 flex items-center justify-between gap-4" style={{ padding: '16px 24px', borderBottom: '1px solid #f0f0f0' }}>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f2430', margin: 0 }}>Laporan</h1>
-            <p style={{ fontSize: 12.5, color: '#6b7280', margin: '2px 0 0' }}>
+            <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
               {isStaff
                 ? `${activeClient.name} · Kelola laporan yang sudah masuk — ganti file, ubah periode, atau hapus`
                 : `${activeClient.name} · Pantau laporan yang sudah masuk & status ekstraksinya`}
@@ -359,7 +359,7 @@ export default function LaporanPage() {
               onClick={() => void load()}
               disabled={loading || busy !== null}
               aria-label="Muat ulang daftar laporan"
-              style={{ ...ghostBtn(loading || busy !== null), color: '#6b7280' }}
+              style={{ ...ghostBtn(loading || busy !== null), color: 'var(--color-text-muted)' }}
             >
               <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Muat ulang
             </button>
@@ -379,7 +379,7 @@ export default function LaporanPage() {
         {/* Body */}
         <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
           {loading ? (
-            <div className="flex items-center justify-center gap-2 h-full" style={{ color: '#9ca3af' }}>
+            <div className="flex items-center justify-center gap-2 h-full" style={{ color: 'var(--color-text-muted)' }}>
               <Loader2 className="w-5 h-5 animate-spin" /><span className="text-sm">Memuat laporan…</span>
             </div>
           ) : loadError ? (
@@ -393,7 +393,7 @@ export default function LaporanPage() {
                   <Inbox className="w-6 h-6" style={{ color: '#8aa32e' }} />
                 </div>
                 <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Belum ada laporan</p>
-                <p className="text-xs mb-4" style={{ color: '#6b7280' }}>
+                <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
                   {isStaff
                     ? `Belum ada laporan ter-upload untuk ${activeClient.name}. Mulai dengan meng-upload Laba Rugi, Neraca, atau Arus Kas.`
                     : `Belum ada laporan ter-upload untuk ${activeClient.name}. Laporan akan muncul di sini setelah tim akunting mengunggahnya.`}
@@ -414,7 +414,7 @@ export default function LaporanPage() {
 
               {/* Ringkasan + error banner */}
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <p style={{ fontSize: 12.5, color: '#6b7280' }}>
+                <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
                   <span style={{ fontWeight: 700, color: '#1f2430' }}>{reports.length}</span> laporan dalam{' '}
                   <span style={{ fontWeight: 700, color: '#1f2430' }}>{groups.length}</span> periode
                 </p>
@@ -440,7 +440,7 @@ export default function LaporanPage() {
                           <div style={{ fontSize: 14, fontWeight: 700, color: '#1f2430' }}>
                             {fmtTanggal(group.periodStart)} – {fmtTanggal(group.periodEnd)}
                           </div>
-                          <div style={{ fontSize: 11.5, color: '#9ca3af' }}>
+                          <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>
                             {group.items.length} laporan · Periode akuntansi
                           </div>
                         </div>
@@ -455,7 +455,7 @@ export default function LaporanPage() {
                           }}
                           style={ghostBtn(busy !== null)}
                         >
-                          <CalendarCog className="w-3.5 h-3.5" style={{ color: '#6b7280' }} /> Ubah Periode
+                          <CalendarCog className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} /> Ubah Periode
                         </button>
                       )}
                     </div>
@@ -463,7 +463,7 @@ export default function LaporanPage() {
                     {/* Editor periode inline */}
                     {isEditing && (
                       <div style={{ background: '#fafafa', borderBottom: '1px solid #f2f2f4', padding: '14px 18px' }}>
-                        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+                        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
                           Pindahkan <strong>semua {group.items.length} laporan</strong> periode ini ke periode baru:
                         </p>
                         <div className="flex items-end gap-3 flex-wrap">
@@ -487,7 +487,7 @@ export default function LaporanPage() {
                             disabled={periodBusy}
                             onClick={() => { setEditPeriodKey(null); setActionError(null) }}
                             className="inline-flex items-center gap-1.5 rounded-full"
-                            style={{ padding: '8px 14px', fontSize: 12, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' }}
+                            style={{ padding: '8px 14px', fontSize: 12, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-muted)', cursor: 'pointer' }}
                           >
                             <X className="w-3.5 h-3.5" /> Batal
                           </button>
@@ -525,7 +525,7 @@ export default function LaporanPage() {
                                       <span style={{ fontWeight: 600 }}>{TYPE_LABEL[r.reportType]}</span>
                                     </div>
                                   </td>
-                                  <td style={{ ...td, color: '#6b7280', maxWidth: 320 }}>
+                                  <td style={{ ...td, color: 'var(--color-text-muted)', maxWidth: 320 }}>
                                     <span className="block truncate" title={r.sourceFileName}>{r.sourceFileName}</span>
                                   </td>
                                   <td style={{ ...td, textAlign: 'right', color: '#374151' }}>{r.lineCount}</td>
@@ -613,7 +613,7 @@ export default function LaporanPage() {
                                             disabled={deleting}
                                             onClick={() => setConfirmDeleteId(null)}
                                             className="rounded-full"
-                                            style={{ padding: '7px 14px', fontSize: 12, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', cursor: 'pointer' }}
+                                            style={{ padding: '7px 14px', fontSize: 12, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-muted)', cursor: 'pointer' }}
                                           >
                                             Batal
                                           </button>

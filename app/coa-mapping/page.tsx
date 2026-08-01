@@ -184,7 +184,7 @@ function SessionContextBar({
 
           {/* Period selector */}
           {periods.length === 0 ? (
-            <span className="text-xs" style={{ color: '#9ca3af' }}>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               Belum ada periode
             </span>
           ) : (
@@ -210,7 +210,7 @@ function SessionContextBar({
               </select>
               <ChevronDown
                 className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: '#9ca3af' }}
+                style={{ color: 'var(--color-text-muted)' }}
               />
             </div>
           )}
@@ -234,7 +234,7 @@ function SessionContextBar({
         {/* Progress */}
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-xs" style={{ color: '#6b7280' }}>
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               {remaining > 0
                 ? `${remaining} akun belum dipetakan`
                 : 'Semua akun terpetakan'
@@ -257,7 +257,7 @@ function SessionContextBar({
                 }}
               />
             </div>
-            <p className="text-[10px] text-right mt-0.5" style={{ color: '#9ca3af' }}>
+            <p className="text-[10px] text-right mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
               {progressPct}%
             </p>
           </div>
@@ -394,7 +394,7 @@ function MappingCard({
                 {item.rawName}
               </p>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs" style={{ color: '#9ca3af' }}>dari PDF</span>
+                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>dari PDF</span>
                 <span
                   className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                   style={{ background: confBg, color: confColor }}
@@ -415,7 +415,7 @@ function MappingCard({
                   </span>
                 )}
               </div>
-              <p className="text-sm font-semibold mt-1" style={{ color: '#6b7280' }}>
+              <p className="text-sm font-semibold mt-1" style={{ color: 'var(--color-text-muted)' }}>
                 {formatRupiah(item.amount)}
               </p>
             </div>
@@ -465,7 +465,7 @@ function MappingCard({
                 <Check className="w-3.5 h-3.5" style={{ color: 'var(--color-bg-main)' }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs" style={{ color: '#9ca3af' }}>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   {mappedValue.kode}
                 </p>
                 <p className="text-sm font-semibold truncate" style={{ color: '#2d2d2d' }}>
@@ -476,7 +476,7 @@ function MappingCard({
                 type="button"
                 onClick={onDropdownToggle}
                 className="text-xs px-3 py-2 rounded-lg transition-colors flex-shrink-0 bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                style={{ color: '#6b7280' }}
+                style={{ color: 'var(--color-text-muted)' }}
               >
                 Ubah
               </button>
@@ -535,7 +535,7 @@ function AutoMatchedTable({
             <p className="text-sm font-semibold" style={{ color: '#2d2d2d' }}>
               Akun Ter-mapping Otomatis
             </p>
-            <p className="text-xs" style={{ color: '#6b7280' }}>
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               {items.length} akun dicocokkan AI secara otomatis
             </p>
           </div>
@@ -548,8 +548,8 @@ function AutoMatchedTable({
             {items.length} akun
           </span>
           {isExpanded
-            ? <ChevronUp className="w-4 h-4" style={{ color: '#9ca3af' }} />
-            : <ChevronDown className="w-4 h-4" style={{ color: '#9ca3af' }} />
+            ? <ChevronUp className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} />
+            : <ChevronDown className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} />
           }
         </div>
       </button>
@@ -570,7 +570,7 @@ function AutoMatchedTable({
               <span
                 key={h}
                 className="text-[10px] font-semibold uppercase tracking-wide"
-                style={{ color: '#9ca3af' }}
+                style={{ color: 'var(--color-text-muted)' }}
               >
                 {h}
               </span>
@@ -589,7 +589,7 @@ function AutoMatchedTable({
                 opacity: 0.7,
               }}
             >
-              <span className="text-xs truncate pr-2" style={{ color: '#6b7280' }}>
+              <span className="text-xs truncate pr-2" style={{ color: 'var(--color-text-muted)' }}>
                 {item.rawName}
               </span>
               <ArrowRight className="w-3 h-3 mx-2 flex-shrink-0" style={{ color: '#d4d4d4' }} />
@@ -598,7 +598,7 @@ function AutoMatchedTable({
               </span>
               <span
                 className="text-[10px] px-1.5 py-0.5 rounded"
-                style={{ background: '#f0f0f0', color: '#9ca3af' }}
+                style={{ background: '#f0f0f0', color: 'var(--color-text-muted)' }}
               >
                 {item.kode}
               </span>
@@ -628,7 +628,7 @@ function CenteredState({ icon, title, subtitle }: { icon: React.ReactNode; title
     <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
       {icon}
       <p className="text-sm font-semibold" style={{ color: '#2d2d2d' }}>{title}</p>
-      <p className="text-xs max-w-sm" style={{ color: '#6b7280' }}>{subtitle}</p>
+      <p className="text-xs max-w-sm" style={{ color: 'var(--color-text-muted)' }}>{subtitle}</p>
     </div>
   )
 }
@@ -975,7 +975,7 @@ export default function COAMappingPage() {
             <h1 className="text-xl font-bold" style={{ color: '#2d2d2d' }}>
               COA Mapping
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
               Petakan akun mentah dari PDF ke Master COA klien
             </p>
           </div>
@@ -997,7 +997,7 @@ export default function COAMappingPage() {
           <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }} data-testid="coa-main">
             {busy ? (
               <CenteredState
-                icon={<Loader2 className="w-6 h-6 animate-spin" style={{ color: '#9ca3af' }} />}
+                icon={<Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--color-text-muted)' }} />}
                 title="Memuat data klien..."
                 subtitle={`Mengambil Master COA dan line item untuk ${activeClient.name}.`}
               />
@@ -1009,7 +1009,7 @@ export default function COAMappingPage() {
               />
             ) : periods.length === 0 ? (
               <CenteredState
-                icon={<Inbox className="w-6 h-6" style={{ color: '#9ca3af' }} />}
+                icon={<Inbox className="w-6 h-6" style={{ color: 'var(--color-text-muted)' }} />}
                 title="Belum ada laporan"
                 subtitle={`${activeClient.name} belum punya laporan yang diunggah. Unggah dulu lewat halaman Upload.`}
               />
@@ -1048,7 +1048,7 @@ export default function COAMappingPage() {
                         <h2 className="text-base font-bold" style={{ color: '#2d2d2d' }}>
                           Akun Belum Dipetakan
                         </h2>
-                        <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+                        <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                           Petakan setiap akun ke Master COA {activeClient.name}
                         </p>
                       </div>
@@ -1105,7 +1105,7 @@ export default function COAMappingPage() {
 
                   {unmappedItems.length === 0 ? (
                     <div className="py-6 text-center">
-                      <p className="text-sm" style={{ color: '#6b7280' }}>
+                      <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                         Tidak ada akun yang perlu dipetakan untuk periode ini.
                       </p>
                     </div>
@@ -1127,7 +1127,7 @@ export default function COAMappingPage() {
                             </h3>
                             <span
                               className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
-                              style={{ background: '#f0f0f0', color: '#6b7280' }}
+                              style={{ background: '#f0f0f0', color: 'var(--color-text-muted)' }}
                             >
                               {group.items.length} akun
                             </span>
@@ -1219,7 +1219,7 @@ export default function COAMappingPage() {
                   >
                     <AlertTriangle className="w-3 h-3" style={{ color: '#f59e0b' }} />
                   </div>
-                  <span className="text-sm" style={{ color: '#6b7280' }}>
+                  <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                     <strong style={{ color: '#2d2d2d' }}>
                       {unmappedItems.length - mappedCount} akun
                     </strong>{' '}
@@ -1235,7 +1235,7 @@ export default function COAMappingPage() {
                 onClick={() => window.history.back()}
                 className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors bg-(--color-muted-bg) hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                 style={{
-                  color: '#6b7280',
+                  color: 'var(--color-text-muted)',
                   border: '1px solid #e5e5e5',
                 }}
               >
@@ -1251,7 +1251,7 @@ export default function COAMappingPage() {
                 className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all enabled:hover:shadow-[0_4px_16px_rgba(218,241,99,0.4)] disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
                 style={{
                   background: isAllMapped && !saving ? 'var(--color-accent-primary)' : '#e5e5e5',
-                  color: isAllMapped && !saving ? 'var(--color-bg-main)' : '#9ca3af',
+                  color: isAllMapped && !saving ? 'var(--color-bg-main)' : 'var(--color-text-disabled)',
                 }}
               >
                 {saving ? (

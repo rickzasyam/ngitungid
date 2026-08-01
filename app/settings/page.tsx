@@ -988,11 +988,11 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
                     <div className="flex-1 min-w-0">
                       <p
                         className="text-sm transition-colors duration-150"
-                        style={{ color: on ? 'var(--color-text-primary)' : '#9ca3af', fontWeight: on ? 500 : 400 }}
+                        style={{ color: on ? 'var(--color-text-primary)' : 'var(--color-text-muted)', fontWeight: on ? 500 : 400 }}
                       >
                         {metric.label}
                       </p>
-                      <p className="text-[11px] truncate" style={{ color: '#9ca3af' }}>{metric.desc}</p>
+                      <p className="text-[11px] truncate" style={{ color: 'var(--color-text-muted)' }}>{metric.desc}</p>
                     </div>
                     {!on && (
                       <span
@@ -1100,7 +1100,7 @@ function UsersTab() {
     fontSize: 13, color: '#1f2430', background: 'white',
   }
   const labelStyle: React.CSSProperties = {
-    fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 5,
+    fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5,
   }
 
   return (
@@ -1169,10 +1169,10 @@ function UsersTab() {
             </div>
           )}
 
-          <p style={{ fontSize: 11, color: '#9ca3af' }}>
-            <strong style={{ color: '#6b7280' }}>Akunting</strong> — upload, review, mapping, kelola klien, lihat semua klien.{' '}
-            <strong style={{ color: '#6b7280' }}>Owner</strong> — semua itu, plus membuat akun & assign akunting ke klien.{' '}
-            <strong style={{ color: '#6b7280' }}>Klien</strong> — akses read-only terikat ke satu klien: Dashboard, Analytics, Laporan (monitoring), Settings (General + Master COA, read-only).
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+            <strong style={{ color: 'var(--color-text-muted)' }}>Akunting</strong> — upload, review, mapping, kelola klien, lihat semua klien.{' '}
+            <strong style={{ color: 'var(--color-text-muted)' }}>Owner</strong> — semua itu, plus membuat akun & assign akunting ke klien.{' '}
+            <strong style={{ color: 'var(--color-text-muted)' }}>Klien</strong> — akses read-only terikat ke satu klien: Dashboard, Analytics, Laporan (monitoring), Settings (General + Master COA, read-only).
           </p>
 
           {error && (
@@ -1207,7 +1207,7 @@ function UsersTab() {
         />
         <div className="mt-4" />
         {loading ? (
-          <div className="flex items-center gap-2" style={{ color: '#9ca3af', fontSize: 12 }}>
+          <div className="flex items-center gap-2" style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>
             <Loader2 className="w-4 h-4 animate-spin" /> Memuat akun…
           </div>
         ) : (
@@ -1215,17 +1215,17 @@ function UsersTab() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
               <thead>
                 <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
-                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Nama</th>
-                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Email</th>
-                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Role</th>
-                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: '#6b7280' }}>Klien</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>Nama</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>Email</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>Role</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-muted)' }}>Klien</th>
                 </tr>
               </thead>
               <tbody>
                 {list.map(u => (
                   <tr key={u.id} style={{ borderBottom: '1px solid #f5f5f6' }}>
                     <td style={{ padding: '9px 10px', fontSize: 12.5, color: '#1f2430', fontWeight: 500 }}>{u.name}</td>
-                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: '#6b7280' }}>{u.email}</td>
+                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: 'var(--color-text-muted)' }}>{u.email}</td>
                     <td style={{ padding: '9px 10px' }}>
                       <span
                         className="inline-flex items-center rounded-full"
@@ -1238,7 +1238,7 @@ function UsersTab() {
                         {ROLE_LABEL[u.role]}
                       </span>
                     </td>
-                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: '#6b7280' }}>
+                    <td style={{ padding: '9px 10px', fontSize: 12.5, color: 'var(--color-text-muted)' }}>
                       {u.role === 'user' ? clientNameById(u.clientId) : '—'}
                     </td>
                   </tr>
@@ -1319,14 +1319,14 @@ export default function SettingsPage() {
                     <span className="block text-sm whitespace-nowrap" style={{ fontWeight: isActive ? 600 : 500 }}>
                       {item.label}
                     </span>
-                    <span className="hidden lg:block text-[10.5px] truncate" style={{ color: isActive ? 'rgba(26,26,26,0.6)' : '#a3a3a3' }}>
+                    <span className="hidden lg:block text-[10.5px] truncate" style={{ color: isActive ? 'rgba(26,26,26,0.7)' : 'var(--color-text-muted)' }}>
                       {item.desc}
                     </span>
                   </span>
                   {isSoon && (
                     <span
                       className="text-[9px] font-semibold rounded px-1 py-0.5 leading-none flex-shrink-0"
-                      style={{ color: '#a3a3a3', border: '1px solid #dcdcdc' }}
+                      style={{ color: 'var(--color-text-muted)', border: '1px solid #dcdcdc' }}
                     >
                       SOON
                     </span>

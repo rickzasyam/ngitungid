@@ -37,7 +37,7 @@ export default function GlobalError({
             <h1 style={{ fontSize: 18, fontWeight: 700, color: '#1f2430', margin: '0 0 8px' }}>
               Ada yang bermasalah
             </h1>
-            <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 20px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 20px', lineHeight: 1.5 }}>
               Error-nya sudah otomatis dilaporkan ke tim. Coba muat ulang halaman ini —
               kalau terus berulang, hubungi admin.
             </p>

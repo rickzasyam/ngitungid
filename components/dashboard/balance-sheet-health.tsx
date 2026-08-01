@@ -84,7 +84,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
         </div>
         <div>
           <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Kesehatan Neraca</h3>
-          <p className="text-xs" style={{ color: '#6b7280' }}>Komposisi Aset, Hutang & Modal</p>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Komposisi Aset, Hutang & Modal</p>
         </div>
       </div>
 
@@ -129,7 +129,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               {ASET_SEGMENTS.map(seg => ({ label: seg.label, value: balanceSheet[seg.key], color: seg.color })).map(item => (
                 <div key={item.label} className="flex items-center gap-1.5">
                   <span className="rounded-full flex-shrink-0" style={{ width: '7px', height: '7px', background: item.color }} />
-                  <span className="text-[10px]" style={{ color: '#6b7280' }}>{item.label}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{item.label}</span>
                   <span className="text-[10px] font-semibold" style={{ color: '#2d2d2d' }}>
                     {((item.value / balanceSheet.totalAset) * 100).toFixed(1)}%
                   </span>
@@ -155,7 +155,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
               ].map(item => (
                 <div key={item.label} className="flex items-center gap-1.5">
                   <span className="rounded-full flex-shrink-0" style={{ width: '7px', height: '7px', background: item.color }} />
-                  <span className="text-[10px]" style={{ color: '#6b7280' }}>{item.label}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{item.label}</span>
                   <span className="text-[10px] font-semibold" style={{ color: '#2d2d2d' }}>
                     {((item.value / balanceSheet.totalAset) * 100).toFixed(1)}%
                   </span>
@@ -169,7 +169,7 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
             className="flex items-center gap-2 px-3 py-2 rounded-2xl"
             style={{ background: '#f8f8f8', border: '1px solid #f0f0f0' }}
           >
-            <span className="text-[10px] font-mono" style={{ color: '#9ca3af' }}>
+            <span className="text-[10px] font-mono" style={{ color: 'var(--color-text-muted)' }}>
               Total Aset ({formatRupiahShort(balanceSheet.totalAset)}) = Hutang ({formatRupiahShort(balanceSheet.totalHutang)}) + Modal ({formatRupiahShort(balanceSheet.totalModal)})
             </span>
           </div>
@@ -204,15 +204,15 @@ export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: Bala
                     className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ background: '#f0f0f0' }}
                   >
-                    <MetricIcon className="w-4 h-4" style={{ color: '#6b7280' }} />
+                    <MetricIcon className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs" style={{ color: '#6b7280' }}>{metric.label}</p>
+                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{metric.label}</p>
                     <p className="text-sm font-bold" style={{ color: '#2d2d2d' }}>
                       {formatRupiahShort(metric.value)}
                     </p>
                   </div>
-                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#9ca3af' }}>
+                  <span className="text-xs font-semibold flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
                     {((metric.value / balanceSheet.aktivaLancar) * 100).toFixed(1)}%
                   </span>
                 </div>

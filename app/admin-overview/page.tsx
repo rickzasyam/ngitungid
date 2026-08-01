@@ -38,7 +38,7 @@ export default function AdminOverviewPage() {
             <h1 className="text-xl font-bold" style={{ color: '#2d2d2d' }}>
               Admin Overview
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: '#6b7280' }}>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
               Ringkasan seluruh klien yang Anda kelola
             </p>
           </div>
@@ -57,7 +57,7 @@ export default function AdminOverviewPage() {
         <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
           <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
             {!isLoaded ? (
-              <div className="flex items-center justify-center gap-2 py-16" style={{ color: '#9ca3af' }}>
+              <div className="flex items-center justify-center gap-2 py-16" style={{ color: 'var(--color-text-muted)' }}>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-sm">Memuat klien…</span>
               </div>
@@ -136,11 +136,11 @@ export default function AdminOverviewPage() {
                         <p className="text-sm font-bold mb-0.5" style={{ color: '#2d2d2d' }}>
                           {client.name}
                         </p>
-                        <p className="text-xs mb-3" style={{ color: '#9ca3af' }}>
+                        <p className="text-xs mb-3" style={{ color: 'var(--color-text-muted)' }}>
                           {client.type}
                         </p>
                         <div className="flex items-center justify-between">
-                          <p className="text-[11px]" style={{ color: '#6b7280' }}>
+                          <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
                             Buka workspace
                           </p>
                           <ArrowRight className="w-3.5 h-3.5" style={{ color: 'var(--color-accent-primary)' }} />

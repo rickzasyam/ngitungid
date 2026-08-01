@@ -36,7 +36,7 @@ export function ExpenseBreakdownDonut({ data, totalExpenses, periodLabel }: Expe
         </div>
         <div>
           <h3 className="text-base font-bold" style={{ color: '#2d2d2d' }}>Komposisi Biaya</h3>
-          <p className="text-xs" style={{ color: '#6b7280' }}>{periodLabel}</p>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{periodLabel}</p>
         </div>
       </div>
       <div className="flex items-center gap-6">
@@ -52,7 +52,7 @@ export function ExpenseBreakdownDonut({ data, totalExpenses, periodLabel }: Expe
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ pointerEvents: 'none' }}>
-            <p className="text-[10px]" style={{ color: '#9ca3af' }}>Total</p>
+            <p className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Total</p>
             <p className="text-xs font-bold" style={{ color: '#2d2d2d' }}>{formatRupiahShort(totalExpenses)}</p>
           </div>
         </div>
@@ -60,7 +60,7 @@ export function ExpenseBreakdownDonut({ data, totalExpenses, periodLabel }: Expe
           {data.map(item => (
             <div key={item.name} className="flex items-center gap-2">
               <span className="rounded-full flex-shrink-0" style={{ width: '8px', height: '8px', background: item.color }} />
-              <span className="text-xs flex-1" style={{ color: '#6b7280' }}>{item.name}</span>
+              <span className="text-xs flex-1" style={{ color: 'var(--color-text-muted)' }}>{item.name}</span>
               <span className="text-xs font-semibold" style={{ color: '#2d2d2d' }}>
                 {((item.value / totalExpenses) * 100).toFixed(0)}%
               </span>

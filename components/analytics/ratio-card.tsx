@@ -96,7 +96,7 @@ export function RatioCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: t.dot, flexShrink: 0 }} />
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
         </div>
         <Pill tone={tone} label={status} />
       </div>
@@ -105,8 +105,8 @@ export function RatioCard({
         <Sparkline values={trend} color={t.bar} width={64} height={22} />
       </div>
       <div style={{ borderTop: '1px solid #eee', marginBottom: 6 }} />
-      <div style={{ fontFamily: 'monospace', fontSize: 9.5, color: '#9ca3af', marginBottom: 4 }}>{formula}</div>
-      <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.4 }}>
+      <div style={{ fontFamily: 'monospace', fontSize: 9.5, color: 'var(--color-text-muted)', marginBottom: 4 }}>{formula}</div>
+      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
         <span style={{ fontWeight: 700, color: t.fg }}>Benchmark {benchmark}.</span>
         {' '}Klik untuk detail analisis.
       </div>
