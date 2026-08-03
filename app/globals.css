@@ -422,7 +422,12 @@ textarea::placeholder {
 }
 
 .ng-nav-link[data-soon='true'] {
-  color: rgba(255, 255, 255, 0.25);
+  /* 0.25 = 2,29:1 di atas kanvas sidebar #222124 — tak terbaca. 0.5 = 5,04:1,
+     ambang terendah yang lolos AA di sana. Item "coming soon" ini BUKAN kontrol
+     nonaktif (tidak ada <button disabled>), jadi pengecualian WCAG 1.4.3 tidak
+     berlaku; ia tetap harus terbaca. Bedanya dari item aktif tetap terjaga
+     lewat alpha (0.5 vs 0.6) dan tidak adanya hover. */
+  color: rgba(255, 255, 255, 0.5);
   cursor: not-allowed;
 }
 

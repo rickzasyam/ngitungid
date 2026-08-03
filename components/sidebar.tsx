@@ -287,7 +287,7 @@ export function Sidebar() {
             {!isCollapsed && (
               <div className="min-w-0 overflow-hidden whitespace-nowrap">
                 <div className="font-bold text-sm leading-tight" style={{ color: 'white' }}>NgitungID BI</div>
-                <div className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.4)' }}>Financial Analytics</div>
+                <div className="text-xs leading-tight" style={{ color: 'rgba(255,255,255,0.5)' }}>Financial Analytics</div>
               </div>
             )}
           </div>
@@ -368,7 +368,7 @@ export function Sidebar() {
                       {isComingSoon && (
                         <span
                           className="text-[9px] font-semibold rounded px-1 py-0.5 leading-none flex-shrink-0"
-                          style={{ color: 'rgba(255,255,255,0.25)', border: '1px solid rgba(255,255,255,0.15)' }}
+                          style={{ color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.15)' }}
                         >
                           SOON
                         </span>
@@ -439,10 +439,10 @@ export function Sidebar() {
                   {activeClient ? (
                     <>
                       <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-[11px] whitespace-nowrap overflow-hidden" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                        <p className="text-[11px] whitespace-nowrap overflow-hidden" style={{ color: 'rgba(255,255,255,0.5)' }}>
                           {isStaff ? 'Mengelola klien' : 'Workspace Bisnis'}
                         </p>
-                        {canSwitch && <ChevronDown className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />}
+                        {canSwitch && <ChevronDown className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.5)' }} />}
                       </div>
                       <p className="text-sm font-semibold mb-2.5 whitespace-nowrap overflow-hidden" style={{ color: 'white' }}>
                         {activeClient.name}
@@ -453,7 +453,7 @@ export function Sidebar() {
                           style={{ width: `${storageUsed}%`, background: storageUsed > 80 ? '#f59e0b' : 'var(--color-accent-primary)' }}
                         />
                       </div>
-                      <p className="text-[10px] mt-1 whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      <p className="text-[10px] mt-1 whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.5)' }}>
                         {storageUsed}% storage used
                       </p>
                     </>
@@ -467,9 +467,9 @@ export function Sidebar() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium" style={{ color: 'var(--color-accent-primary)' }}>Pilih klien</p>
-                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>untuk mulai mengelola</p>
+                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>untuk mulai mengelola</p>
                       </div>
-                      <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />
+                      <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.5)' }} />
                     </div>
                   )}
                 </>
@@ -506,7 +506,7 @@ export function Sidebar() {
                   </div>
                   <div className="flex-1">
                     <p className="text-xs font-medium" style={{ color: 'white' }}>Admin Overview</p>
-                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Lihat semua klien</p>
+                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Lihat semua klien</p>
                   </div>
                   {!activeClient && <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-accent-primary)' }} />}
                 </button>
@@ -536,7 +536,7 @@ export function Sidebar() {
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate" style={{ color: 'white' }}>{client.name}</p>
-                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{client.type}</p>
+                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{client.type}</p>
                       </div>
                       {activeClient?.id === client.id && (
                         <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-accent-primary)' }} />
@@ -607,7 +607,7 @@ export function Sidebar() {
                   <p className="text-xs font-semibold truncate" style={{ color: 'white' }}>
                     {session.user.name || session.user.email}
                   </p>
-                  <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  <p className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
                     {ROLE_LABEL[session.user.role] ?? 'Klien'}
                     {session.user.name && session.user.email ? ` · ${session.user.email}` : ''}
                   </p>
