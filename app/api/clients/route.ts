@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { asc, eq, sql } from 'drizzle-orm'
+import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { clients } from '@/lib/db/schema'
+import { clients, financialReports } from '@/lib/db/schema'
 import { requireAkunting, requireUser } from '@/lib/api/guards'
 
 // hasLogo (bukan bytea-nya) supaya UI tahu harus render <img> atau inisial tanpa
@@ -13,6 +13,36 @@ const clientColumns = {
   type: clients.type,
   hasLogo: sql<boolean>`${clients.logo} is not null`,
   updatedAt: clients.updatedAt,
+}
+
+/**
+ * Bulan-bulan yang punya laporan, per klien: 'YYYY-MM' + berapa JENIS laporan
+ * yang sudah masuk (maks 3). Jadi bahan indikator progres di kartu sidebar.
+ *
+ * `to_char` dijalankan di SQL, BUKAN dengan mengonversi Date di JS: kolomnya
+ * bertipe `date`, dan driver mengembalikannya sebagai Date tengah malam yang
+ * kalau di-toISOString bergeser sehari di WIB — cukup untuk melempar periode
+ * Januari ke Desember.
+ *
+ * Satu query ber-group-by untuk SEMUA klien sekaligus; endpoint ini sendiri
+ * hanya dipanggil sekali oleh ClientProvider, jadi tidak ada request tambahan
+ * dan tidak ada query per-render.
+ */
+async function monthsByClient(clientIds: string[]): Promise<Record<string, { m: string; types: number }[]>> {
+  if (clientIds.length === 0) return {}
+  const rows = await db
+    .select({
+      clientId: financialReports.clientId,
+      m: sql<string>`to_char(${financialReports.periodStart}, 'YYYY-MM')`,
+      types: sql<number>`count(distinct ${financialReports.reportType})`.mapWith(Number),
+    })
+    .from(financialReports)
+    .where(inArray(financialReports.clientId, clientIds))
+    .groupBy(financialReports.clientId, sql`to_char(${financialReports.periodStart}, 'YYYY-MM')`)
+
+  const out: Record<string, { m: string; types: number }[]> = {}
+  for (const r of rows) (out[r.clientId] ??= []).push({ m: r.m, types: r.types })
+  return out
 }
 
 // GET /api/clients
@@ -29,11 +59,13 @@ export async function GET() {
       .from(clients)
       .where(eq(clients.id, g.user.clientId))
       .limit(1)
-    return NextResponse.json(rows)
+    const months = await monthsByClient(rows.map(r => r.id))
+    return NextResponse.json(rows.map(r => ({ ...r, months: months[r.id] ?? [] })))
   }
 
   const rows = await db.select(clientColumns).from(clients).orderBy(asc(clients.name))
-  return NextResponse.json(rows)
+  const months = await monthsByClient(rows.map(r => r.id))
+  return NextResponse.json(rows.map(r => ({ ...r, months: months[r.id] ?? [] })))
 }
 
 // POST /api/clients — akunting/owner. Body { name, type }.

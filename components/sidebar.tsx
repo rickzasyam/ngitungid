@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import {
   LayoutDashboard,
   BarChart2,
@@ -27,6 +27,7 @@ import { useClient, ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import { ROLE_LABEL } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
+import { computeReportProgress, formatMonth, monthsBehind } from '@/lib/clients/report-progress'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
 const CAPSULE_TRANSITION = 'transform .48s cubic-bezier(.34,1.42,.5,1), height .48s cubic-bezier(.34,1.42,.5,1)'
@@ -41,7 +42,7 @@ const ROUTE_ACTIVE_MAP: Record<string, string> = {
 export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
-  const { activeClient, setActiveClient, isStaff, storageMap, clients } = useClient()
+  const { activeClient, setActiveClient, isStaff, clients } = useClient()
   // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
   // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
   // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
@@ -166,7 +167,39 @@ export function Sidebar() {
     // lalu muncul lagi. Setelah sesi resolved, filter normal berlaku.
   ].filter((item) => status === 'loading' || isStaff || !item.staffOnly)
 
-  const storageUsed = activeClient ? (storageMap[activeClient.id] ?? 50) : 0
+  // Progres laporan klien aktif. Menggantikan "% storage used" yang dulu
+  // dihitung dari hash UUID — angka yang tidak pernah berubah walau laporan
+  // bertambah, dan istilah "storage" menyiratkan kuota yang tidak ada.
+  //
+  // `months` sudah ikut di response GET /api/clients yang di-fetch sekali oleh
+  // ClientProvider, jadi ini murni perhitungan di memori: tidak ada query per
+  // render dan tidak ada request tambahan.
+  const progress = useMemo(
+    () => computeReportProgress(activeClient?.months ?? [], new Date()),
+    [activeClient]
+  )
+  const behind = monthsBehind(progress)
+  const progressPct = progress.kind === 'ratio' && progress.total > 0
+    ? Math.round((progress.completed / progress.total) * 100)
+    : 0
+  // Kuning hanya kalau benar-benar tertinggal; selebihnya lime.
+  const progressColor = behind > 0 ? '#f59e0b' : 'var(--color-accent-primary)'
+  /** Baris utama. Role 'user' (klien) TIDAK melihat rasio: "3 dari 6 bulan"
+   *  terbaca sebagai penilaian atas kinerja tim akunting, bukan sesuatu yang
+   *  bisa mereka tindaklanjuti. Mereka cukup tahu datanya sampai kapan. */
+  const progressLabel = (() => {
+    if (progress.kind === 'none') return 'Belum ada laporan'
+    if (!isStaff) return progress.lastMonth ? `Terakhir: ${formatMonth(progress.lastMonth)}` : 'Belum ada laporan'
+    if (progress.kind === 'no-window') return 'Terkini'
+    return `${progress.completed} dari ${progress.total} bulan`
+  })()
+  /** Baris kedua (staf saja) — konteks, bukan pengulangan. */
+  const progressHint = (() => {
+    if (!isStaff || progress.kind === 'none') return null
+    const belumLengkap = progress.incompleteMonths.at(-1)
+    if (belumLengkap) return `${formatMonth(belumLengkap)} belum lengkap`
+    return progress.lastMonth ? `Terakhir: ${formatMonth(progress.lastMonth)}` : null
+  })()
   // Owner & akunting sama-sama boleh pindah klien (semua staf lihat semua klien).
   const canSwitch = isStaff
 
@@ -422,7 +455,7 @@ export function Sidebar() {
                       <ClientAvatar client={activeClient} size={32} rounded={999} fontSize={12} />
                       <span
                         className="absolute rounded-full"
-                        style={{ width: '8px', height: '8px', bottom: '-2px', right: '-2px', background: storageUsed > 80 ? '#f59e0b' : 'var(--color-accent-primary)', border: '2px solid var(--color-bg-sidebar)' }}
+                        style={{ width: '8px', height: '8px', bottom: '-2px', right: '-2px', background: progressColor, border: '2px solid var(--color-bg-sidebar)' }}
                       />
                     </>
                   ) : (
@@ -447,15 +480,25 @@ export function Sidebar() {
                       <p className="text-sm font-semibold mb-2.5 whitespace-nowrap overflow-hidden" style={{ color: 'white' }}>
                         {activeClient.name}
                       </p>
-                      <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${storageUsed}%`, background: storageUsed > 80 ? '#f59e0b' : 'var(--color-accent-primary)' }}
-                        />
-                      </div>
+                      {/* Bar hanya bermakna kalau ada jendela penilaian; untuk
+                          klien tanpa laporan atau role 'user' ia dihilangkan
+                          supaya tidak memberi kesan "0% = tertinggal". */}
+                      {isStaff && progress.kind === 'ratio' && (
+                        <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ width: `${progressPct}%`, background: progressColor }}
+                          />
+                        </div>
+                      )}
                       <p className="text-[10px] mt-1 whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                        {storageUsed}% storage used
+                        {progressLabel}
                       </p>
+                      {progressHint && (
+                        <p className="text-[10px] whitespace-nowrap" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          {progressHint}
+                        </p>
+                      )}
                     </>
                   ) : (
                     <div className="flex items-center gap-2.5">

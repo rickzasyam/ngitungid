@@ -11,6 +11,10 @@ export interface ClientInfo {
   hasLogo: boolean
   // ISO string dari clients.updatedAt — dipakai sebagai cache-buster URL logo.
   updatedAt: string
+  /** Bulan yang punya laporan + berapa jenis (maks 3) — bahan indikator progres
+   *  di kartu sidebar. Ikut dalam response GET /api/clients yang sudah di-fetch
+   *  sekali oleh provider ini, jadi tidak ada request tambahan. */
+  months: { m: string; types: number }[]
 }
 
 const STORAGE_KEY = 'ngitungid-active-client-id'
@@ -26,19 +30,9 @@ interface ClientContextValue {
   isStaff: boolean
   /** Owner saja — boleh buat akun & assign akunting ke klien. */
   isOwner: boolean
-  storageMap: Record<string, number>
 }
 
 const ClientContext = createContext<ClientContextValue | undefined>(undefined)
-
-// "storage used" masih placeholder (nilai asli: Phase 2.6). Deterministik dari
-// id supaya bar di sidebar tetap bervariasi antar klien & stabil antar render,
-// bukan angka acak.
-function pseudoStorage(id: string): number {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return 25 + (h % 65) // 25..89
-}
 
 export function ClientProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
@@ -110,14 +104,9 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     return list
   }, [fetchClients])
 
-  const storageMap = useMemo(
-    () => Object.fromEntries(clients.map(c => [c.id, pseudoStorage(c.id)])),
-    [clients]
-  )
-
   return (
     <ClientContext.Provider
-      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, isStaff, isOwner, storageMap }}
+      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, isStaff, isOwner }}
     >
       {children}
     </ClientContext.Provider>
