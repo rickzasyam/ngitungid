@@ -8,6 +8,11 @@ __v0_jsx-dev-runtime.ts
 
 # Environment variables
 .env*.local
+# Pola di atas menuntut ".local" di AKHIR nama, jadi TIDAK menangkap hasil
+# `vercel env pull` seperti .env.local.vercel — file yang berisi DATABASE_URL,
+# AUTH_SECRET & GEMINI_API_KEY produksi. Satu `git add -A` sudah cukup untuk
+# membocorkannya.
+.env*.local*
 
 # Common ignores
 node_modules
