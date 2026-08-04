@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ModalPortal } from '@/components/ui/modal-portal'
 
 interface DateRange {
   from: Date | undefined
@@ -246,16 +247,82 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
   const [viewYear, setViewYear] = useState(value?.from?.getFullYear() ?? new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(value?.from?.getMonth() ?? 0)
   const containerRef = useRef<HTMLDivElement>(null)
+  // Node panel disimpan di ref (satu-satunya tempat yang boleh dimutasi — kita
+  // menulis .style langsung ke sana), sementara `panelReady` hanyalah PEMICU
+  // supaya efek penempatan jalan ULANG begitu node-nya menempel.
+  //
+  // Pemisahan ini perlu karena ModalPortal sengaja mengembalikan null di render
+  // pertamanya (gerbang `mounted` demi SSR): pada render saat isOpen baru true,
+  // panel BELUM ada. Efek yang cuma bergantung pada [isOpen] akan jalan sekali,
+  // tidak menemukan node, lalu tidak pernah dipanggil lagi — panel tertinggal
+  // di visibility:hidden dan dropdown-nya tidak pernah muncul.
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const [panelReady, setPanelReady] = useState(false)
+  // useCallback: kalau identitasnya berubah tiap render, React akan melepas dan
+  // memasang ref berulang kali dan memicu render tanpa henti.
+  const setPanel = useCallback((node: HTMLDivElement | null) => {
+    panelRef.current = node
+    setPanelReady(node !== null)
+  }, [])
 
+  // Dropdown di-portal ke <body> (lihat komentar di blok render), jadi ia BUKAN
+  // lagi keturunan containerRef — klik di dalam kalender harus dikecualikan
+  // secara eksplisit, kalau tidak panel menutup sendiri begitu tanggal diklik.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false)
-      }
+      const t = e.target as Node
+      if (containerRef.current?.contains(t)) return
+      if (panelRef.current?.contains(t)) return
+      setIsOpen(false)
     }
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpen(false) }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKey)
+    }
   }, [])
+
+  // Penempatan panel dilakukan imperatif (tulis .style langsung) dan bukan lewat
+  // state: posisi hanya boleh dihitung SETELAH panel punya ukuran nyata, dan
+  // useLayoutEffect berjalan sebelum paint sehingga tidak ada kedipan. Lewat
+  // state, tiap event scroll akan memicu render ulang seluruh kalender.
+  useLayoutEffect(() => {
+    if (!isOpen || !panelReady) return
+    const GAP = 8
+
+    const place = () => {
+      const anchor = containerRef.current
+      const panel = panelRef.current
+      if (!anchor || !panel) return
+
+      const r = anchor.getBoundingClientRect()
+      const h = panel.offsetHeight
+      const roomBelow = window.innerHeight - r.bottom - GAP
+      const roomAbove = r.top - GAP
+      // Buka ke atas hanya kalau memang tidak muat di bawah DAN di atas lebih lega.
+      const openUp = h > roomBelow && roomAbove > roomBelow
+
+      panel.style.top = openUp
+        ? `${Math.max(GAP, r.top - GAP - h)}px`
+        : `${r.bottom + GAP}px`
+      // Rata kanan dengan tombol pemicu, meniru `right-0` versi absolute dulu.
+      panel.style.right = `${Math.max(GAP, window.innerWidth - r.right)}px`
+      panel.style.maxHeight = `${Math.max(220, openUp ? roomAbove : roomBelow)}px`
+      panel.style.visibility = 'visible'
+    }
+
+    place()
+    // capture:true — panel harus ikut bergeser saat kontainer scroll internal
+    // (main di Analytics/Dashboard) bergerak, bukan cuma scroll window.
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [isOpen, panelReady])
 
   const secondMonth = viewMonth === 11 ? 0 : viewMonth + 1
   const secondYear = viewMonth === 11 ? viewYear + 1 : viewYear
@@ -295,7 +362,13 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
   }
 
   return (
-    <div ref={containerRef} className="relative">
+    // Lebar minimum hidup DI SINI, bukan di tiap pemanggil. Label rentang penuh
+    // ("1 Jan 2026 – 31 Jan 2026") plus ikon kalender dan tombol clear butuh
+    // ~280px; di bawah itu teks turun ke baris kedua. Sebelumnya tiap halaman
+    // menentukan lebarnya sendiri (Dashboard 280px, Analytics 248px) sehingga
+    // hanya Analytics yang rusak. `min(280px, 100%)` menjaga floor tanpa
+    // meluber kalau komponen dipakai di kolom yang memang lebih sempit.
+    <div ref={containerRef} className="relative" style={{ minWidth: 'min(280px, 100%)' }}>
 
       {/* Trigger button */}
       <button
@@ -340,11 +413,28 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
         )}
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown — di-portal ke <body>.
+          Versi lama memakai `absolute … z-50` di dalam card. Itu tidak pernah
+          bisa menang: tiap SectionCard ber-`.ng-rise`/`.animate-slide-up`
+          menyisakan transform (fill-mode: both) sehingga jadi stacking context
+          sendiri, dan card BERIKUTNYA di DOM otomatis melukis di atas seluruh
+          isi card sebelumnya — z-index setinggi apa pun di dalam tidak terbaca
+          dari luar. Gejalanya: panel tanggal "Detail Laporan" tertimpa card
+          "Detail Laba Rugi". Sama persis dengan bug dialog COA (lihat
+          modal-portal.tsx). Portal + position:fixed melepaskan panel dari
+          leluhur mana pun; z-[70] di atas ModalShell (z-50) dan PdfPreview
+          (z-60) supaya tetap benar saat picker dipakai DI DALAM modal. */}
       {isOpen && (
+        <ModalPortal>
         <div
-          className="absolute top-full right-0 mt-2 z-50 rounded-3xl overflow-hidden"
+          ref={setPanel}
+          className="fixed z-[70] rounded-3xl overflow-y-auto overflow-x-hidden"
           style={{
+            // visibility dibuka oleh useLayoutEffect setelah posisi terhitung —
+            // mencegah panel sempat tergambar di pojok kiri atas.
+            visibility: 'hidden',
+            top: 0,
+            right: 0,
             background: 'rgba(34,33,36,0.92)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
@@ -461,6 +551,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   )

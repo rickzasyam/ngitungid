@@ -534,7 +534,7 @@ export default function AnalyticsPage() {
                   </button>
                 ))}
               </div>
-              <div style={{ width: 248 }}>
+              <div style={{ width: 280 }}>
                 <DateRangePicker
                   value={headerPickerValue}
                   onChange={(r) => { setCustomRange(r); setPreset('custom') }}
@@ -850,7 +850,7 @@ export default function AnalyticsPage() {
                           <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Laba Rugi &amp; Neraca per periode · filter tanggalnya terpisah dari rasio di atas</div>
                         </div>
                       </div>
-                      <div style={{ width: 248 }}>
+                      <div style={{ width: 280 }}>
                         <DateRangePicker value={detailPickerValue} onChange={setDetailRange} placeholder="Filter tanggal detail" />
                       </div>
                     </div>
