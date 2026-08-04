@@ -7,6 +7,7 @@ import { requireOwner } from '@/lib/api/guards'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 import { CREATABLE_ROLES, type Role } from '@/lib/roles'
 import { resolveNewAccountClientId } from '@/lib/api/account'
+import { MIN_PASSWORD } from '@/lib/api/password-change'
 
 export const runtime = 'nodejs'
 
@@ -15,7 +16,6 @@ export const runtime = 'nodejs'
 const BCRYPT_COST = 12
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const MIN_PASSWORD = 8
 
 const bad = (msg: string) => NextResponse.json({ error: msg }, { status: 400 })
 

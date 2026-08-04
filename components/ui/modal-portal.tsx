@@ -45,15 +45,31 @@ export function ModalShell({
   children,
   onDismiss,
   labelledBy,
+  label,
   className = 'max-w-lg',
 }: {
   children: React.ReactNode
-  /** null = tidak bisa ditutup lewat klik backdrop (mis. sedang menyimpan). */
+  /** null = tidak bisa ditutup lewat klik backdrop / Esc (mis. sedang menyimpan). */
   onDismiss: (() => void) | null
-  labelledBy: string
+  /** id elemen judul di dalam dialog. Pakai ini kalau judulnya memang tampil. */
+  labelledBy?: string
+  /** Alternatif `labelledBy` saat label yang berguna lebih spesifik daripada
+   *  judul yang tampil — mis. judul "Edit Klien" tapi label "Edit klien Rasyuka". */
+  label?: string
   /** kelas lebar untuk kotak dialog, mis. 'max-w-2xl'. */
   className?: string
 }) {
+  // Esc ditangani DI SINI, bukan di tiap dialog. Sebelumnya tiap pemanggil
+  // memasang listener sendiri (dan yang lupa, tidak dapat Esc sama sekali).
+  // `onDismiss === null` berarti sedang sibuk menyimpan → Esc ikut nonaktif,
+  // konsisten dengan klik backdrop.
+  useEffect(() => {
+    if (!onDismiss) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onDismiss() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onDismiss])
+
   return (
     <ModalPortal>
       <div
@@ -81,6 +97,7 @@ export function ModalShell({
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
+            aria-label={labelledBy ? undefined : label}
             className={`w-full ${className} max-h-[85vh] flex flex-col rounded-3xl overflow-hidden`}
             style={{ background: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)' }}
           >

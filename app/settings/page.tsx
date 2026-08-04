@@ -27,9 +27,13 @@ import {
   UserPlus,
   Bell,
   Building2,
+  KeyRound,
 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
 import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
+import { MIN_PASSWORD } from '@/lib/api/password-change'
+import { visibleSettingsTabs, type SettingsTabId } from '@/lib/settings-tabs'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
@@ -135,19 +139,23 @@ const defaultVisibility = (): Record<string, boolean> =>
   Object.fromEntries(ALL_METRIC_IDS.map(id => [id, id !== 'dpo' && id !== 'dar']))
 
 // ── Settings nav ─────────────────────────────────────────────
-type TabId = 'general' | 'coa' | 'analytics' | 'users' | 'account' | 'notifications'
+type TabId = SettingsTabId
 
-// `ownerOnly`: tab disembunyikan total dari akunting. Itu cuma kenyamanan UI —
-// penjaga sebenarnya ada di requireOwner() pada route API-nya, karena
-// menyembunyikan tombol bukan kontrol keamanan.
-const NAV_ITEMS: { id: TabId; label: string; desc: string; Icon: typeof Globe; scoped: boolean; soon?: boolean; ownerOnly?: boolean }[] = [
-  { id: 'general',       label: 'General',           desc: 'Bahasa, format, timezone',      Icon: Globe,             scoped: false },
-  { id: 'coa',           label: 'Master COA',        desc: 'Struktur akun klien',           Icon: FileSpreadsheet,   scoped: true },
-  { id: 'analytics',     label: 'Analytics Display', desc: 'Metrik yang tampil ke klien',   Icon: SlidersHorizontal, scoped: true },
-  { id: 'users',         label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',         Icon: Users,             scoped: false, ownerOnly: true },
-  { id: 'account',       label: 'Account',           desc: 'Profil & keamanan',             Icon: User,              scoped: false, soon: true },
-  { id: 'notifications', label: 'Notifications',     desc: 'Email & pengingat',             Icon: Bell,              scoped: false, soon: true },
-]
+// Presentasi per tab. DAFTAR & aturan aksesnya sendiri hidup di
+// lib/settings-tabs.ts (murni, teruji) — di sini hanya label/ikon/deskripsi,
+// plus dua flag yang memang urusan tampilan:
+//   `scoped` : tab berlaku per-klien (butuh klien aktif),
+//   `soon`   : fiturnya belum ada, tombol di-disable.
+// Menambah tab baru berarti menambahnya di lib/settings-tabs.ts DULU, sehingga
+// test visibilitas memaksa keputusan akses dibuat eksplisit.
+const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe; scoped: boolean; soon?: boolean }> = {
+  general:       { label: 'General',           desc: 'Bahasa, format, timezone',    Icon: Globe,             scoped: false },
+  coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
+  analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
+  users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
+  account:       { label: 'Account',           desc: 'Password & keamanan',         Icon: User,              scoped: false },
+  notifications: { label: 'Notifications',     desc: 'Email & pengingat',           Icon: Bell,              scoped: false, soon: true },
+}
 
 // ── Small building blocks ────────────────────────────────────
 
@@ -1252,22 +1260,190 @@ function UsersTab() {
   )
 }
 
+// ── Tab: Account (semua role) ────────────────────────────────
+// Ganti password AKUN SENDIRI. Terlihat untuk SEMUA role, termasuk klien —
+// lihat lib/settings-tabs.ts. Endpoint POST /api/account/password tidak
+// menerima id akun sama sekali; targetnya selalu pemilik sesi.
+function AccountTab() {
+  const { data: session } = useSession()
+  const { role } = useClient()
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
+
+  // Validasi client-side = LAPISAN TAMBAHAN, bukan pengganti. Server tetap
+  // memvalidasi ulang semuanya (lib/api/password-change.ts) — di sini hanya
+  // supaya user tidak perlu menunggu roundtrip untuk kesalahan yang jelas.
+  const trimmedNew = newPassword.trim()
+  const tooShort = trimmedNew.length > 0 && trimmedNew.length < MIN_PASSWORD
+  const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword
+  const sameAsOld = trimmedNew.length > 0 && trimmedNew === currentPassword
+  const canSubmit =
+    currentPassword.length > 0 &&
+    trimmedNew.length >= MIN_PASSWORD &&
+    newPassword === confirmPassword &&
+    !sameAsOld &&
+    !saving
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!canSubmit) return
+    setSaving(true)
+    setError(null)
+    setOkMsg(null)
+    try {
+      const res = await fetch('/api/account/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) throw new Error(payload?.error ?? 'Gagal mengubah password.')
+      setOkMsg('Password berhasil diubah. Pakai password baru saat login berikutnya.')
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal mengubah password.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #e5e7eb',
+    fontSize: 13, color: '#1f2430', background: 'white',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5,
+  }
+  // #b45309 di atas putih = 4.8:1 → lolos AA untuk teks normal. Jangan turunkan
+  // ke amber yang lebih terang; kontras hint inline ini baru saja dirapikan.
+  const hintStyle: React.CSSProperties = { fontSize: 11, marginTop: 5, color: '#b45309' }
+
+  return (
+    <>
+      <SettingsCard>
+        <SectionHeading
+          Icon={KeyRound}
+          accent="linear-gradient(135deg, #bbb3f3 0%, #a5b4fc 100%)"
+          title="Ganti Password"
+          subtitle="Password lama wajib dimasukkan — sesi yang aktif saja tidak cukup"
+        />
+
+        {session?.user?.email && (
+          <div
+            className="flex items-center gap-2.5 rounded-2xl px-3.5 py-2.5 mt-4"
+            style={{ background: 'var(--color-muted-bg)' }}
+          >
+            <User className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+            <span className="text-xs min-w-0 truncate" style={{ color: 'var(--color-text-primary)' }}>
+              {session.user.email}
+            </span>
+            <span className="text-[10.5px] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+              · {ROLE_LABEL[role]}
+            </span>
+          </div>
+        )}
+
+        {/* Hardening autofill — pelajaran dari form Buat Akun, di mana Chrome
+            diam-diam mengisi field dan menghasilkan akun dengan kredensial yang
+            salah. Di sini autoComplete justru harus BENAR per field (bukan
+            "off"): current-password memberi tahu password manager mana yang
+            lama, new-password mencegahnya menawarkan password tersimpan untuk
+            dua field terakhir. name= non-generik supaya heuristik lama browser
+            tidak menebak sendiri. */}
+        <form onSubmit={submit} className="space-y-3 mt-4">
+          <div>
+            <label style={labelStyle} htmlFor="pw-current">PASSWORD LAMA</label>
+            <input
+              id="pw-current" name="ngid-current-password" type="password"
+              autoComplete="current-password" style={inputStyle} value={currentPassword}
+              onChange={e => { setCurrentPassword(e.target.value); setError(null); setOkMsg(null) }}
+              placeholder="••••••••" required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label style={labelStyle} htmlFor="pw-new">PASSWORD BARU (min {MIN_PASSWORD} karakter)</label>
+              <input
+                id="pw-new" name="ngid-new-password" type="password"
+                autoComplete="new-password" style={inputStyle} value={newPassword}
+                onChange={e => { setNewPassword(e.target.value); setError(null); setOkMsg(null) }}
+                placeholder="••••••••" required minLength={MIN_PASSWORD}
+                aria-describedby={tooShort || sameAsOld ? 'pw-new-hint' : undefined}
+              />
+              {tooShort && <p id="pw-new-hint" style={hintStyle}>Minimal {MIN_PASSWORD} karakter.</p>}
+              {!tooShort && sameAsOld && (
+                <p id="pw-new-hint" style={hintStyle}>Password baru harus berbeda dari password lama.</p>
+              )}
+            </div>
+            <div>
+              <label style={labelStyle} htmlFor="pw-confirm">KONFIRMASI PASSWORD BARU</label>
+              <input
+                id="pw-confirm" name="ngid-confirm-password" type="password"
+                autoComplete="new-password" style={inputStyle} value={confirmPassword}
+                onChange={e => { setConfirmPassword(e.target.value); setError(null); setOkMsg(null) }}
+                placeholder="••••••••" required
+                aria-describedby={mismatch ? 'pw-confirm-hint' : undefined}
+              />
+              {mismatch && <p id="pw-confirm-hint" style={hintStyle}>Konfirmasi belum sama dengan password baru.</p>}
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-2xl" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#dc2626' }} />
+              <span role="alert" className="text-xs font-medium" style={{ color: '#dc2626' }}>{error}</span>
+            </div>
+          )}
+          {okMsg && (
+            <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-2xl" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#15803d' }} />
+              <span role="status" className="text-xs font-medium" style={{ color: '#15803d' }}>{okMsg}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all enabled:hover:-translate-y-px disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+              style={{
+                background: canSubmit ? 'var(--color-accent-primary)' : 'var(--color-muted-dark)',
+                color: canSubmit ? 'var(--color-accent-primary-fg)' : 'var(--color-text-disabled)',
+                minHeight: 40,
+              }}
+            >
+              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan…</> : 'Ubah Password'}
+            </button>
+          </div>
+        </form>
+      </SettingsCard>
+    </>
+  )
+}
+
 export default function SettingsPage() {
   // Tidak pakai useRequireClient: tab General bersifat platform-level dan harus
   // tetap bisa diakses tanpa klien aktif — tab scoped punya empty state sendiri.
-  const { activeClient, isOwner, isStaff } = useClient()
+  const { activeClient, isOwner, isStaff, role } = useClient()
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
   // Visibility metrik sekarang dimiliki AnalyticsDisplayTab (persisted ke
   // client_metric_visibility), bukan lagi state lokal di page ini.
 
-  // Role 'user' (klien): HANYA General + Master COA (keduanya read-only). Tab
-  // Analytics Display/Kelola Akun/Account/Notifications disembunyikan total —
-  // bukan di-disable. Staf: semua kecuali ownerOnly untuk akunting.
-  const USER_TABS: TabId[] = ['general', 'coa']
-  const navItems = NAV_ITEMS.filter(n =>
-    isStaff ? !n.ownerOnly || isOwner : USER_TABS.includes(n.id)
-  )
+  // Aturan visibilitas per-role ada di lib/settings-tabs.ts (murni & teruji),
+  // bukan di sini. Role 'user' (klien) melihat General + Master COA (read-only)
+  // + Account — Account WAJIB terlihat karena semua orang harus bisa mengganti
+  // password sendiri. Analytics Display / Kelola Akun / Notifications tetap
+  // tersembunyi total (bukan di-disable).
+  const navItems = visibleSettingsTabs(role).map(id => ({ id, ...TAB_META[id] }))
   const activeNav = navItems.find(n => n.id === activeTab) ?? navItems[0]
   const needsClient = activeNav.scoped && !activeClient
 
@@ -1351,6 +1527,8 @@ export default function SettingsPage() {
               {activeNav.id === 'general' && <GeneralTab readOnly={!isStaff} />}
 
               {activeNav.id === 'users' && isOwner && <UsersTab />}
+
+              {activeNav.id === 'account' && <AccountTab />}
 
               {activeTab === 'coa' && activeClient && (
                 <MasterCoaTab key={activeClient.id} clientId={activeClient.id} readOnly={!isStaff} />

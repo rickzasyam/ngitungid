@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import type { ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
+import { ModalShell } from '@/components/ui/modal-portal'
 import { ROLE_LABEL, type Role } from '@/lib/roles'
 
 const TYPE_SUGGESTIONS = ['E-commerce', 'Jasa Kreatif', 'Manufaktur', 'Retail', 'F&B', 'Jasa']
@@ -19,31 +20,24 @@ const inputStyle: React.CSSProperties = {
 }
 
 // ── Shell modal (dipakai bertiga) ─────────────────────────────
-function ModalShell({
-  onClose, busy, children, label, maxWidth = 440,
-}: { onClose: () => void; busy: boolean; children: React.ReactNode; label: string; maxWidth?: number }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onClose])
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={() => !busy && onClose()}
-    >
-      <div
-        role="dialog" aria-modal="true" aria-label={label}
-        className="w-full rounded-3xl p-6 sm:p-7 animate-scale-in"
-        style={{ maxWidth, background: 'white', boxShadow: '0 8px 40px rgba(0,0,0,0.4)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  )
+// Dulu ini ModalShell LOKAL — duplikat dari components/ui/modal-portal.tsx —
+// sehingga ketiga dialog di file ini tidak ikut mendapat dua perbaikan yang
+// sudah lama ada di versi bersama: portal ke <body> (kebal terhadap transform
+// sisa `.ng-rise`/`.animate-slide-up` yang menjadikan card sebagai containing
+// block untuk position:fixed) dan pemusatan ke AREA KONTEN lewat
+// --app-content-left (bukan ke seluruh viewport, jadi dialog tidak pernah
+// setengah tertutup sidebar). Sekarang memakai yang bersama.
+//
+// Dua penyesuaian saat menyatukan:
+//   - `busy` → `onDismiss={busy ? null : onClose}` (shell bersama memakai null
+//     sebagai "tidak bisa ditutup"), yang sekaligus menonaktifkan Esc.
+//   - Padding dulu ada di shell (`p-6 sm:p-7`); shell bersama sengaja tidak
+//     memberi padding supaya dialog ber-header lengket bisa mengaturnya sendiri.
+//     Karena itu isi dibungkus ModalBody di bawah — sekalian membuat dialog
+//     tinggi (Kelola Akunting dgn daftar staf) ikut scroll, bukan terpotong
+//     max-h-[85vh] milik shell.
+function ModalBody({ children }: { children: React.ReactNode }) {
+  return <div className="p-6 sm:p-7 overflow-y-auto">{children}</div>
 }
 
 function ErrorBox({ msg }: { msg: string }) {
@@ -163,7 +157,8 @@ export function EditClientModal({
   const showingCurrentLogo = client.hasLogo && !file && !removeLogo
 
   return (
-    <ModalShell onClose={onClose} busy={busy} label={`Edit klien ${client.name}`}>
+    <ModalShell onDismiss={busy ? null : onClose} label={`Edit klien ${client.name}`} className="max-w-[440px]">
+      <ModalBody>
       <div className="flex items-start gap-3 mb-5">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--color-accent-primary)' }}>
           <Pencil className="w-5 h-5" style={{ color: 'var(--color-accent-primary-fg)' }} />
@@ -225,6 +220,7 @@ export function EditClientModal({
           </button>
         </div>
       </form>
+      </ModalBody>
     </ModalShell>
   )
 }
@@ -256,7 +252,8 @@ export function DeleteClientModal({
   }
 
   return (
-    <ModalShell onClose={onClose} busy={busy} label={`Hapus klien ${client.name}`}>
+    <ModalShell onDismiss={busy ? null : onClose} label={`Hapus klien ${client.name}`} className="max-w-[440px]">
+      <ModalBody>
       <div className="flex items-start gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#fef2f2' }}>
           <AlertTriangle className="w-5 h-5" style={{ color: '#dc2626' }} />
@@ -296,6 +293,7 @@ export function DeleteClientModal({
           {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Menghapus…</> : <><Trash2 className="w-4 h-4" /> Hapus Permanen</>}
         </button>
       </div>
+      </ModalBody>
     </ModalShell>
   )
 }
@@ -363,7 +361,8 @@ export function AssignClientModal({
   }
 
   return (
-    <ModalShell onClose={onClose} busy={busy} label={`Kelola akunting ${client.name}`}>
+    <ModalShell onDismiss={busy ? null : onClose} label={`Kelola akunting ${client.name}`} className="max-w-[440px]">
+      <ModalBody>
       <div className="flex items-start gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg,#bbb3f3,#a5b4fc)' }}>
           <Users2 className="w-5 h-5" style={{ color: '#1a1a1a' }} />
@@ -422,6 +421,7 @@ export function AssignClientModal({
           </div>
         </>
       )}
+      </ModalBody>
     </ModalShell>
   )
 }
