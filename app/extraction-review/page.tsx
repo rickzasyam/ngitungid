@@ -23,6 +23,7 @@ import {
   Loader2,
   Upload,
 } from 'lucide-react'
+import { useRupiah } from '@/lib/preferences-context'
 
 type LineStatus = 'matched' | 'unmatched' | 'edited' | 'rejected'
 
@@ -63,11 +64,6 @@ const TAB_META: Record<TabId, { label: string; Icon: typeof TrendingUp }> = {
   cashflow: { label: 'Arus Kas', Icon: Waves },
 }
 
-const formatRupiah = (amount: number) => {
-  const abs = Math.abs(amount)
-  const formatted = abs.toLocaleString('id-ID')
-  return amount < 0 ? `(${formatted})` : formatted
-}
 
 const getConfidenceStyle = (confidence: number) => {
   if (confidence >= 90) return { color: '#15803d', bg: '#f0fdf4', label: 'Tinggi' }
@@ -96,6 +92,8 @@ const EMPTY_LINES: Record<TabId, ExtractedLine[]> = { pnl: [], neraca: [], cashf
 const EMPTY_REPORTS: Record<TabId, ReportData | null> = { pnl: null, neraca: null, cashflow: null }
 
 function ExtractionReviewInner() {
+  // Digit saja (kolomnya sudah berjudul nominal), dari lib/format.ts.
+  const { rupiahPlain: formatRupiah } = useRupiah()
   const { activeClient, isLoaded } = useRequireClient()
   const searchParams = useSearchParams()
   const start = searchParams.get('start')

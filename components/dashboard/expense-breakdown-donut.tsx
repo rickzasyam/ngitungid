@@ -4,7 +4,8 @@ import {
   PieChart, Pie, Cell,
   Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { PieTooltip, formatRupiahShort } from './dashboard-utils'
+import { PieTooltip } from './dashboard-utils'
+import { useRupiah } from '@/lib/preferences-context'
 import { PieChart as PieChartIcon } from 'lucide-react'
 
 interface ExpenseItem {
@@ -22,6 +23,7 @@ interface ExpenseBreakdownDonutProps {
 }
 
 export function ExpenseBreakdownDonut({ data, totalExpenses, periodLabel }: ExpenseBreakdownDonutProps) {
+  const { rupiahShort: formatRupiahShort } = useRupiah()
   return (
     <div
       className="ng-card-lift rounded-3xl p-6"

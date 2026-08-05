@@ -1,7 +1,7 @@
 'use client'
 
 import { Wallet, Users, Clock, Package, Layers } from 'lucide-react'
-import { formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { useRupiah } from '@/lib/preferences-context'
 import { AKTIVA_CATS, BS_CAT_LABEL, type AktivaCat } from '@/lib/financial-agg'
 
 interface BalanceSheetData {
@@ -47,6 +47,7 @@ interface BalanceSheetHealthProps {
 function BarSegment({
   value, color, label, radius,
 }: { value: number; color: string; label: string; radius: string }) {
+  const { rupiah: formatRupiahFull } = useRupiah()
   return (
     <div
       className="ng-seg-tooltip-wrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
@@ -70,6 +71,7 @@ function BarSegment({
 }
 
 export function BalanceSheetHealth({ balanceSheet, workingCapitalMetrics }: BalanceSheetHealthProps) {
+  const { rupiahShort: formatRupiahShort, rupiah: formatRupiahFull } = useRupiah()
   return (
     <div
       className="ng-card-lift rounded-3xl p-6"

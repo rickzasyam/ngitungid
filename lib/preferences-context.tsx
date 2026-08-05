@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { DEFAULT_PREFERENCES, type Preferences } from '@/lib/api/preferences'
+import { formatRupiah, formatRupiahShort, formatRupiahPlain } from '@/lib/format'
 
 // Preferensi tampilan per-user, di-fetch SEKALI per load aplikasi — pola sama
 // dengan ClientProvider yang mem-fetch /api/clients sekali.
@@ -89,4 +90,28 @@ export function usePreferences() {
   const ctx = useContext(PreferencesContext)
   if (!ctx) throw new Error('usePreferences must be used within PreferencesProvider')
   return ctx
+}
+
+/**
+ * Formatter Rupiah yang SUDAH terikat ke preferensi user — pemakaiannya:
+ *   const { rupiah, rupiahShort, rupiahPlain } = useRupiah()
+ *
+ * Ada di sini, bukan di lib/format.ts, supaya lib/format.ts tetap murni dan
+ * bebas React: modul itu bisa diuji langsung dan tidak menyeret context ke
+ * mana pun ia di-import. Di sini hanya pengikatannya.
+ */
+export function useRupiah() {
+  const { preferences } = usePreferences()
+  const f = preferences.currencyFormat
+  return useMemo(
+    () => ({
+      /** "Rp 1.234.567" — nominal penuh dengan simbol. */
+      rupiah: (v: number) => formatRupiah(v, f),
+      /** "Rp 1,2M" — ringkas, untuk kartu & sumbu grafik. */
+      rupiahShort: (v: number) => formatRupiahShort(v, f),
+      /** "1.234.567" — digit saja, tanpa simbol. */
+      rupiahPlain: (v: number) => formatRupiahPlain(v, f),
+    }),
+    [f]
+  )
 }

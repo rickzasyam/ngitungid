@@ -5,16 +5,12 @@ import { X, ChevronRight } from 'lucide-react'
 import { Sparkline } from './sparkline'
 import { TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from './ratio-card'
 import { healthVerdict } from '@/lib/financial-health'
+import { useRupiah } from '@/lib/preferences-context'
 
 // ── Format helpers ────────────────────────────────────────────
-const fmtRp = (v: number) => {
-  const a = Math.abs(v)
-  if (a >= 1e9) return 'Rp ' + (v / 1e9).toFixed(2).replace('.', ',') + 'M'
-  if (a >= 1e6) return 'Rp ' + Math.round(v / 1e6) + 'jt'
-  if (a >= 1e3) return 'Rp ' + Math.round(v / 1e3) + 'rb'
-  return 'Rp ' + Math.round(v)
-}
-const fmtFull  = (v: number) => 'Rp ' + Math.round(v).toLocaleString('id-ID')
+// fmtRp & fmtFull pindah ke lib/format.ts (dulu SALINAN PERSIS dari
+// app/analytics/page.tsx). Diikat lewat useRupiah() di dalam komponen.
+// fmtPct/fmtRatio/fmtDays/fmtX tetap di sini — bukan nominal.
 const fmtPct   = (v: number, d = 1) => v.toFixed(d).replace('.', ',') + '%'
 const fmtRatio = (v: number) => v.toFixed(2).replace('.', ',')
 const fmtDays  = (v: number) => Math.round(v) + ' hari'
@@ -74,7 +70,12 @@ const DIMS: Record<string, { label: string; score: number; tone: ToneKey; status
 }
 
 // ── Metric registry builder ───────────────────────────────────
-function buildRegistry(c: ComputedMetrics, t: TrendArrays, health?: DrawerHealth): Record<string, MetricEntry> {
+// fmtRp/fmtFull disuntikkan — fungsi ini di luar komponen sedangkan formatnya
+// bergantung preferensi user.
+function buildRegistry(
+  c: ComputedMetrics, t: TrendArrays, health: DrawerHealth | undefined,
+  fmtRp: (v: number) => string, fmtFull: (v: number) => string,
+): Record<string, MetricEntry> {
   const reg: Record<string, MetricEntry> = {
     rev: {
       grp: 'Performa', label: 'Pendapatan', value: fmtRp(c.totRev), tone: 'info', status: 'Tumbuh',
@@ -272,7 +273,8 @@ export function MetricDrawer({
   months: string[]
   health?: DrawerHealth
 }) {
-  const registry = buildRegistry(computed, trends, health)
+  const { rupiahShort: fmtRp, rupiah: fmtFull } = useRupiah()
+  const registry = buildRegistry(computed, trends, health, fmtRp, fmtFull)
   const OVERALL_SCORE = health?.overall ?? 82
 
   // DIMS = label + keanggotaan metrik (UI). Skor/tone/status/reason di-override

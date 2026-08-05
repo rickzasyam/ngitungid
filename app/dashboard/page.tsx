@@ -9,7 +9,7 @@ import { ExpenseBreakdownDonut } from '@/components/dashboard/expense-breakdown-
 import { BalanceSheetHealth } from '@/components/dashboard/balance-sheet-health'
 import { CashflowWaterfallChart } from '@/components/dashboard/cashflow-waterfall-chart'
 import { TopReceiptsBubble } from '@/components/dashboard/top-receipts-bubble'
-import { formatRupiahShort } from '@/components/dashboard/dashboard-utils'
+import { useRupiah } from '@/lib/preferences-context'
 
 import {
   TrendingUp, DollarSign, Monitor, Activity,
@@ -89,6 +89,7 @@ function KPICard({
 
 // ── MAIN PAGE ────────────────────────────────────────────────
 export default function DashboardPage() {
+  const { rupiahShort: formatRupiahShort } = useRupiah()
   const { activeClient, isLoaded } = useRequireClient()
   const clientId = activeClient?.id ?? null
   // Default = TAHUN BERJALAN (bukan hardcode) supaya tidak nyangkut di satu

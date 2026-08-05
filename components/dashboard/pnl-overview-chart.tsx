@@ -4,7 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { DarkTooltip, formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { DarkTooltip } from './dashboard-utils'
+import { useRupiah } from '@/lib/preferences-context'
 import { BarChart3 } from 'lucide-react'
 
 interface PnlOverviewItem {
@@ -20,6 +21,7 @@ interface PnlOverviewChartProps {
 }
 
 export function PnlOverviewChart({ data, year }: PnlOverviewChartProps) {
+  const { rupiahShort: formatRupiahShort, rupiah: formatRupiahFull } = useRupiah()
   return (
     <div
       className="rounded-3xl p-6"

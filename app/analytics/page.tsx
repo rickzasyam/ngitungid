@@ -13,6 +13,7 @@ import { AKTIVA_CATS, PASIVA_CATS } from '@/lib/financial-agg'
 import {
   isMetricVisible, isHiddenFromClient, type MetricId, type VisibilityMap,
 } from '@/lib/analytics/metric-visibility'
+import { useRupiah } from '@/lib/preferences-context'
 
 // ── API response shapes (GET /api/analytics/[clientId]/ratios) ─
 type MonthPoint = { m: string; rev: number; np: number; gp: number; exp: number }
@@ -60,13 +61,10 @@ type NeracaDetailApi = {
 type Preset = '3m' | '6m' | 'all' | 'custom'
 
 // ── Format helpers ────────────────────────────────────────────
-const fmtRp = (v: number) => {
-  const a = Math.abs(v)
-  if (a >= 1e9) return 'Rp ' + (v / 1e9).toFixed(2).replace('.', ',') + 'M'
-  if (a >= 1e6) return 'Rp ' + Math.round(v / 1e6) + 'jt'
-  if (a >= 1e3) return 'Rp ' + Math.round(v / 1e3) + 'rb'
-  return 'Rp ' + Math.round(v)
-}
+// fmtRp & fmtFull pindah ke lib/format.ts, diikat ke preferensi user lewat
+// useRupiah() di dalam komponen (nama lokalnya dipertahankan supaya call site
+// tidak berubah). fmtPct/fmtRatio/fmtDays/fmtX SENGAJA tetap di sini — itu
+// persen/rasio/hari, bukan nominal, dan tidak terpengaruh format mata uang.
 const fmtPct   = (v: number, d = 1) => v.toFixed(d).replace('.', ',') + '%'
 const fmtRatio = (v: number) => v.toFixed(2).replace('.', ',')
 const fmtDays  = (v: number) => Math.round(v) + ' hari'
@@ -76,10 +74,6 @@ const fmtX     = (v: number) => v.toFixed(2).replace('.', ',') + '×'
 // Angka PENUH (bukan singkatan jt/M) — tabel ini dipakai mencocokkan ke
 // laporan manual klien; identitas AKTIVA = PASIVA harus terlihat persis.
 // Negatif pakai kurung, mengikuti konvensi laporan akuntansi.
-const fmtFull = (v: number) => {
-  const s = Math.round(Math.abs(v)).toLocaleString('id-ID')
-  return v < 0 ? `(${s})` : s
-}
 const pctOf = (v: number, total: number) => (total === 0 ? null : (v / total) * 100)
 const fmtPct0 = (v: number | null) => (v === null ? '—' : Math.round(v) + '%')
 // Diturunkan dari sumber tunggal di lib/financial-agg — dulu array literal
@@ -174,7 +168,9 @@ const momDelta = (arr: number[]) => {
   const cur = arr[arr.length - 1], prev = arr[arr.length - 2]
   return prev === 0 ? null : (cur - prev) / Math.abs(prev) * 100
 }
-function cellVal(row: RowDef, col: ColData, stmtMode: 'nominal' | 'pct'): string {
+// fmtRp disuntikkan: fungsi ini di luar komponen, sedangkan formatnya kini
+// bergantung preferensi user yang hanya bisa dibaca lewat hook.
+function cellVal(row: RowDef, col: ColData, stmtMode: 'nominal' | 'pct', fmtRp: (v: number) => string): string {
   const raw = row.getVal(col)
   if (row.pct) return fmtPct(raw / col.rev * 100)
   if (stmtMode === 'pct') return fmtPct(raw / col.rev * 100)
@@ -244,6 +240,9 @@ export default function AnalyticsPage() {
   const { activeClient, isLoaded } = useRequireClient()
   // Balance check hanya untuk staf — lihat alasannya di banner Detail Neraca.
   const { isStaff, role } = useClient()
+  // Nominal: nama lokal fmtRp/fmtFull dipertahankan supaya ~18 call site di
+  // bawah tidak perlu disentuh; isinya kini dari lib/format.ts.
+  const { rupiahShort: fmtRp, rupiahPlain: fmtFull } = useRupiah()
   const clientId = activeClient?.id ?? null
 
   // Visibilitas metrik per-klien (Settings → Analytics Display). Staf tetap
@@ -1004,7 +1003,7 @@ export default function AnalyticsPage() {
                                       </td>
                                       {detailPnlView.pnlCols.map(col => (
                                         <td key={col.label} style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, fontStyle: fi, color }}>
-                                          {cellVal(row, col, stmtMode)}
+                                          {cellVal(row, col, stmtMode, fmtRp)}
                                         </td>
                                       ))}
                                       <td style={{ padding: '9px 10px', textAlign: 'right', borderLeft: '1px solid #f0f0f0', fontSize: 11, fontWeight: 600, color: delta === null ? 'var(--color-text-muted)' : delta.isGood ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
@@ -1016,7 +1015,7 @@ export default function AnalyticsPage() {
                                           : <span style={{ color: '#e5e7eb' }}>·</span>}
                                       </td>
                                       <td style={{ padding: '9px 10px', textAlign: 'right', fontSize: 12, fontWeight: fw, fontStyle: fi, color, background: '#fafafa', borderLeft: '2px solid #efefef' }}>
-                                        {cellVal(row, detailPnlView.pnlTotal, stmtMode)}
+                                        {cellVal(row, detailPnlView.pnlTotal, stmtMode, fmtRp)}
                                       </td>
                                     </tr>
                                     {isExp && rowSub.map((sub, si) => (

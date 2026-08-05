@@ -1,16 +1,14 @@
 'use client'
 
+import { useRupiah } from '@/lib/preferences-context'
+
 // ============================================================
 // FORMAT HELPERS
 // ============================================================
 
-export const formatRupiahShort = (value: number) => {
-  if (value >= 1000000000) return `Rp ${(value / 1000000000).toFixed(1)}M`
-  if (value >= 1000000) return `Rp ${(value / 1000000).toFixed(0)}jt`
-  return `Rp ${value.toLocaleString('id-ID')}`
-}
-
-export const formatRupiahFull = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+// Formatter Rupiah pindah ke lib/format.ts (satu rumah), terikat preferensi
+// user lewat useRupiah(). Dulu dua const di sini mengeraskan 'Rp' + locale
+// id-ID, jadi setelan Currency Format tidak pernah bisa berpengaruh.
 
 // ============================================================
 // PIE TOOLTIP — gaya "Top 5 Sumber Penerimaan": border-atas aksen warna
@@ -25,6 +23,7 @@ export function PieTooltip({ active, payload, total, totalLabel = 'total' }: {
   total?: number
   totalLabel?: string
 }) {
+  const { rupiah: formatRupiahFull } = useRupiah()
   if (!active || !payload || !payload.length) return null
   const entry = payload[0]
   const accent = entry.payload?.color || entry.color || '#daf163'

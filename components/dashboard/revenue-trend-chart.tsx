@@ -4,7 +4,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis,
   Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { formatRupiahShort, formatRupiahFull } from './dashboard-utils'
+import { useRupiah } from '@/lib/preferences-context'
 import { TrendingUp } from 'lucide-react'
 
 interface MonthlyDataItem {
@@ -32,6 +32,7 @@ function CombinedTooltip({ active, payload, label, year }: {
   label?: string
   year?: number
 }) {
+  const { rupiah: formatRupiahFull } = useRupiah()
   if (!active || !payload || !payload.length) return null
 
   return (
@@ -60,6 +61,7 @@ function CombinedTooltip({ active, payload, label, year }: {
 }
 
 export function RevenueTrendChart({ data, year, periodLabel }: RevenueTrendChartProps) {
+  const { rupiahShort: formatRupiahShort } = useRupiah()
   const chartData = data
     .filter(d => d.revenue !== null)
     .map(d => ({

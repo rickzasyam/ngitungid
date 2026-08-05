@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { ArrowLeftRight } from 'lucide-react'
 import { DarkTooltip } from './dashboard-utils'
+import { useRupiah } from '@/lib/preferences-context'
 
 interface CashflowItem {
   month: string
@@ -20,23 +21,11 @@ interface CashflowWaterfallChartProps {
   year: number
 }
 
-// Unified short formatter: handles positive, negative, and zero consistently
-function formatRupiah(value: number): string {
-  const abs = Math.abs(value)
-  let formatted: string
-  if (abs >= 1_000_000_000) {
-    formatted = `Rp ${(abs / 1_000_000_000).toFixed(0)} miliar`
-  } else if (abs >= 1_000_000) {
-    formatted = `Rp ${(abs / 1_000_000).toFixed(0)}jt`
-  } else if (abs >= 1_000) {
-    formatted = `Rp ${(abs / 1_000).toFixed(0)}rb`
-  } else {
-    formatted = `Rp ${abs}`
-  }
-  return value < 0 ? `-${formatted}` : formatted
-}
-
 export function CashflowWaterfallChart({ data, year }: CashflowWaterfallChartProps) {
+  // Dulu ada formatter ringkas lokal di file ini yang mengeraskan 'Rp' + satuan
+  // Indonesia. Sekarang dari lib/format.ts lewat useRupiah(), jadi setelan
+  // Currency Format user akhirnya berpengaruh di sumbu & tooltip grafik ini.
+  const { rupiahShort: formatRupiah } = useRupiah()
   return (
     <div
       className="rounded-3xl p-6"

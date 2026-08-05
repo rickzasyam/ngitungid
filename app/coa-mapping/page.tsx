@@ -20,6 +20,7 @@ import {
   Loader2,
   Inbox,
 } from 'lucide-react'
+import { useRupiah } from '@/lib/preferences-context'
 
 // ============================================================
 // TYPES
@@ -92,11 +93,6 @@ const REPORT_TYPE_ACCENT: Record<ApiReport['reportType'], string> = {
 // HELPERS
 // ============================================================
 
-const formatRupiah = (amount: number) => {
-  const abs = Math.abs(amount)
-  const formatted = new Intl.NumberFormat('id-ID').format(abs)
-  return amount < 0 ? `(Rp ${formatted})` : `Rp ${formatted}`
-}
 
 const getConfidenceColor = (confidence: number) => {
   if (confidence >= 90) return '#15803d'
@@ -352,6 +348,8 @@ function MappingCard({
   searchQuery: string
   onSearchChange: (q: string) => void
 }) {
+  // Nominal penuh + simbol, dari lib/format.ts (terikat preferensi user).
+  const { rupiah: formatRupiah } = useRupiah()
   const isMapped = mappedValue !== null
   const hasSuggestion = !!item.suggestedCOA
   const confColor = getConfidenceColor(item.confidence)

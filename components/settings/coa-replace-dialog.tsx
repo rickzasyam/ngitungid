@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp, Link2, Loader2, Unlink } from 'lucide-react'
+import { useRupiah } from '@/lib/preferences-context'
 
 // Layar konfirmasi "Ganti Master COA". Dulu tombol Ganti Excel langsung POST —
 // admin tak pernah tahu berapa mapping yang akan putus sampai semuanya sudah
@@ -47,10 +48,6 @@ const fmtTanggal = (ymd: string) => {
   const [y, m, d] = ymd.split('-').map(Number)
   return `${d} ${BULAN[m - 1] ?? '?'} ${y}`
 }
-const fmtRupiah = (v: string) => {
-  const n = Number(v)
-  return Number.isFinite(n) ? n.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : v
-}
 
 function Stat({
   value,
@@ -94,6 +91,9 @@ export function CoaReplaceDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { rupiahPlain } = useRupiah()
+  // amount datang sebagai STRING dari API — dikonversi di titik pakai.
+  const fmtRupiah = (v: string) => { const n = Number(v); return Number.isFinite(n) ? rupiahPlain(n) : v }
   const [expanded, setExpanded] = useState<string | null>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
 
