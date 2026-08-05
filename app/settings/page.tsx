@@ -6,6 +6,7 @@ import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-edito
 import {
   FileSpreadsheet,
   Upload,
+  Download,
   ChevronDown,
   ChevronUp,
   CheckCircle2,
@@ -649,6 +650,23 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
               Struktur
               {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
+          )}
+          {/* Export — SEMUA role, termasuk klien untuk kliennya sendiri
+              (aksesnya sama dengan membaca COA yang memang sudah haknya).
+              Sengaja di sebelah tombol import: mengganti Master COA menimpa
+              seluruh isinya, dan ini satu-satunya cara mengambil cadangan
+              sebelum itu terjadi. Anchor biasa, bukan fetch — biar browser
+              yang menangani unduhan & nama file dari Content-Disposition. */}
+          {hasCoa && (
+            <a
+              href={`/api/clients/${clientId}/coa/export`}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors duration-150 hover:bg-(--color-border-subtle) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
+              title="Unduh Master COA sebagai Excel — bisa di-import balik apa adanya"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </a>
           )}
           {!readOnly && hasCoa && (
             <button
