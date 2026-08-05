@@ -134,3 +134,75 @@ describe('parameter waras', () => {
     expect(LOCKOUT_MS).toBeGreaterThan(0)
   })
 })
+
+// ── Bentuk nilai dari DB: naif vs berlabel offset ────────────────
+//
+// DICATAT SEBELUM migrasi 0006 (timestamp -> timestamptz), supaya perubahan
+// perilaku rate limit bisa dibuktikan setelahnya.
+//
+// Yang BERUBAH karena migrasi bukan logika di file ini (murni, tidak disentuh),
+// melainkan BENTUK STRING yang dikembalikan driver ke toMs():
+//   sebelum : '2026-07-18 10:15:00'      (naif — diparse sebagai waktu LOKAL proses)
+//   sesudah : '2026-07-18 10:15:00+00'   (berlabel — diparse sebagai UTC, mutlak)
+//
+// Nilai tersimpan di DB memang selalu UTC, jadi bentuk naif hanya kebetulan
+// benar ketika proses kebetulan berjalan di UTC (Vercel). Di mesin WIB, string
+// naif meleset 7 jam ke arah yang membuat lockout TERLIHAT sudah kedaluwarsa —
+// kunci lepas terlalu cepat.
+describe('bentuk nilai lockedUntil dari driver', () => {
+  it('string berlabel offset (BENTUK SESUDAH MIGRASI) diparse mutlak — tidak bergantung TZ proses', () => {
+    // NOW = 2026-07-18T10:00:00Z, kunci sampai 10:15Z → tersisa 15 menit,
+    // dan angka ini harus sama di mesin mana pun.
+    const rec: AttemptRecord = {
+      failedCount: MAX_FAILED_ATTEMPTS,
+      windowStart: '2026-07-18 09:45:00+00',
+      lockedUntil: '2026-07-18 10:15:00+00',
+    }
+    expect(isLocked(rec, NOW)).toBe(true)
+    expect(lockRemainingMs(rec, NOW)).toBe(15 * 60_000)
+  })
+
+  it('string naif (BENTUK SEBELUM MIGRASI) diparse sebagai waktu LOKAL proses', () => {
+    // Inti masalahnya: hasilnya ditentukan TZ mesin, bukan isi datanya.
+    const naive = '2026-07-18 10:15:00'
+    const asLocal = new Date(2026, 6, 18, 10, 15, 0)
+    expect(new Date(naive).getTime()).toBe(asLocal.getTime())
+
+    // Ditulis TZ-independen supaya lulus di mesin mana pun, sekaligus
+    // memperlihatkan bahwa jawabannya memang berayun mengikuti TZ.
+    const rec: AttemptRecord = { failedCount: MAX_FAILED_ATTEMPTS, windowStart: naive, lockedUntil: naive }
+    expect(isLocked(rec, NOW)).toBe(asLocal.getTime() > NOW.getTime())
+  })
+
+  it('kedua bentuk setara HANYA kalau proses berjalan di UTC', () => {
+    const utcOffsetMinutes = new Date('2026-07-18T10:15:00Z').getTimezoneOffset()
+    const naive = new Date('2026-07-18 10:15:00').getTime()
+    const labelled = new Date('2026-07-18 10:15:00+00').getTime()
+    if (utcOffsetMinutes === 0) {
+      expect(naive).toBe(labelled)
+    } else {
+      expect(naive).not.toBe(labelled)
+      expect(naive - labelled).toBe(utcOffsetMinutes * 60_000)
+    }
+  })
+
+  it('objek Date tidak terpengaruh sama sekali — jalur ini identik sebelum & sesudah migrasi', () => {
+    const rec: AttemptRecord = {
+      failedCount: MAX_FAILED_ATTEMPTS,
+      windowStart: new Date('2026-07-18T09:45:00Z'),
+      lockedUntil: new Date('2026-07-18T10:15:00Z'),
+    }
+    expect(isLocked(rec, NOW)).toBe(true)
+    expect(lockRemainingMs(rec, NOW)).toBe(15 * 60_000)
+  })
+
+  it('kebijakan itu sendiri murni — registerFailure tidak menyentuh tipe kolom', () => {
+    // Bukti bahwa migrasi tidak bisa mengubah keputusan ambang/lockout:
+    // registerFailure hanya membaca angka & Date yang diberikan pemanggil.
+    const fromString = registerFailure({ failedCount: 4, windowStart: '2026-07-18 09:55:00+00', lockedUntil: null }, NOW)
+    const fromDate = registerFailure({ failedCount: 4, windowStart: new Date('2026-07-18T09:55:00Z'), lockedUntil: null }, NOW)
+    expect(fromString).toEqual(fromDate)
+    expect(fromString.failedCount).toBe(MAX_FAILED_ATTEMPTS)
+    expect(fromString.lockedUntil).toEqual(new Date(NOW.getTime() + LOCKOUT_MS))
+  })
+})
