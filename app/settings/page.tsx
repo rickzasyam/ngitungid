@@ -34,6 +34,7 @@ import { useClient } from '@/lib/client-context'
 import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
 import { MIN_PASSWORD } from '@/lib/api/password-change'
 import { visibleSettingsTabs, type SettingsTabId } from '@/lib/settings-tabs'
+import { defaultMetricVisibility, type MetricId } from '@/lib/analytics/metric-visibility'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
@@ -62,7 +63,10 @@ function formatCoaDate(iso: string | null): string {
 }
 
 // ── Metrics visibility — kategori mengikuti Analytics page ───
-type MetricDef = { id: string; label: string; desc: string }
+// id diketik MetricId (lib/analytics/metric-visibility.ts): id yang tidak
+// terdaftar di sana langsung gagal tsc, jadi toggle tidak bisa dibuat untuk
+// metrik yang tidak punya pemetaan ke payload ratios / drawer.
+type MetricDef = { id: MetricId; label: string; desc: string }
 
 const METRIC_CATEGORIES: {
   id: string
@@ -110,9 +114,13 @@ const METRIC_CATEGORIES: {
     accent: '#bbb3f3',
     accentBg: '#f3f2ff',
     Icon: Scale,
+    // DAR (Debt-to-Assets) DIHAPUS 2026-08-05: DAR = DER / (1 + DER), jadi
+    // secara aljabar sudah terkandung di DER di section yang sama. Permenkop
+    // UKM No.06/2006 pun hanya menetapkan ambang untuk DER — kartu DAR terpaksa
+    // memakai ambang karangan atau tone netral permanen. Lagipula togglenya
+    // selama ini tidak berefek: /analytics memang tidak pernah merender DAR.
     metrics: [
       { id: 'der', label: 'Debt-to-Equity Ratio', desc: 'Total Hutang ÷ Total Modal' },
-      { id: 'dar', label: 'Debt-to-Assets Ratio', desc: 'Total Hutang ÷ Total Aset' },
     ],
   },
   {
@@ -132,11 +140,10 @@ const METRIC_CATEGORIES: {
   },
 ]
 
+// Diturunkan dari kategori supaya penyebut counter "x/16" selalu jujur pada apa
+// yang benar-benar dirender di tab ini. Isinya harus sama dengan METRIC_IDS —
+// dijaga tipe MetricId di MetricDef.
 const ALL_METRIC_IDS = METRIC_CATEGORIES.flatMap(c => c.metrics.map(m => m.id))
-
-// Default visibility per klien — DPO & DAR mati sebagai contoh mixed state
-const defaultVisibility = (): Record<string, boolean> =>
-  Object.fromEntries(ALL_METRIC_IDS.map(id => [id, id !== 'dpo' && id !== 'dar']))
 
 // ── Settings nav ─────────────────────────────────────────────
 type TabId = SettingsTabId
@@ -843,7 +850,7 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
 }) {
   // Di-mount ulang tiap ganti klien (key={activeClient.id} di pemanggil),
   // jadi state di bawah selalu milik satu klien saja.
-  const [visibility, setVisibility] = useState<Record<string, boolean>>(defaultVisibility)
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(defaultMetricVisibility)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -857,7 +864,17 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
         if (cancelled) return
         // Baris yang belum pernah disimpan jatuh ke default — backend hanya
         // menyimpan yang pernah di-toggle.
-        setVisibility({ ...defaultVisibility(), ...data.visibility })
+        //
+        // Id yang TIDAK dikenal lagi dibuang di sini (mis. baris `dar` lama yang
+        // masih tertinggal di DB). Tanpa filter ini id usang ikut masuk state
+        // lalu ditulis ulang tiap toggle oleh persist() di bawah, jadi baris
+        // yatimnya hidup selamanya. Membuangnya di sisi baca juga berarti kita
+        // tidak perlu menghapus data lama: baris usang cukup berhenti ditulis.
+        const known = new Set<string>(ALL_METRIC_IDS)
+        const saved = Object.fromEntries(
+          Object.entries(data.visibility).filter(([id]) => known.has(id))
+        )
+        setVisibility({ ...defaultMetricVisibility(), ...saved })
       })
       .catch(err => !cancelled && setError(err.message))
       .finally(() => !cancelled && setLoading(false))

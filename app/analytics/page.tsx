@@ -10,6 +10,9 @@ import { RatioCard, TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from 
 import { MetricDrawer, type ComputedMetrics, type TrendArrays, type DrawerHealth } from '@/components/analytics/metric-drawer'
 import { assessHealth, healthVerdict, type RatioValues } from '@/lib/financial-health'
 import { AKTIVA_CATS, PASIVA_CATS } from '@/lib/financial-agg'
+import {
+  isMetricVisible, isHiddenFromClient, type MetricId, type VisibilityMap,
+} from '@/lib/analytics/metric-visibility'
 
 // ── API response shapes (GET /api/analytics/[clientId]/ratios) ─
 type MonthPoint = { m: string; rev: number; np: number; gp: number; exp: number }
@@ -240,8 +243,15 @@ function SegCtrl<T extends string>({
 export default function AnalyticsPage() {
   const { activeClient, isLoaded } = useRequireClient()
   // Balance check hanya untuk staf — lihat alasannya di banner Detail Neraca.
-  const { isStaff } = useClient()
+  const { isStaff, role } = useClient()
   const clientId = activeClient?.id ?? null
+
+  // Visibilitas metrik per-klien (Settings → Analytics Display). Staf tetap
+  // melihat semuanya; peta ini hanya mengatur apa yang dilihat role 'user'.
+  // Default TAMPIL supaya kegagalan fetch tidak pernah menyembunyikan metrik
+  // secara diam-diam — halaman gagal ke arah "menampilkan terlalu banyak",
+  // bukan "menyembunyikan tanpa sepengetahuan siapa pun".
+  const [metricVis, setMetricVis] = useState<VisibilityMap>({})
 
   // Period selection
   const [periods, setPeriods] = useState<{ periodStart: string; periodEnd: string }[]>([])
@@ -323,6 +333,28 @@ export default function AnalyticsPage() {
     setDetailNeraca(null)
     setDetailLoading(true)
     setNeracaExpanded({})
+    setMetricVis({})
+  }, [clientId])
+
+  // Visibilitas metrik — sumbernya sama persis dengan yang ditulis tab
+  // Analytics Display (Settings). Tidak ikut fetch rasio karena tidak
+  // bergantung pada rentang periode: cukup sekali per klien.
+  //
+  // Gagal fetch SENGAJA dibiarkan senyap dan peta tetap kosong (= semua
+  // tampil). Menyembunyikan metrik karena request gagal jauh lebih buruk
+  // daripada menampilkan metrik yang seharusnya disembunyikan: yang pertama
+  // membuat klien mengira datanya hilang, yang kedua hanya membocorkan rasio
+  // ke klien yang memang punya akses ke laporannya sendiri.
+  useEffect(() => {
+    if (!clientId) return
+    let alive = true
+    fetch(`/api/clients/${clientId}/metrics`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { visibility?: VisibilityMap } | null) => {
+        if (alive && d?.visibility) setMetricVis(d.visibility)
+      })
+      .catch(() => { /* diam — default tampil semua */ })
+    return () => { alive = false }
   }, [clientId])
 
   // Fetch data Detail Laporan (Laba Rugi via /ratios + Neraca via /neraca-detail)
@@ -478,6 +510,27 @@ export default function AnalyticsPage() {
   }
 
   const view = (!busy && !loadError && !noRange && hasData) ? buildView() : null
+
+  // ── Gerbang tampilan metrik ──────────────────────────────────
+  // PENTING: `showMetric` dipakai HANYA di titik render kartu, TIDAK PERNAH
+  // untuk menyaring input perhitungan. `buildView()` di atas menurunkan
+  // CCC (= dio + dso − dpo) dan menjalankan assessHealth memakai SELURUH rasio,
+  // termasuk metrik yang disembunyikan. Menyaring lebih awal akan mengubah CCC
+  // dan skor dua dimensi (likuiditas & efisiensi) hanya karena preferensi
+  // tampilan — dijaga lib/analytics/metric-visibility.test.ts.
+  const showMetric = (id: MetricId) => isMetricVisible(role, metricVis, id)
+
+  // Props penanda "tidak tampil ke klien". Hanya pernah aktif untuk staf —
+  // klien tidak melihat kartunya sama sekali, jadi tidak ada yang perlu
+  // ditandai di sisi mereka.
+  const clientHidden = (id: MetricId) => ({ hiddenFromClient: isStaff && isHiddenFromClient(metricVis, id) })
+
+  // Keanggotaan section MENGIKUTI HALAMAN INI, bukan pengelompokan di Settings:
+  // di sini Debt-to-Equity ikut section Likuiditas, dan CCC sengaja tampil dua
+  // kali (Likuiditas & Efisiensi) — sejalan dgn DIMENSIONS di financial-health.
+  const SEC_LIKUIDITAS: MetricId[] = ['cr', 'qr', 'cashr', 'der', 'wc', 'ccc']
+  const SEC_PROFITABILITAS: MetricId[] = ['roe', 'roa', 'gpm', 'npm', 'opm']
+  const SEC_EFISIENSI: MetricId[] = ['dso', 'dio', 'dpo', 'invturn', 'assetturn', 'ccc']
 
   // Detail Laba Rugi — data dari rentang filter TERPISAH (detailPnl), bukan view induk.
   const detailPnlView = (() => {
@@ -774,48 +827,56 @@ export default function AnalyticsPage() {
                 </div>
 
                 {/* ═══ 4. LIKUIDITAS ═════════════════════════════════ */}
+                {SEC_LIKUIDITAS.some(showMetric) && (
                 <div id="sec-likuiditas">
                   <SectionCard>
                     <SectionHeader title="Rasio Likuiditas" subtitle="Kemampuan menutup kewajiban jangka pendek · Klik kartu untuk detail" accent="linear-gradient(180deg, #daf163, #bef264)" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-                      <RatioCard label="Current Ratio"          value={fmtRatio(view.ratios.cr)}    formula="Aktiva Lancar ÷ Hutang Lancar"                {...view.rc('cr', 'cr')}       onClick={() => setDrawer('cr')} />
-                      <RatioCard label="Quick Ratio"            value={fmtRatio(view.ratios.qr)}    formula="(Aktiva Lancar − Persediaan) ÷ Hutang Lancar" {...view.rc('qr', 'qr')}       onClick={() => setDrawer('qr')} />
-                      <RatioCard label="Cash Ratio"             value={fmtRatio(view.ratios.cashR)} formula="Kas ÷ Hutang Lancar"                          {...view.rc('cashR', 'cash')}  onClick={() => setDrawer('cash')} />
-                      <RatioCard label="Debt-to-Equity"         value={fmtRatio(view.ratios.der)}   formula="Total Hutang ÷ Total Modal"                   {...view.rc('der', 'der')}     onClick={() => setDrawer('der')} />
-                      <RatioCard label="Modal Kerja"            value={fmtRp(view.ratios.wc)}       formula="Aktiva Lancar − Hutang Lancar"                {...view.rc('wc', 'wc')}       onClick={() => setDrawer('wc')} />
-                      <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}    formula="DIO + DSO − DPO"                              {...view.rc('ccc', 'ccc')}     onClick={() => setDrawer('ccc')} />
+                      {showMetric('cr')    && <RatioCard label="Current Ratio"          value={fmtRatio(view.ratios.cr)}    formula="Aktiva Lancar ÷ Hutang Lancar"                {...view.rc('cr', 'cr')} {...clientHidden('cr')}       onClick={() => setDrawer('cr')} />}
+                      {showMetric('qr')    && <RatioCard label="Quick Ratio"            value={fmtRatio(view.ratios.qr)}    formula="(Aktiva Lancar − Persediaan) ÷ Hutang Lancar" {...view.rc('qr', 'qr')} {...clientHidden('qr')}       onClick={() => setDrawer('qr')} />}
+                      {showMetric('cashr') && <RatioCard label="Cash Ratio"             value={fmtRatio(view.ratios.cashR)} formula="Kas ÷ Hutang Lancar"                          {...view.rc('cashR', 'cash')} {...clientHidden('cashr')}  onClick={() => setDrawer('cash')} />}
+                      {showMetric('der')   && <RatioCard label="Debt-to-Equity"         value={fmtRatio(view.ratios.der)}   formula="Total Hutang ÷ Total Modal"                   {...view.rc('der', 'der')} {...clientHidden('der')}     onClick={() => setDrawer('der')} />}
+                      {showMetric('wc')    && <RatioCard label="Modal Kerja"            value={fmtRp(view.ratios.wc)}       formula="Aktiva Lancar − Hutang Lancar"                {...view.rc('wc', 'wc')} {...clientHidden('wc')}       onClick={() => setDrawer('wc')} />}
+                      {showMetric('ccc')   && <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}    formula="DIO + DSO − DPO"                              {...view.rc('ccc', 'ccc')} {...clientHidden('ccc')}     onClick={() => setDrawer('ccc')} />}
                     </div>
                   </SectionCard>
                 </div>
+                )}
 
                 {/* ═══ 5. PROFITABILITAS ═════════════════════════════ */}
+                {SEC_PROFITABILITAS.some(showMetric) && (
                 <div id="sec-profitabilitas">
                   <SectionCard>
                     <SectionHeader title="Rasio Profitabilitas" subtitle="Kemampuan menghasilkan laba dari investasi dan pendapatan · Klik kartu untuk detail" accent="linear-gradient(180deg, #bbb3f3, #a5b4fc)" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-                      <RatioCard label="Return on Equity"   value={fmtPct(view.ratios.roe)} formula="Laba Bersih ÷ Total Modal"       {...view.rc('roe', 'roe')} onClick={() => setDrawer('roe')} />
-                      <RatioCard label="Return on Assets"   value={fmtPct(view.ratios.roa)} formula="Laba Bersih ÷ Total Aset"        {...view.rc('roa', 'roa')} onClick={() => setDrawer('roa')} />
-                      <RatioCard label="Gross Margin"       value={fmtPct(view.ratios.gpm)} formula="Laba Kotor ÷ Pendapatan"         {...view.rc('gpm', 'gpm')} onClick={() => setDrawer('gpm')} />
-                      <RatioCard label="Net Margin"         value={fmtPct(view.ratios.npm)} formula="Laba Bersih ÷ Pendapatan"        {...view.rc('npm', 'npm')} onClick={() => setDrawer('npm')} />
-                      <RatioCard label="Operating Margin"   value={fmtPct(view.ratios.opm)} formula="Laba Operasi ÷ Pendapatan"       {...view.rc('opm', 'opm')} onClick={() => setDrawer('opm')} />
+                      {showMetric('roe') && <RatioCard label="Return on Equity"   value={fmtPct(view.ratios.roe)} formula="Laba Bersih ÷ Total Modal"       {...view.rc('roe', 'roe')} {...clientHidden('roe')} onClick={() => setDrawer('roe')} />}
+                      {showMetric('roa') && <RatioCard label="Return on Assets"   value={fmtPct(view.ratios.roa)} formula="Laba Bersih ÷ Total Aset"        {...view.rc('roa', 'roa')} {...clientHidden('roa')} onClick={() => setDrawer('roa')} />}
+                      {showMetric('gpm') && <RatioCard label="Gross Margin"       value={fmtPct(view.ratios.gpm)} formula="Laba Kotor ÷ Pendapatan"         {...view.rc('gpm', 'gpm')} {...clientHidden('gpm')} onClick={() => setDrawer('gpm')} />}
+                      {showMetric('npm') && <RatioCard label="Net Margin"         value={fmtPct(view.ratios.npm)} formula="Laba Bersih ÷ Pendapatan"        {...view.rc('npm', 'npm')} {...clientHidden('npm')} onClick={() => setDrawer('npm')} />}
+                      {showMetric('opm') && <RatioCard label="Operating Margin"   value={fmtPct(view.ratios.opm)} formula="Laba Operasi ÷ Pendapatan"       {...view.rc('opm', 'opm')} {...clientHidden('opm')} onClick={() => setDrawer('opm')} />}
                     </div>
                   </SectionCard>
                 </div>
+                )}
 
                 {/* ═══ 6. EFISIENSI ══════════════════════════════════ */}
+                {SEC_EFISIENSI.some(showMetric) && (
                 <div id="sec-efisiensi">
                   <SectionCard>
                     <SectionHeader title="Rasio Efisiensi" subtitle="Efektivitas aset dan operasional · Klik kartu untuk detail" accent="linear-gradient(180deg, #fdba74, #f59e0b)" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
-                      <RatioCard label="DSO"                    value={fmtDays(view.ratios.dso)}      formula="Piutang ÷ Pendapatan × Hari"            {...view.rc('dso', 'dso')}             onClick={() => setDrawer('dso')} />
-                      <RatioCard label="DIO"                    value={fmtDays(view.ratios.dio)}      formula="Persediaan ÷ Pendapatan × Hari"         {...view.rc('dio', 'dio')}             onClick={() => setDrawer('dio')} />
-                      <RatioCard label="DPO"                    value={fmtDays(view.ratios.dpo)}      formula="Hutang Usaha ÷ HPP × Hari"              {...view.rc('dpo', 'dpo')}             onClick={() => setDrawer('dpo')} />
-                      <RatioCard label="Inventory Turnover"     value={fmtX(view.ratios.invTurn)}     formula="HPP ÷ Persediaan (disetahunkan)"        {...view.rc('invTurn', 'invturn')}     onClick={() => setDrawer('invturn')} />
-                      <RatioCard label="Asset Turnover"         value={fmtX(view.ratios.assetTurn)}   formula="Pendapatan ÷ Total Aset (disetahunkan)" {...view.rc('assetTurn', 'assetturn')} onClick={() => setDrawer('assetturn')} />
-                      <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}      formula="DIO + DSO − DPO"                        {...view.rc('ccc', 'ccc')}             onClick={() => setDrawer('ccc')} />
+                      {showMetric('dso')       && <RatioCard label="DSO"                    value={fmtDays(view.ratios.dso)}      formula="Piutang ÷ Pendapatan × Hari"            {...view.rc('dso', 'dso')} {...clientHidden('dso')}             onClick={() => setDrawer('dso')} />}
+                      {showMetric('dio')       && <RatioCard label="DIO"                    value={fmtDays(view.ratios.dio)}      formula="Persediaan ÷ Pendapatan × Hari"         {...view.rc('dio', 'dio')} {...clientHidden('dio')}             onClick={() => setDrawer('dio')} />}
+                      {showMetric('dpo')       && <RatioCard label="DPO"                    value={fmtDays(view.ratios.dpo)}      formula="Hutang Usaha ÷ HPP × Hari"              {...view.rc('dpo', 'dpo')} {...clientHidden('dpo')}             onClick={() => setDrawer('dpo')} />}
+                      {showMetric('invturn')   && <RatioCard label="Inventory Turnover"     value={fmtX(view.ratios.invTurn)}     formula="HPP ÷ Persediaan (disetahunkan)"        {...view.rc('invTurn', 'invturn')} {...clientHidden('invturn')}     onClick={() => setDrawer('invturn')} />}
+                      {showMetric('assetturn') && <RatioCard label="Asset Turnover"         value={fmtX(view.ratios.assetTurn)}   formula="Pendapatan ÷ Total Aset (disetahunkan)" {...view.rc('assetTurn', 'assetturn')} {...clientHidden('assetturn')} onClick={() => setDrawer('assetturn')} />}
+                      {showMetric('ccc')       && <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}      formula="DIO + DSO − DPO"                        {...view.rc('ccc', 'ccc')} {...clientHidden('ccc')}             onClick={() => setDrawer('ccc')} />}
                     </div>
-                    {/* DIO Warning Banner — hanya bila DIO benar-benar dinilai bermasalah */}
-                    {(view.health.tones.dio === 'risiko' || view.health.tones.dio === 'perhatian') && (
+                    {/* DIO Warning Banner — hanya bila DIO benar-benar dinilai
+                        bermasalah, DAN hanya kalau DIO-nya sendiri tampil:
+                        banner yang menunjuk kartu yang tidak ada (dan membuka
+                        drawer DIO saat diklik) hanya membingungkan klien. */}
+                    {showMetric('dio') && (view.health.tones.dio === 'risiko' || view.health.tones.dio === 'perhatian') && (
                       <div
                         onClick={() => setDrawer('dio')}
                         style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}
@@ -836,6 +897,7 @@ export default function AnalyticsPage() {
                     )}
                   </SectionCard>
                 </div>
+                )}
 
                 {/* ═══ 7. DETAIL LAPORAN — Laba Rugi + Neraca (filter rentang SENDIRI) ═══ */}
                 <div id="sec-detail" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

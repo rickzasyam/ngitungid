@@ -1,5 +1,6 @@
 'use client'
 
+import { EyeOff } from 'lucide-react'
 import { Sparkline } from './sparkline'
 
 export type ToneKey = 'sehat' | 'perhatian' | 'risiko' | 'netral' | 'info'
@@ -62,7 +63,7 @@ export function Pill({ tone, label }: { tone: ToneKey; label: string }) {
 }
 
 export function RatioCard({
-  label, value, tone, status, formula, benchmark, trend, onClick,
+  label, value, tone, status, formula, benchmark, trend, onClick, hiddenFromClient = false,
 }: {
   label: string
   value: string
@@ -72,13 +73,17 @@ export function RatioCard({
   benchmark: string
   trend: number[]
   onClick: () => void
+  /** Metrik ini dimatikan di Settings → tidak tampil ke klien. Hanya pernah
+   *  true untuk staf: klien tidak melihat kartunya sama sekali. */
+  hiddenFromClient?: boolean
 }) {
   const t = TONES[tone]
   return (
     <div
       role="button"
       tabIndex={0}
-      aria-label={`${label}: ${value}, status ${status}. Buka detail analisis.`}
+      // Penanda ikut di accessible name, bukan cuma visual.
+      aria-label={`${label}: ${value}, status ${status}.${hiddenFromClient ? ' Tidak tampil ke klien.' : ''} Buka detail analisis.`}
       onClick={onClick}
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -104,6 +109,26 @@ export function RatioCard({
         <span style={{ fontSize: 26, fontWeight: 700, color: '#1f2430', letterSpacing: '-0.5px' }}>{value}</span>
         <Sparkline values={trend} color={t.bar} width={64} height={22} />
       </div>
+      {/* Penanda "tidak tampil ke klien" — SENGAJA berupa pill, bukan meredupkan
+          kartu. Angkanya justru sedang diperiksa akuntan, jadi menurunkan
+          keterbacaannya berisiko salah baca; opacity juga akan bertabrakan
+          dengan sistem tone (risiko/perhatian/sehat) yang sudah memakai warna —
+          kartu "risiko" yang diredupkan terlihat seolah sudah beres. */}
+      {hiddenFromClient && (
+        <div style={{ display: 'flex', marginBottom: 6 }}>
+          <span
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 9.5, fontWeight: 600, whiteSpace: 'nowrap',
+              color: 'var(--color-text-muted)', background: 'var(--color-muted-bg)',
+              padding: '2px 8px', borderRadius: 99,
+            }}
+          >
+            <EyeOff aria-hidden="true" style={{ width: 10, height: 10, flexShrink: 0 }} />
+            Tidak tampil ke klien
+          </span>
+        </div>
+      )}
       <div style={{ borderTop: '1px solid #eee', marginBottom: 6 }} />
       <div style={{ fontFamily: 'monospace', fontSize: 9.5, color: 'var(--color-text-muted)', marginBottom: 4 }}>{formula}</div>
       <div style={{ fontSize: 10, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
