@@ -55,6 +55,11 @@ export const lineItemStatusEnum = pgEnum('line_item_status', [
 // user     : klien, read-only Dashboard + Analytics. TIDAK berubah.
 export const userRoleEnum = pgEnum('user_role', ['akunting', 'user', 'owner'])
 
+// Bahasa antarmuka per-user. Daftarnya memang tertutup, jadi enum tepat di sini.
+// CATATAN: kolomnya SUDAH tersimpan & bertahan, tapi BELUM punya efek
+// penerjemahan apa pun — i18n adalah Task 4.
+export const userLanguageEnum = pgEnum('user_language', ['id', 'en'])
+
 // ── clients ──────────────────────────────────────────────────
 // logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
 // .source_pdf. Alasannya sama: file-nya kecil (logo klien lazimnya < 200KB,
@@ -220,6 +225,17 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   role: userRoleEnum('role').notNull().default('user'),
   clientId: uuid('client_id').references(() => clients.id, { onDelete: 'restrict' }),
+  // ── Preferensi tampilan per-user (migrasi 0006) ──
+  // Per-USER, bukan per-klien/global: bahasa itu preferensi pribadi, dan akan
+  // ada 4 akunting + akun klien yang boleh berbeda. Konsistensi laporan yang
+  // dilihat klien dijaga di titik EKSPOR, bukan dengan menyeragamkan layar.
+  language: userLanguageEnum('language').notNull().default('id'),
+  // `text`, bukan enum — kalau keduanya enum dan sama-sama default 'id', nilai
+  // 'id' berarti dua hal berbeda di satu baris. 'idr' terbaca tanpa ambiguitas.
+  // Nilai divalidasi di PUT /api/account/preferences (lib/api/preferences.ts).
+  // FORMAT TAMPILAN saja: 'idr' → Rp 1.234.567, 'intl' → IDR 1,234,567.
+  // Tidak pernah konversi mata uang — semua nilai di sistem ini Rupiah.
+  currencyFormat: text('currency_format').notNull().default('idr'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })

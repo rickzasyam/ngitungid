@@ -35,6 +35,8 @@ import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
 import { MIN_PASSWORD } from '@/lib/api/password-change'
 import { visibleSettingsTabs, type SettingsTabId } from '@/lib/settings-tabs'
 import { defaultMetricVisibility, type MetricId } from '@/lib/analytics/metric-visibility'
+import { usePreferences } from '@/lib/preferences-context'
+import type { Preferences, Language, CurrencyFormat } from '@/lib/api/preferences'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
@@ -307,9 +309,32 @@ function NoClientState() {
 // readOnly (role user/klien): kontrol dirender sebagai chip nilai statis, bukan
 // SegButtons aktif — spek: user melihat General read-only, tanpa form input.
 function GeneralTab({ readOnly = false }: { readOnly?: boolean }) {
-  const [language, setLanguage] = useState<'id' | 'en'>('id')
-  const [currencyFormat, setCurrencyFormat] = useState<'id' | 'intl'>('id')
-  const [timezone, setTimezone] = useState<'wib' | 'wita' | 'wit'>('wib')
+  // Nilai nyata dari PreferencesProvider (satu fetch per load app), bukan lagi
+  // useState lokal yang hilang tiap pindah tab.
+  const { preferences, isLoaded, savePreferences } = usePreferences()
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
+
+  // Simpan seluruh preferensi sekaligus (endpoint-nya mengganti, bukan patch).
+  const persist = async (next: Preferences) => {
+    setSaving(true)
+    setError(null)
+    setOkMsg(null)
+    try {
+      await savePreferences(next)
+      setOkMsg('Preferensi tersimpan.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan preferensi.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const language = preferences.language
+  const currencyFormat = preferences.currencyFormat
+  const setLanguage = (v: Language) => void persist({ ...preferences, language: v })
+  const setCurrencyFormat = (v: CurrencyFormat) => void persist({ ...preferences, currencyFormat: v })
 
   const seg = <T extends string>(
     label: string,
@@ -328,21 +353,23 @@ function GeneralTab({ readOnly = false }: { readOnly?: boolean }) {
       <SegButtons label={label} options={options} value={value} onChange={onChange} />
     )
 
+  // Timezone SENGAJA tidak ada di sini lagi. Setelan WIB/WITA/WIT dibatalkan
+  // (bukan ditunda): empat akunting semuanya WIB dan seluruh klien Indonesia,
+  // jadi ia hanya akan mempengaruhi string seperti "diupload 14:32" sambil
+  // memaksa setiap formatter tanggal dijaga permanen agar tidak menggeser
+  // periode akuntansi. Timestamp dirender pada satu zona tetap (WIB).
   const rows: { label: string; desc: string; control: React.ReactNode }[] = [
     {
       label: 'Language',
-      desc: 'Bahasa antarmuka platform',
+      // Jujur soal statusnya: nilainya tersimpan, tapi belum menerjemahkan
+      // apa pun. i18n adalah pekerjaan terpisah.
+      desc: 'Bahasa antarmuka — tersimpan, penerapannya menyusul',
       control: seg('Language', [{ value: 'id' as const, label: 'Bahasa Indonesia' }, { value: 'en' as const, label: 'English' }], language, setLanguage),
     },
     {
       label: 'Currency Format',
-      desc: 'Format penulisan nominal di seluruh laporan',
-      control: seg('Currency Format', [{ value: 'id' as const, label: 'Rp 1.234.567' }, { value: 'intl' as const, label: 'IDR 1,234,567' }], currencyFormat, setCurrencyFormat),
-    },
-    {
-      label: 'Timezone',
-      desc: 'Acuan tanggal upload & periode laporan',
-      control: seg('Timezone', [{ value: 'wib' as const, label: 'WIB' }, { value: 'wita' as const, label: 'WITA' }, { value: 'wit' as const, label: 'WIT' }], timezone, setTimezone),
+      desc: 'Format penulisan nominal — tampilan saja, nilai tidak dikonversi',
+      control: seg('Currency Format', [{ value: 'idr' as const, label: 'Rp 1.234.567' }, { value: 'intl' as const, label: 'IDR 1,234,567' }], currencyFormat, setCurrencyFormat),
     },
   ]
 
@@ -351,8 +378,10 @@ function GeneralTab({ readOnly = false }: { readOnly?: boolean }) {
       <SectionHeading
         Icon={Globe}
         accent="linear-gradient(135deg, #daf163 0%, #c8e000 100%)"
-        title="Preferensi Platform"
-        subtitle={readOnly ? 'Preferensi global platform (tampilan saja)' : 'Berlaku global untuk seluruh platform, bukan per-klien'}
+        title="Preferensi Tampilan"
+        // Subtitle lama berbohong: ia menyebut "berlaku global untuk seluruh
+        // platform", padahal scope-nya per-USER (kolom di tabel users).
+        subtitle={readOnly ? 'Preferensi akun Anda sendiri (tampilan saja)' : 'Berlaku untuk akun Anda sendiri, bukan untuk semua orang'}
       />
       <div className="mt-4">
         {rows.map((row, i) => (
@@ -368,6 +397,19 @@ function GeneralTab({ readOnly = false }: { readOnly?: boolean }) {
             {row.control}
           </div>
         ))}
+      </div>
+
+      {/* Status simpan — tanpa ini toggle terasa seperti tidak melakukan apa-apa. */}
+      <div className="mt-1 min-h-[18px]">
+        {!isLoaded ? (
+          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Memuat preferensi…</span>
+        ) : error ? (
+          <span role="alert" className="text-xs font-medium" style={{ color: '#dc2626' }}>{error}</span>
+        ) : saving ? (
+          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Menyimpan…</span>
+        ) : okMsg ? (
+          <span role="status" className="text-xs font-medium" style={{ color: '#15803d' }}>{okMsg}</span>
+        ) : null}
       </div>
     </SettingsCard>
   )
