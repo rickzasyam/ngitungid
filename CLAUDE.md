@@ -156,8 +156,25 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
 6. Hardcoded hex colors should be CSS variables in `globals.css` — one source of truth, not
    scattered across components.
 
+7. **CCC and the health score are computed CLIENT-side, in the same component that holds
+   the metric visibility map.** `GET /api/analytics/[clientId]/ratios` returns only 15
+   ratios; CCC is derived in `app/analytics/page.tsx` (~`:409`, `dio + dso - dpo`) and
+   `assessHealth()` runs right after (~`:426`). The visibility map lives in that same
+   component. **Never filter the ratios before computing** — hiding DPO must not change
+   CCC, and CCC feeds the health score in two dimensions (likuiditas and efisiensi), so
+   filtering early would silently move a client's score because of a display preference.
+   There is no process or module boundary preventing this; the only guard is the DPO
+   invariance test in `lib/analytics/metric-visibility.test.ts`. Visibility is applied
+   **only** at the point where a card is rendered.
+
 ## Working Conventions
 
+- **Only Ricko approves. Never write "Approved", "Decisions recorded", or any equivalent
+  on your own behalf.** Report what you were told and what you decided to do, but do not
+  narrate agreement into existence. If you are told to stop for approval on a specific
+  point, stop on that point — even when the rest of the work continues, and even if an
+  answer arrives that looks like a preference. Choosing between offered options is not
+  the same as being told to proceed; when in doubt, the instruction to stop wins.
 - Read `ROADMAP.md` before starting, update it after finishing.
 - Don't remove or refactor existing components outside the current task's scope without
   confirming first — components can be disconnected from a page without being deleted (this
@@ -172,3 +189,13 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
 - Prefer English for UI chrome/settings labels (e.g. "General", "Analytics Display") unless
   the label is user-facing product copy already established in Indonesian (e.g. "Laba
   Rugi", "Neraca", "Kelola Master COA").
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
