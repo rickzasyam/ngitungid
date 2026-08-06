@@ -110,6 +110,30 @@ export function fmtVal(v: number, unit: Unit): string {
   return id(v)
 }
 
+// ── Bisnis tanpa persediaan ──────────────────────────────────
+/**
+ * Metrik berbasis persediaan TIDAK BERMAKNA kalau bisnisnya memang tidak punya
+ * persediaan — mis. Graphicook yang menjual template digital: persediaan 0 dan
+ * HPP 0, sehingga Inventory Turnover keluar 0,00× dan DIO 0 hari. Angka itu
+ * bukan kinerja buruk, melainkan pertanyaan yang tidak berlaku, dan menampilkan
+ * "Berisiko" untuk keduanya membuat klien mengejar masalah yang tidak ada.
+ *
+ * Syaratnya KEDUANYA nol. Persediaan 0 dengan HPP > 0 adalah cerita berbeda
+ * (barang habis / dropship) dan di situ turnover memang bermakna.
+ *
+ * Ini murni penilaian TAMPILAN. Fungsi ini sengaja TIDAK dipakai di dalam
+ * assessHealth: aritmetikanya tidak berubah sama sekali (lihat catatan di
+ * ROADMAP 2026-08-05 tentang skor yang masih ikut menghitung DIO/invTurn).
+ */
+export function isInventoryless(persediaan: number, totHPP: number): boolean {
+  return persediaan === 0 && totHPP === 0
+}
+
+/** Label & keterangan seragam untuk metrik yang tidak berlaku. */
+export const NA_LABEL = 'N/A'
+export const NA_STATUS = 'Tidak berlaku'
+export const NA_INVENTORY_NOTE = 'Bisnis tanpa persediaan'
+
 // ── Keanggotaan dimensi (CCC sengaja di Likuiditas & Efisiensi) ─
 export const DIMENSIONS: Record<string, { label: string; metrics: string[] }> = {
   likuiditas: { label: 'Likuiditas', metrics: ['cr', 'qr', 'cashR', 'wc', 'ccc'] },

@@ -4,7 +4,9 @@ import { useEffect } from 'react'
 import { X, ChevronRight } from 'lucide-react'
 import { Sparkline } from './sparkline'
 import { TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from './ratio-card'
-import { healthVerdict } from '@/lib/financial-health'
+import {
+  healthVerdict, isInventoryless, NA_LABEL, NA_STATUS, NA_INVENTORY_NOTE,
+} from '@/lib/financial-health'
 import { useRupiah } from '@/lib/preferences-context'
 
 // ── Format helpers ────────────────────────────────────────────
@@ -76,6 +78,10 @@ function buildRegistry(
   c: ComputedMetrics, t: TrendArrays, health: DrawerHealth | undefined,
   fmtRp: (v: number) => string, fmtFull: (v: number) => string,
 ): Record<string, MetricEntry> {
+  // Bisnis tanpa persediaan: metrik berbasis persediaan tidak berlaku, bukan
+  // buruk. Hanya tone/label/penjelasan yang berubah — angka tetap dihitung.
+  const noInv = isInventoryless(c.persediaan, c.totHPP)
+  const naTone = { tone: 'netral' as ToneKey, status: NA_STATUS }
   const reg: Record<string, MetricEntry> = {
     rev: {
       grp: 'Performa', label: 'Pendapatan', value: fmtRp(c.totRev), tone: 'info', status: 'Tumbuh',
@@ -176,11 +182,14 @@ function buildRegistry(
       recos: ['Pertahankan kebijakan kredit ketat', 'Jaga hubungan pelanggan pembayar cepat'],
     },
     dio: {
-      grp: 'Efisiensi', label: 'DIO', value: fmtDays(c.dio), tone: 'perhatian', status: 'Perlu Perhatian',
-      benchmark: '< 60 hari', formula: 'Persediaan ÷ Pendapatan × Hari', tUnit: 'days',
+      grp: 'Efisiensi', label: 'DIO', value: noInv ? NA_LABEL : fmtDays(c.dio),
+      ...(noInv ? naTone : { tone: 'perhatian' as ToneKey, status: 'Perlu Perhatian' }),
+      benchmark: noInv ? NA_INVENTORY_NOTE : '< 60 hari', formula: 'Persediaan ÷ Pendapatan × Hari', tUnit: 'days',
       comp: [['Persediaan', fmtFull(c.persediaan)], ['Pendapatan', fmtFull(c.totRev)], ['Periode', c.pc.days + ' hari'], ['DIO', fmtDays(c.dio)]],
-      trend: t.dio, interp: 'DIO ' + fmtDays(c.dio) + ' melebihi benchmark 60 hari. Persediaan = ' + (c.persediaan / c.aktivaLancar * 100).toFixed(1) + '% aktiva lancar — mengikat kas.',
-      recos: ['Review kategori stok slow-moving', 'Evaluasi strategi & frekuensi pembelian', 'Buat clearance atau bundling untuk produk lambat', 'Sesuaikan reorder point & safety stock'],
+      trend: t.dio, interp: noInv
+        ? 'Klien ini tidak memiliki persediaan (persediaan Rp 0, HPP Rp 0), jadi umur persediaan tidak berlaku — bukan kinerja buruk.'
+        : 'DIO ' + fmtDays(c.dio) + ' melebihi benchmark 60 hari. Persediaan = ' + (c.persediaan / c.aktivaLancar * 100).toFixed(1) + '% aktiva lancar — mengikat kas.',
+      recos: noInv ? [] : ['Review kategori stok slow-moving', 'Evaluasi strategi & frekuensi pembelian', 'Buat clearance atau bundling untuk produk lambat', 'Sesuaikan reorder point & safety stock'],
     },
     dpo: {
       grp: 'Efisiensi', label: 'DPO', value: fmtDays(c.dpo), tone: 'netral', status: 'Pendek',
@@ -190,11 +199,14 @@ function buildRegistry(
       recos: ['Negosiasi termin pemasok 30–45 hari', 'Manfaatkan diskon pembayaran awal bila menguntungkan'],
     },
     invturn: {
-      grp: 'Efisiensi', label: 'Inventory Turnover', value: fmtX(c.invTurn), tone: 'perhatian', status: 'Rendah',
-      benchmark: '> 6×', formula: 'Pendapatan ÷ Persediaan (disetahunkan)', tUnit: 'x',
+      grp: 'Efisiensi', label: 'Inventory Turnover', value: noInv ? NA_LABEL : fmtX(c.invTurn),
+      ...(noInv ? naTone : { tone: 'perhatian' as ToneKey, status: 'Rendah' }),
+      benchmark: noInv ? NA_INVENTORY_NOTE : '> 6×', formula: 'Pendapatan ÷ Persediaan (disetahunkan)', tUnit: 'x',
       comp: [['Pendapatan', fmtFull(c.totRev)], ['Persediaan', fmtFull(c.persediaan)], ['Faktor tahunan', '365/' + c.pc.days + ' = ' + (365 / c.pc.days).toFixed(2) + '×'], ['Turnover', fmtX(c.invTurn)]],
-      trend: t.invTurn, interp: 'Persediaan hanya berputar ~' + c.invTurn.toFixed(1) + '× setahun, di bawah ideal. Stok terlalu banyak relatif terhadap penjualan.',
-      recos: ['Turunkan level persediaan rata-rata', 'Tingkatkan akurasi forecast permintaan'],
+      trend: t.invTurn, interp: noInv
+        ? 'Tidak ada persediaan untuk diputar (persediaan Rp 0, HPP Rp 0). Perputaran persediaan tidak berlaku untuk model bisnis ini.'
+        : 'Persediaan hanya berputar ~' + c.invTurn.toFixed(1) + '× setahun, di bawah ideal. Stok terlalu banyak relatif terhadap penjualan.',
+      recos: noInv ? [] : ['Turunkan level persediaan rata-rata', 'Tingkatkan akurasi forecast permintaan'],
     },
     assetturn: {
       grp: 'Efisiensi', label: 'Asset Turnover', value: fmtX(c.assetTurn), tone: 'sehat', status: 'Baik',
@@ -206,9 +218,16 @@ function buildRegistry(
     ccc: {
       grp: 'Efisiensi', label: 'Cash Conversion Cycle', value: fmtDays(c.ccc), tone: 'perhatian', status: 'Perlu Perhatian',
       benchmark: 'Semakin pendek', formula: 'DIO + DSO − DPO', tUnit: 'days',
-      comp: [['DIO', fmtDays(c.dio)], ['DSO', fmtDays(c.dso)], ['DPO', fmtDays(c.dpo)], ['CCC', fmtDays(c.ccc)]],
-      trend: t.ccc, interp: 'Siklus konversi kas didominasi DIO. Kas tertahan ~' + Math.round(c.ccc) + ' hari sebelum kembali ke perusahaan.',
-      recos: ['Fokus utama: pangkas DIO', 'Perpanjang DPO via negosiasi termin', 'Target CCC < 45 hari'],
+      comp: [
+        ['DIO', noInv ? `${NA_LABEL} — ${NA_INVENTORY_NOTE.toLowerCase()}` : fmtDays(c.dio)],
+        ['DSO', fmtDays(c.dso)], ['DPO', fmtDays(c.dpo)], ['CCC', fmtDays(c.ccc)],
+      ],
+      trend: t.ccc, interp: noInv
+        ? 'Tanpa persediaan, DIO tidak berlaku sehingga siklus kas praktis = DSO − DPO. Kas tertahan ~' + Math.round(c.ccc) + ' hari sebelum kembali ke perusahaan.'
+        : 'Siklus konversi kas didominasi DIO. Kas tertahan ~' + Math.round(c.ccc) + ' hari sebelum kembali ke perusahaan.',
+      recos: noInv
+        ? ['Perpanjang DPO via negosiasi termin', 'Percepat penagihan untuk memangkas DSO']
+        : ['Fokus utama: pangkas DIO', 'Perpanjang DPO via negosiasi termin', 'Target CCC < 45 hari'],
     },
   }
 

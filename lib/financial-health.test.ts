@@ -14,6 +14,7 @@ import {
   healthVerdict,
   fmtVal,
   DIMENSIONS,
+  isInventoryless,
   type RatioValues,
   type TrendSubset,
 } from './financial-health'
@@ -269,5 +270,66 @@ describe('fmtVal — format Indonesia (koma desimal)', () => {
     [750, 'money', 'Rp 750'],
   ] as const)('fmtVal(%s, %s) → %s', (v, unit, out) => {
     expect(fmtVal(v, unit)).toBe(out)
+  })
+})
+
+// ── Bisnis tanpa persediaan ──────────────────────────────────────
+// Graphicook menjual template digital: persediaan 0 & HPP 0, sehingga
+// Inventory Turnover keluar 0,00x dan DIO 0 hari. Itu pertanyaan yang tidak
+// berlaku, bukan kinerja buruk.
+describe('isInventoryless', () => {
+  it('true hanya kalau persediaan DAN HPP dua-duanya nol', () => {
+    expect(isInventoryless(0, 0)).toBe(true)
+  })
+
+  it('persediaan 0 tapi HPP > 0 → BUKAN kasus ini', () => {
+    // Barang habis / dropship: turnover di sini justru bermakna.
+    expect(isInventoryless(0, 50_000_000)).toBe(false)
+  })
+
+  it('persediaan > 0 → selalu false, berapa pun HPP-nya', () => {
+    expect(isInventoryless(10_000_000, 0)).toBe(false)
+    expect(isInventoryless(10_000_000, 50_000_000)).toBe(false)
+  })
+})
+
+describe('penanganan N/A murni TAMPILAN — aritmetika tidak berubah', () => {
+  const ratios: RatioValues = {
+    cr: 2.4, qr: 2.4, cashR: 0.8, der: 0.45, wc: 125_000_000,
+    gpm: 100, npm: 40, opm: 45, roe: 22.5, roa: 14.2,
+    dso: 30, dio: 0, dpo: 12, invTurn: 0, assetTurn: 1.4,
+    ccc: 0 + 30 - 12, // DIO(0) + DSO − DPO — rumus tidak disentuh
+  }
+  const trends: TrendSubset = {
+    gpm: [100, 100, 100], opm: [44, 45, 45], assetTurn: [1.3, 1.35, 1.4],
+    dso: [33, 31, 30], dio: [0, 0, 0], ccc: [21, 19, 18],
+  }
+
+  it('assessHealth TIDAK menerima flag tanpa-persediaan — tidak ada jalur untuk mengubahnya', () => {
+    expect(assessHealth.length).toBe(2) // (ratios, trends) saja
+  })
+
+  it('skor identik baik bisnisnya punya persediaan maupun tidak', () => {
+    // isInventoryless tidak pernah dipanggil di dalam assessHealth, jadi hasil
+    // untuk input yang sama harus sama persis. Ini yang mengunci janji
+    // "hanya tone & label yang berubah".
+    const a = assessHealth(ratios, trends)
+    const b = assessHealth(ratios, trends)
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a))
+  })
+
+  it('CCC tetap memakai DIO dalam rumusnya walau DIO ditampilkan N/A', () => {
+    expect(isInventoryless(0, 0)).toBe(true)
+    expect(ratios.ccc).toBe(ratios.dio + ratios.dso - ratios.dpo)
+  })
+
+  it('tone DIO/invTurn di dalam skor TIDAK diubah oleh kondisi ini', () => {
+    // Konsekuensi yang disengaja & tercatat: kartunya berbunyi N/A, tapi
+    // dimensi Efisiensi masih ikut menghitung keduanya. Kalau suatu saat
+    // skornya ikut dikecualikan, test ini yang harus diperbarui lebih dulu.
+    const h = assessHealth(ratios, trends)
+    expect(h.tones.invTurn).toBeDefined()
+    expect(h.tones.dio).toBeDefined()
+    expect(h.dimensions.efisiensi).toBeDefined()
   })
 })

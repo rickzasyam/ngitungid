@@ -8,7 +8,10 @@ import { DateRangePicker } from '@/components/date-range-picker'
 import { Sparkline } from '@/components/analytics/sparkline'
 import { RatioCard, TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from '@/components/analytics/ratio-card'
 import { MetricDrawer, type ComputedMetrics, type TrendArrays, type DrawerHealth } from '@/components/analytics/metric-drawer'
-import { assessHealth, healthVerdict, type RatioValues } from '@/lib/financial-health'
+import {
+  assessHealth, healthVerdict, isInventoryless, NA_LABEL, NA_STATUS, NA_INVENTORY_NOTE,
+  type RatioValues,
+} from '@/lib/financial-health'
 import { AKTIVA_CATS, PASIVA_CATS } from '@/lib/financial-agg'
 import {
   isMetricVisible, isHiddenFromClient, type MetricId, type VisibilityMap,
@@ -524,6 +527,19 @@ export default function AnalyticsPage() {
   // ditandai di sisi mereka.
   const clientHidden = (id: MetricId) => ({ hiddenFromClient: isStaff && isHiddenFromClient(metricVis, id) })
 
+  // ── Metrik persediaan pada bisnis TANPA persediaan ───────────
+  // Graphicook menjual template digital: persediaan 0 dan HPP 0, sehingga
+  // Inventory Turnover keluar 0,00x dan DIO 0 hari. Itu bukan kinerja buruk,
+  // melainkan pertanyaan yang tidak berlaku — menampilkannya "Berisiko"
+  // membuat klien mengejar masalah yang tidak ada.
+  //
+  // HANYA tone & label yang diganti. Aritmetikanya tidak disentuh: DIO tetap
+  // dihitung, dan CCC tetap memakainya (lihat catatan di kartu CCC).
+  const noInventory = view ? isInventoryless(view.bs.persediaan, view.totRev - view.totGP) : false
+  const naInv = noInventory
+    ? { tone: 'netral' as ToneKey, status: NA_STATUS, benchmark: NA_INVENTORY_NOTE }
+    : null
+
   // Keanggotaan section MENGIKUTI HALAMAN INI, bukan pengelompokan di Settings:
   // di sini Debt-to-Equity ikut section Likuiditas, dan CCC sengaja tampil dua
   // kali (Likuiditas & Efisiensi) — sejalan dgn DIMENSIONS di financial-health.
@@ -836,7 +852,7 @@ export default function AnalyticsPage() {
                       {showMetric('cashr') && <RatioCard label="Cash Ratio"             value={fmtRatio(view.ratios.cashR)} formula="Kas ÷ Hutang Lancar"                          {...view.rc('cashR', 'cash')} {...clientHidden('cashr')}  onClick={() => setDrawer('cash')} />}
                       {showMetric('der')   && <RatioCard label="Debt-to-Equity"         value={fmtRatio(view.ratios.der)}   formula="Total Hutang ÷ Total Modal"                   {...view.rc('der', 'der')} {...clientHidden('der')}     onClick={() => setDrawer('der')} />}
                       {showMetric('wc')    && <RatioCard label="Modal Kerja"            value={fmtRp(view.ratios.wc)}       formula="Aktiva Lancar − Hutang Lancar"                {...view.rc('wc', 'wc')} {...clientHidden('wc')}       onClick={() => setDrawer('wc')} />}
-                      {showMetric('ccc')   && <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}    formula="DIO + DSO − DPO"                              {...view.rc('ccc', 'ccc')} {...clientHidden('ccc')}     onClick={() => setDrawer('ccc')} />}
+                      {showMetric('ccc')   && <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}    formula={noInventory ? 'DIO (N/A) + DSO − DPO' : 'DIO + DSO − DPO'}                              {...view.rc('ccc', 'ccc')} {...clientHidden('ccc')}     onClick={() => setDrawer('ccc')} />}
                     </div>
                   </SectionCard>
                 </div>
@@ -865,17 +881,17 @@ export default function AnalyticsPage() {
                     <SectionHeader title="Rasio Efisiensi" subtitle="Efektivitas aset dan operasional · Klik kartu untuk detail" accent="linear-gradient(180deg, #fdba74, #f59e0b)" />
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 14 }}>
                       {showMetric('dso')       && <RatioCard label="DSO"                    value={fmtDays(view.ratios.dso)}      formula="Piutang ÷ Pendapatan × Hari"            {...view.rc('dso', 'dso')} {...clientHidden('dso')}             onClick={() => setDrawer('dso')} />}
-                      {showMetric('dio')       && <RatioCard label="DIO"                    value={fmtDays(view.ratios.dio)}      formula="Persediaan ÷ Pendapatan × Hari"         {...view.rc('dio', 'dio')} {...clientHidden('dio')}             onClick={() => setDrawer('dio')} />}
+                      {showMetric('dio')       && <RatioCard label="DIO"                    value={noInventory ? NA_LABEL : fmtDays(view.ratios.dio)}      formula="Persediaan ÷ Pendapatan × Hari"         {...view.rc('dio', 'dio')} {...clientHidden('dio')} {...(naInv ?? {})}             onClick={() => setDrawer('dio')} />}
                       {showMetric('dpo')       && <RatioCard label="DPO"                    value={fmtDays(view.ratios.dpo)}      formula="Hutang Usaha ÷ HPP × Hari"              {...view.rc('dpo', 'dpo')} {...clientHidden('dpo')}             onClick={() => setDrawer('dpo')} />}
-                      {showMetric('invturn')   && <RatioCard label="Inventory Turnover"     value={fmtX(view.ratios.invTurn)}     formula="HPP ÷ Persediaan (disetahunkan)"        {...view.rc('invTurn', 'invturn')} {...clientHidden('invturn')}     onClick={() => setDrawer('invturn')} />}
+                      {showMetric('invturn')   && <RatioCard label="Inventory Turnover"     value={noInventory ? NA_LABEL : fmtX(view.ratios.invTurn)}     formula="HPP ÷ Persediaan (disetahunkan)"        {...view.rc('invTurn', 'invturn')} {...clientHidden('invturn')} {...(naInv ?? {})}     onClick={() => setDrawer('invturn')} />}
                       {showMetric('assetturn') && <RatioCard label="Asset Turnover"         value={fmtX(view.ratios.assetTurn)}   formula="Pendapatan ÷ Total Aset (disetahunkan)" {...view.rc('assetTurn', 'assetturn')} {...clientHidden('assetturn')} onClick={() => setDrawer('assetturn')} />}
-                      {showMetric('ccc')       && <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}      formula="DIO + DSO − DPO"                        {...view.rc('ccc', 'ccc')} {...clientHidden('ccc')}             onClick={() => setDrawer('ccc')} />}
+                      {showMetric('ccc')       && <RatioCard label="Cash Conversion Cycle"  value={fmtDays(view.ratios.ccc)}      formula={noInventory ? 'DIO (N/A) + DSO − DPO' : 'DIO + DSO − DPO'}                        {...view.rc('ccc', 'ccc')} {...clientHidden('ccc')}             onClick={() => setDrawer('ccc')} />}
                     </div>
                     {/* DIO Warning Banner — hanya bila DIO benar-benar dinilai
                         bermasalah, DAN hanya kalau DIO-nya sendiri tampil:
                         banner yang menunjuk kartu yang tidak ada (dan membuka
                         drawer DIO saat diklik) hanya membingungkan klien. */}
-                    {showMetric('dio') && (view.health.tones.dio === 'risiko' || view.health.tones.dio === 'perhatian') && (
+                    {showMetric('dio') && !noInventory && (view.health.tones.dio === 'risiko' || view.health.tones.dio === 'perhatian') && (
                       <div
                         onClick={() => setDrawer('dio')}
                         style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}
