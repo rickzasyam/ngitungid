@@ -9,7 +9,8 @@ import { Sparkline } from '@/components/analytics/sparkline'
 import { RatioCard, TONES, Pill, statusFromTone, BENCHMARK, type ToneKey } from '@/components/analytics/ratio-card'
 import { MetricDrawer, type ComputedMetrics, type TrendArrays, type DrawerHealth } from '@/components/analytics/metric-drawer'
 import {
-  assessHealth, healthVerdict, isInventoryless, NA_LABEL, NA_STATUS, NA_INVENTORY_NOTE,
+  assessHealth, healthVerdict, isInventoryless, INVENTORY_METRICS,
+  NA_LABEL, NA_STATUS, NA_INVENTORY_NOTE,
   type RatioValues,
 } from '@/lib/financial-health'
 import { AKTIVA_CATS, PASIVA_CATS } from '@/lib/financial-agg'
@@ -450,7 +451,16 @@ export default function AnalyticsPage() {
       ? (monthsArr.length === 1 ? monthsArr[0] : `${monthsArr[0]}–${monthsArr[monthsArr.length - 1]}`)
       : ''
 
-    const health = assessHealth(ratios, { gpm: ta.gpm, opm: ta.opm, assetTurn: ta.assetTurn, dso: ta.dso, dio: ta.dio, ccc: ta.ccc })
+    // Klien tanpa persediaan (persediaan 0 DAN HPP 0) tidak bisa memperbaiki
+    // DIO maupun Inventory Turnover dengan cara apa pun, jadi keduanya
+    // dikeluarkan dari skor Efisiensi dan dari alert. Rasionya sendiri tetap
+    // dihitung — CCC masih memakai DIO seperti biasa.
+    const noInventory = isInventoryless(bs.persediaan, totHPP)
+    const health = assessHealth(
+      ratios,
+      { gpm: ta.gpm, opm: ta.opm, assetTurn: ta.assetTurn, dso: ta.dso, dio: ta.dio, ccc: ta.ccc },
+      noInventory ? { excludeMetrics: INVENTORY_METRICS } : {}
+    )
 
     const computed: ComputedMetrics = {
       totRev, totNP, totGP, totOI, totHPP, totExp,
@@ -505,7 +515,7 @@ export default function AnalyticsPage() {
     }
 
     return {
-      monthly, bs, ratios, ta, totRev, totGP, totNP, totExp, rangeLabel,
+      monthly, bs, ratios, ta, totRev, totGP, totNP, totExp, rangeLabel, noInventory,
       health, computed, dimsPanel, drawerHealth, alerts,
       pRevArr, pGPArr, pNPArr, pGPMArr, pNPMArr, pnlCols, pnlTotal, subRows, drawerMonths, rc,
     }
@@ -535,7 +545,9 @@ export default function AnalyticsPage() {
   //
   // HANYA tone & label yang diganti. Aritmetikanya tidak disentuh: DIO tetap
   // dihitung, dan CCC tetap memakainya (lihat catatan di kartu CCC).
-  const noInventory = view ? isInventoryless(view.bs.persediaan, view.totRev - view.totGP) : false
+  // Satu sumber: dihitung di buildView bersama skor, supaya kartu & skor tidak
+  // pernah memakai jawaban berbeda.
+  const noInventory = view?.noInventory ?? false
   const naInv = noInventory
     ? { tone: 'netral' as ToneKey, status: NA_STATUS, benchmark: NA_INVENTORY_NOTE }
     : null

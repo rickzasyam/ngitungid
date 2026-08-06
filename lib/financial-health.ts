@@ -167,7 +167,26 @@ export function healthVerdict(overall: number): string {
   return overall >= DIM_TONE.sehat ? 'Keuangan Sehat' : overall >= DIM_TONE.perhatian ? 'Perlu Perhatian' : 'Berisiko'
 }
 
-export function assessHealth(r: RatioValues, t: TrendSubset): HealthResult {
+/** Metrik yang bergantung pada adanya persediaan. Dikecualikan dari skor saat
+ *  isInventoryless() true — lihat HealthOptions. */
+export const INVENTORY_METRICS = ['dio', 'invTurn'] as const
+
+export interface HealthOptions {
+  /**
+   * Metrik yang TIDAK BERLAKU untuk klien ini pada periode ini, sehingga
+   * dikeluarkan dari rata-rata dimensi DAN dari kandidat alert.
+   *
+   * Bukan "metrik yang disembunyikan" — visibilitas tampilan tidak pernah
+   * sampai ke sini (lihat lib/analytics/metric-visibility.test.ts). Ini untuk
+   * pertanyaan yang memang tidak berlaku bagi model bisnisnya: klien tanpa
+   * persediaan tidak bisa memperbaiki DIO maupun Inventory Turnover, jadi
+   * memotong skornya karena itu adalah cacat, bukan penilaian.
+   */
+  excludeMetrics?: readonly string[]
+}
+
+export function assessHealth(r: RatioValues, t: TrendSubset, opts: HealthOptions = {}): HealthResult {
+  const excluded = new Set<string>(opts.excludeMetrics ?? [])
   const tones: Record<string, ToneKey> = {
     cr: toneCR(r.cr), qr: toneQR(r.qr), cashR: toneCashR(r.cashR), der: toneDER(r.der), wc: 'info',
     npm: toneNPM(r.npm), roa: toneROA(r.roa), roe: toneROE(r.roe), invTurn: toneInvTurn(r.invTurn),
@@ -178,7 +197,25 @@ export function assessHealth(r: RatioValues, t: TrendSubset): HealthResult {
 
   const dimensions: Record<string, DimensionResult> = {}
   for (const [key, def] of Object.entries(DIMENSIONS)) {
-    const scores = def.metrics.map(m => scoreFromTone(tones[m])).filter((s): s is number => s !== null)
+    // Renormalisasi: rata-rata dihitung HANYA atas metrik yang berlaku, sehingga
+    // nilai maksimum dimensi tetap bisa dicapai. Sebelum ini klien tanpa
+    // persediaan permanen kehilangan poin di Efisiensi untuk dua metrik yang
+    // tidak bisa ia perbaiki dengan cara apa pun.
+    const applicable = def.metrics.filter(m => !excluded.has(m))
+    if (applicable.length === 0) {
+      // BERHENTI, jangan mengarang skor. Membagi nol atau diam-diam memakai 50
+      // akan menyembunyikan daftar pengecualian yang salah di balik angka yang
+      // terlihat masuk akal.
+      throw new Error(
+        `assessHealth: dimensi "${key}" kehilangan SELURUH metriknya setelah pengecualian ` +
+          `[${[...excluded].join(', ')}]. Skor tidak dihitung — perbaiki daftar pengecualian ` +
+          `atau DIMENSIONS, jangan mengembalikan skor default.`
+      )
+    }
+    // Catatan: `: 50` di bawah menangani kasus BERBEDA — metriknya ada tapi
+    // seluruhnya bertone 'info' (scoreFromTone → null). Perilaku lama, sengaja
+    // tidak diubah supaya klien yang sudah ada tidak bergeser skornya.
+    const scores = applicable.map(m => scoreFromTone(tones[m])).filter((s): s is number => s !== null)
     const score = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 50
     dimensions[key] = { label: def.label, score, tone: dimTone(score) }
   }
@@ -189,8 +226,12 @@ export function assessHealth(r: RatioValues, t: TrendSubset): HealthResult {
   const val: Record<string, number> = { ...r }
   const dimOf = (m: string) => Object.entries(DIMENSIONS).find(([, d]) => d.metrics.includes(m))?.[0] ?? ''
   const rank: Record<ToneKey, number> = { risiko: 0, perhatian: 1, netral: 2, sehat: 3, info: 4 }
+  // Metrik yang dikecualikan juga TIDAK boleh memunculkan alert. Mengeluarkannya
+  // dari skor tapi tetap menampilkan "DIO — perlu perhatian serius" hanya
+  // memindahkan cacat yang sama ke panel lain: peringatan yang tidak bisa
+  // ditindaklanjuti klien.
   const flagged = Object.entries(tones)
-    .filter(([, tone]) => tone === 'risiko' || tone === 'perhatian')
+    .filter(([m, tone]) => !excluded.has(m) && (tone === 'risiko' || tone === 'perhatian'))
     .sort((a, b) => rank[a[1]] - rank[b[1]] || (dimensions[dimOf(a[0])]?.score ?? 99) - (dimensions[dimOf(b[0])]?.score ?? 99))
 
   const toAlert = ([m, tone]: [string, ToneKey]): HealthAlert => ({

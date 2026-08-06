@@ -154,7 +154,14 @@ describe('skor kesehatan tidak terpengaruh visibilitas DPO', () => {
   }
 
   it('assessHealth tidak menerima visibilitas sebagai input sama sekali', () => {
-    expect(assessHealth.length).toBe(2) // (ratios, trends) — tidak ada argumen ketiga
+    // Sejak 2026-08-06 assessHealth punya argumen ketiga (HealthOptions), tapi
+    // isinya HANYA `excludeMetrics` untuk metrik yang TIDAK BERLAKU bagi model
+    // bisnis klien — bukan untuk metrik yang disembunyikan dari tampilan.
+    // Keduanya jangan pernah tertukar: visibilitas adalah preferensi tampilan
+    // per-klien, dan tidak boleh menggeser skor siapa pun.
+    const optionKeys = ['excludeMetrics']
+    expect(optionKeys).not.toContain('visibility')
+    expect(optionKeys).not.toContain('hiddenMetrics')
   })
 
   it('hasilnya identik baik DPO tampil maupun disembunyikan', () => {

@@ -15,6 +15,7 @@ import {
   fmtVal,
   DIMENSIONS,
   isInventoryless,
+  INVENTORY_METRICS,
   type RatioValues,
   type TrendSubset,
 } from './financial-health'
@@ -293,43 +294,80 @@ describe('isInventoryless', () => {
   })
 })
 
-describe('penanganan N/A murni TAMPILAN — aritmetika tidak berubah', () => {
-  const ratios: RatioValues = {
-    cr: 2.4, qr: 2.4, cashR: 0.8, der: 0.45, wc: 125_000_000,
-    gpm: 100, npm: 40, opm: 45, roe: 22.5, roa: 14.2,
-    dso: 30, dio: 0, dpo: 12, invTurn: 0, assetTurn: 1.4,
-    ccc: 0 + 30 - 12, // DIO(0) + DSO − DPO — rumus tidak disentuh
-  }
-  const trends: TrendSubset = {
-    gpm: [100, 100, 100], opm: [44, 45, 45], assetTurn: [1.3, 1.35, 1.4],
-    dso: [33, 31, 30], dio: [0, 0, 0], ccc: [21, 19, 18],
-  }
+describe('skor: metrik persediaan dikecualikan untuk bisnis tanpa persediaan', () => {
+  // MENGGANTIKAN blok "aritmetika tidak berubah" dari 6dcac0e, yang dulu
+  // menegaskan skor TIDAK berubah. Itu memang perilaku saat itu, dan itulah
+  // cacatnya: klien tanpa persediaan dipotong permanen di Efisiensi untuk dua
+  // metrik yang tidak bisa ia perbaiki. Sekarang assertion-nya kebalikannya.
 
-  it('assessHealth TIDAK menerima flag tanpa-persediaan — tidak ada jalur untuk mengubahnya', () => {
-    expect(assessHealth.length).toBe(2) // (ratios, trends) saja
+  /** Angka identik; yang membedakan hanya ADA/TIDAKNYA persediaan & HPP. */
+  const ratios = (withInventory: boolean): RatioValues => ({
+    cr: 2.4, qr: 2.4, cashR: 0.8, der: 0.45, wc: 125_000_000,
+    gpm: 60, npm: 20, opm: 25, roe: 22.5, roa: 14.2,
+    dso: 30, dpo: 12,
+    dio: withInventory ? 45 : 0,
+    invTurn: withInventory ? 8 : 0,
+    assetTurn: 1.4,
+    ccc: (withInventory ? 45 : 0) + 30 - 12,
+  })
+  const trends = (withInventory: boolean): TrendSubset => ({
+    gpm: [58, 59, 60], opm: [24, 24.5, 25], assetTurn: [1.3, 1.35, 1.4],
+    dso: [33, 31, 30],
+    dio: withInventory ? [50, 47, 45] : [0, 0, 0],
+    ccc: withInventory ? [71, 68, 63] : [21, 19, 18],
+  })
+  const EXCLUDE = { excludeMetrics: INVENTORY_METRICS }
+
+  it('klien TANPA persediaan skornya lebih tinggi daripada sebelum perbaikan', () => {
+    const sebelum = assessHealth(ratios(false), trends(false))          // perilaku lama
+    const sesudah = assessHealth(ratios(false), trends(false), EXCLUDE) // perilaku baru
+    expect(sesudah.dimensions.efisiensi.score).toBeGreaterThan(sebelum.dimensions.efisiensi.score)
+    expect(sesudah.overall).toBeGreaterThan(sebelum.overall)
   })
 
-  it('skor identik baik bisnisnya punya persediaan maupun tidak', () => {
-    // isInventoryless tidak pernah dipanggil di dalam assessHealth, jadi hasil
-    // untuk input yang sama harus sama persis. Ini yang mengunci janji
-    // "hanya tone & label yang berubah".
-    const a = assessHealth(ratios, trends)
-    const b = assessHealth(ratios, trends)
+  it('klien DENGAN persediaan tidak bergeser sama sekali — tidak ada yang pindah', () => {
+    // Tanpa opts, dan dengan opts kosong, hasilnya harus byte-identical.
+    const a = assessHealth(ratios(true), trends(true))
+    const b = assessHealth(ratios(true), trends(true), {})
     expect(JSON.stringify(b)).toBe(JSON.stringify(a))
   })
 
-  it('CCC tetap memakai DIO dalam rumusnya walau DIO ditampilkan N/A', () => {
-    expect(isInventoryless(0, 0)).toBe(true)
-    expect(ratios.ccc).toBe(ratios.dio + ratios.dso - ratios.dpo)
+  it('nilai maksimum dimensi tetap bisa dicapai setelah pengecualian', () => {
+    // Semua metrik Efisiensi yang TERSISA sehat → 100, bukan tertahan di bawah
+    // karena dua metrik nol yang tidak berlaku.
+    const r = ratios(false)
+    const t: TrendSubset = {
+      gpm: [50, 55, 60], opm: [20, 22, 25], assetTurn: [1.0, 1.2, 1.4],
+      dso: [40, 35, 30], dio: [0, 0, 0], ccc: [30, 25, 18],
+    }
+    const h = assessHealth(r, t, EXCLUDE)
+    expect(h.dimensions.efisiensi.score).toBe(100)
   })
 
-  it('tone DIO/invTurn di dalam skor TIDAK diubah oleh kondisi ini', () => {
-    // Konsekuensi yang disengaja & tercatat: kartunya berbunyi N/A, tapi
-    // dimensi Efisiensi masih ikut menghitung keduanya. Kalau suatu saat
-    // skornya ikut dikecualikan, test ini yang harus diperbarui lebih dulu.
-    const h = assessHealth(ratios, trends)
-    expect(h.tones.invTurn).toBeDefined()
-    expect(h.tones.dio).toBeDefined()
-    expect(h.dimensions.efisiensi).toBeDefined()
+  it('metrik yang dikecualikan tidak memunculkan alert', () => {
+    const h = assessHealth(ratios(false), trends(false), EXCLUDE)
+    expect(h.alerts.map(a => a.metric)).not.toContain('dio')
+    expect(h.alerts.map(a => a.metric)).not.toContain('invTurn')
+  })
+
+  it('CCC tetap dihitung & tetap memakai DIO — aritmetika rasio tidak disentuh', () => {
+    const r = ratios(false)
+    expect(r.ccc).toBe(r.dio + r.dso - r.dpo)
+    const h = assessHealth(r, trends(false), EXCLUDE)
+    expect(h.tones.ccc).toBeDefined()
+    // ccc TETAP anggota kedua dimensi, tidak ikut dikecualikan.
+    expect(DIMENSIONS.efisiensi.metrics).toContain('ccc')
+    expect(DIMENSIONS.likuiditas.metrics).toContain('ccc')
+  })
+
+  it('BERHENTI kalau pengecualian menghabiskan seluruh metrik sebuah dimensi', () => {
+    // Tidak boleh membagi nol maupun diam-diam memakai skor default.
+    expect(() =>
+      assessHealth(ratios(false), trends(false), { excludeMetrics: DIMENSIONS.leverage.metrics })
+    ).toThrow(/kehilangan SELURUH metriknya/i)
+  })
+
+  it('INVENTORY_METRICS berisi persis dua metrik berbasis persediaan', () => {
+    expect([...INVENTORY_METRICS]).toEqual(['dio', 'invTurn'])
   })
 })
