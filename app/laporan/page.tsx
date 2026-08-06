@@ -170,7 +170,9 @@ function PdfPreview({ report, onClose }: { report: ReportMeta; onClose: () => vo
 
 export default function LaporanPage() {
   const { activeClient, isLoaded } = useRequireClient()
-  const { isStaff } = useClient()
+  // Semua gerbang di halaman ini soal MENGUBAH laporan (upload, ganti file,
+  // ubah periode, hapus, retry ekstraksi) → canDoAccounting, bukan isInternal.
+  const { canDoAccounting } = useClient()
   const clientId = activeClient?.id ?? null
 
   const [reports, setReports] = useState<ReportMeta[]>([])
@@ -353,7 +355,7 @@ export default function LaporanPage() {
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f2430', margin: 0 }}>Laporan</h1>
             <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-              {isStaff
+              {canDoAccounting
                 ? `${activeClient.name} · Kelola laporan yang sudah masuk — ganti file, ubah periode, atau hapus`
                 : `${activeClient.name} · Pantau laporan yang sudah masuk & status ekstraksinya`}
             </p>
@@ -368,7 +370,7 @@ export default function LaporanPage() {
               <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Muat ulang
             </button>
             {/* Upload = aksi tulis, hanya staf. User (klien) read-only. */}
-            {isStaff && (
+            {canDoAccounting && (
               <Link
                 href="/upload"
                 className="inline-flex items-center gap-2 rounded-full font-semibold"
@@ -398,11 +400,11 @@ export default function LaporanPage() {
                 </div>
                 <p className="text-sm font-bold mb-1" style={{ color: '#2d2d2d' }}>Belum ada laporan</p>
                 <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                  {isStaff
+                  {canDoAccounting
                     ? `Belum ada laporan ter-upload untuk ${activeClient.name}. Mulai dengan meng-upload Laba Rugi, Neraca, atau Arus Kas.`
                     : `Belum ada laporan ter-upload untuk ${activeClient.name}. Laporan akan muncul di sini setelah tim akunting mengunggahnya.`}
                 </p>
-                {isStaff && (
+                {canDoAccounting && (
                   <Link
                     href="/upload"
                     className="inline-flex items-center gap-2 rounded-full font-semibold"
@@ -449,7 +451,7 @@ export default function LaporanPage() {
                           </div>
                         </div>
                       </div>
-                      {!isEditing && isStaff && (
+                      {!isEditing && canDoAccounting && (
                         <button
                           disabled={busy !== null}
                           onClick={() => {
@@ -555,7 +557,7 @@ export default function LaporanPage() {
                                         </button>
                                       )}
                                       {/* Aksi TULIS (retry/ganti/hapus) — hanya staf. User read-only. */}
-                                      {isStaff && r.retry === 'retriable' && (
+                                      {canDoAccounting && r.retry === 'retriable' && (
                                         <button
                                           aria-label={`Coba lagi ekstraksi ${TYPE_LABEL[r.reportType]}`}
                                           title="Ekstrak ulang dari PDF yang sudah tersimpan (tanpa upload lagi)"
@@ -569,7 +571,7 @@ export default function LaporanPage() {
                                           {retrying ? 'Mengekstrak…' : 'Coba lagi'}
                                         </button>
                                       )}
-                                      {isStaff && (
+                                      {canDoAccounting && (
                                         <>
                                           <button
                                             aria-label={`Ganti file ${TYPE_LABEL[r.reportType]}`}

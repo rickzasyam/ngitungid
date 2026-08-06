@@ -7,7 +7,7 @@
 // Sampai 2026-08-05 mata rantai TERAKHIR tidak ada: tabelnya ditulis rajin tapi
 // tidak pernah dibaca siapa pun, jadi mematikan metrik tidak berefek apa-apa.
 
-import { isStaff, type Role } from '@/lib/roles'
+import { isInternal, type Role } from '@/lib/roles'
 import type { RatioValues } from '@/lib/financial-health'
 
 /**
@@ -101,7 +101,9 @@ export function isMetricVisible(
   visibility: VisibilityMap,
   id: MetricId
 ): boolean {
-  if (isStaff(role)) return true
+  // isInternal, bukan canDoAccounting: setelan ini mengatur apa yang dilihat
+  // KLIEN. Siapa pun orang dalam berhak melihat angka lengkapnya.
+  if (isInternal(role)) return true
   return visibility[id] ?? true
 }
 

@@ -8,11 +8,32 @@
 export type Role = 'owner' | 'akunting' | 'user'
 
 /**
- * Staf internal NgitungID: boleh upload, review, mapping, kelola klien, dan
- * melihat SEMUA klien. Owner sengaja termasuk — ia mewarisi seluruh kemampuan
- * akunting, bukan role terpisah yang lebih sempit.
+ * Orang DALAM NgitungID (lawan kata: klien). Boleh berpindah klien, melihat
+ * kartu workspace & indikator progres, dan dipantulkan ke Admin Overview saat
+ * belum memilih klien.
+ *
+ * DIPISAH dari canDoAccounting() dengan sengaja. Dulu keduanya satu fungsi
+ * bernama isStaff(), yang diam-diam berarti DUA hal sekaligus: "pegawai
+ * internal" DAN "boleh mengerjakan pekerjaan akunting". Selama hanya ada
+ * owner/akunting/user keduanya kebetulan sama, jadi tidak ada yang terasa.
+ * Begitu ada role internal yang TIDAK mengerjakan akunting, satu fungsi itu
+ * akan memberinya Upload/Extraction Review/COA Mapping tanpa ada yang
+ * memutuskan begitu. Pisahkan dulu, baru tambah role.
  */
-export function isStaff(role: Role | null | undefined): boolean {
+export function isInternal(role: Role | null | undefined): boolean {
+  return role === 'owner' || role === 'akunting'
+}
+
+/**
+ * Boleh mengerjakan pekerjaan AKUNTING: upload, extraction review, COA mapping,
+ * mengganti/menghapus laporan, dan mengubah Master COA.
+ *
+ * Subset dari isInternal(): setiap yang boleh akunting pasti orang dalam, tapi
+ * tidak sebaliknya. Kalau ragu memilih di antara keduanya, tanyakan "apakah
+ * yang digerbangi ini MENGUBAH data akuntansi klien?" — kalau ya, ini
+ * fungsinya.
+ */
+export function canDoAccounting(role: Role | null | undefined): boolean {
   return role === 'owner' || role === 'akunting'
 }
 
@@ -41,11 +62,26 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const CREATABLE_ROLES: Role[] = ['akunting', 'owner', 'user']
 
 /**
+ * Role yang boleh membaca data KLIEN MANA PUN.
+ *
+ * ALLOWLIST, bukan blocklist — dan itu inti perubahannya. Versi lama berbunyi
+ * `if (role !== 'user') return true`, yang berarti fungsi ini GAGAL TERBUKA:
+ * setiap role baru otomatis mendapat akses ke seluruh data setiap klien, tanpa
+ * satu baris pun diubah dan tanpa satu test pun merah. Untuk fungsi yang
+ * menjaga batas antar-klien, default-nya harus menolak.
+ *
+ * **Role baru WAJIB ditambahkan di sini dengan sadar.** Kalau sebuah role tidak
+ * ada di daftar ini, ia hanya bisa melihat kliennya sendiri — itu default yang
+ * benar untuk kesalahan.
+ */
+export const ALL_CLIENT_ACCESS_ROLES: readonly Role[] = ['owner', 'akunting']
+
+/**
  * Boleh-kah pengguna dengan `role` ini melihat DATA milik `targetClientId`?
  * ASIMETRIS by design:
- *   - staf (owner/akunting): SELALU boleh, klien mana pun — tidak dibatasi,
- *     sama seperti perilaku mereka di semua endpoint lain.
- *   - user (klien): HANYA klien miliknya sendiri (`ownClientId`).
+ *   - role di ALL_CLIENT_ACCESS_ROLES: klien mana pun.
+ *   - selain itu (termasuk role tak dikenal): HANYA klien miliknya sendiri
+ *     (`ownClientId`), dan kalau `ownClientId` kosong → ditolak sama sekali.
  * Dipakai untuk scoping per-request di route API yang `requireUser` (mis. GET
  * reports/[id]/pdf, clients/[id]/coa) supaya user tidak bisa membaca data klien
  * lain hanya dengan mengutak-atik id di request. Penjaga ROLE-nya sendiri tetap
@@ -56,6 +92,6 @@ export function canAccessClientData(
   ownClientId: string | null | undefined,
   targetClientId: string
 ): boolean {
-  if (role !== 'user') return true
+  if (role && ALL_CLIENT_ACCESS_ROLES.includes(role)) return true
   return !!ownClientId && ownClientId === targetClientId
 }

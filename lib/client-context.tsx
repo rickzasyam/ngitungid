@@ -2,7 +2,10 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
-import { isOwner as roleIsOwner, isStaff as roleIsStaff, type Role } from '@/lib/roles'
+import {
+  isOwner as roleIsOwner, isInternal as roleIsInternal, canDoAccounting as roleCanDoAccounting,
+  type Role,
+} from '@/lib/roles'
 
 export interface ClientInfo {
   id: string
@@ -26,8 +29,10 @@ interface ClientContextValue {
   refreshClients: () => Promise<ClientInfo[]>
   isLoaded: boolean
   role: Role
-  /** Staf internal (owner ATAU akunting) — boleh switch klien & kelola data. */
-  isStaff: boolean
+  /** Orang dalam NgitungID — boleh pindah klien, lihat kartu workspace. */
+  isInternal: boolean
+  /** Boleh mengerjakan pekerjaan akunting (upload/review/mapping/Master COA). */
+  canDoAccounting: boolean
   /** Owner saja — boleh buat akun & assign akunting ke klien. */
   isOwner: boolean
 }
@@ -43,7 +48,8 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   // Default 'user' (paling sempit) kalau sesi belum ke-resolve — jangan pernah
   // menganggap staf sebelum terbukti.
   const role: Role = session?.user?.role ?? 'user'
-  const isStaff = roleIsStaff(role)
+  const isInternal = roleIsInternal(role)
+  const canDoAccounting = roleCanDoAccounting(role)
   const isOwner = roleIsOwner(role)
   const userClientId = session?.user?.clientId ?? null
 
@@ -87,12 +93,12 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const setActiveClient = useCallback(
     (client: ClientInfo | null) => {
       setActiveClientState(client)
-      if (isStaff) {
+      if (isInternal) {
         if (client) localStorage.setItem(STORAGE_KEY, client.id)
         else localStorage.removeItem(STORAGE_KEY)
       }
     },
-    [isStaff]
+    [isInternal]
   )
 
   // Dipanggil setelah bikin klien baru. Refresh daftar tanpa mengganggu
@@ -106,7 +112,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ClientContext.Provider
-      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, isStaff, isOwner }}
+      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, isInternal, canDoAccounting, isOwner }}
     >
       {children}
     </ClientContext.Provider>

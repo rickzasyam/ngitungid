@@ -1509,7 +1509,7 @@ function AccountTab() {
 export default function SettingsPage() {
   // Tidak pakai useRequireClient: tab General bersifat platform-level dan harus
   // tetap bisa diakses tanpa klien aktif — tab scoped punya empty state sendiri.
-  const { activeClient, isOwner, isStaff, role } = useClient()
+  const { activeClient, isOwner, isInternal, canDoAccounting, role } = useClient()
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
   // Visibility metrik sekarang dimiliki AnalyticsDisplayTab (persisted ke
@@ -1601,14 +1601,14 @@ export default function SettingsPage() {
               {/* Empty state kalau tab scoped tapi belum ada klien */}
               {needsClient && <NoClientState />}
 
-              {activeNav.id === 'general' && <GeneralTab readOnly={!isStaff} />}
+              {activeNav.id === 'general' && <GeneralTab readOnly={!isInternal} />}
 
               {activeNav.id === 'users' && isOwner && <UsersTab />}
 
               {activeNav.id === 'account' && <AccountTab />}
 
               {activeTab === 'coa' && activeClient && (
-                <MasterCoaTab key={activeClient.id} clientId={activeClient.id} readOnly={!isStaff} />
+                <MasterCoaTab key={activeClient.id} clientId={activeClient.id} readOnly={!canDoAccounting} />
               )}
 
               {activeTab === 'analytics' && activeClient && (

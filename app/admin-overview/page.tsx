@@ -9,7 +9,7 @@ import { ClientCardMenu, EditClientModal, DeleteClientModal, AssignClientModal }
 import { ArrowRight, Plus, Building2, Loader2 } from 'lucide-react'
 
 export default function AdminOverviewPage() {
-  const { clients, activeClient, setActiveClient, refreshClients, isLoaded, isStaff, isOwner } = useClient()
+  const { clients, activeClient, setActiveClient, refreshClients, isLoaded, isInternal, isOwner } = useClient()
   const [showNewClient, setShowNewClient] = useState(false)
   const [editing, setEditing] = useState<ClientInfo | null>(null)
   const [deleting, setDeleting] = useState<ClientInfo | null>(null)
@@ -113,7 +113,7 @@ export default function AdminOverviewPage() {
                       <div style={{ height: 4, background: 'linear-gradient(90deg, #daf163, #b8e000)' }} />
 
                       {/* Kebab (staf saja) — di atas tombol utama, z-index lebih tinggi */}
-                      {isStaff && (
+                      {isInternal && (
                         <div className="absolute" style={{ top: 12, right: 10, zIndex: 3 }}>
                           <ClientCardMenu
                             isOwner={isOwner}

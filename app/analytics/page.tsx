@@ -243,7 +243,7 @@ function SegCtrl<T extends string>({
 export default function AnalyticsPage() {
   const { activeClient, isLoaded } = useRequireClient()
   // Balance check hanya untuk staf — lihat alasannya di banner Detail Neraca.
-  const { isStaff, role } = useClient()
+  const { isInternal, canDoAccounting, role } = useClient()
   // Nominal: nama lokal fmtRp/fmtFull dipertahankan supaya ~18 call site di
   // bawah tidak perlu disentuh; isinya kini dari lib/format.ts.
   const { rupiahShort: fmtRp, rupiahPlain: fmtFull } = useRupiah()
@@ -535,7 +535,7 @@ export default function AnalyticsPage() {
   // Props penanda "tidak tampil ke klien". Hanya pernah aktif untuk staf —
   // klien tidak melihat kartunya sama sekali, jadi tidak ada yang perlu
   // ditandai di sisi mereka.
-  const clientHidden = (id: MetricId) => ({ hiddenFromClient: isStaff && isHiddenFromClient(metricVis, id) })
+  const clientHidden = (id: MetricId) => ({ hiddenFromClient: isInternal && isHiddenFromClient(metricVis, id) })
 
   // ── Metrik persediaan pada bisnis TANPA persediaan ───────────
   // Graphicook menjual template digital: persediaan 0 dan HPP 0, sehingga
@@ -1178,7 +1178,7 @@ export default function AnalyticsPage() {
                                   keraguan pada laporannya sendiri padahal mereka
                                   tak punya wewenang memperbaikinya; buat admin,
                                   angka yang sama adalah petunjuk kerja. */}
-                              {isStaff && unbalanced && bal && (
+                              {canDoAccounting && unbalanced && bal && (
                                 <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
                                   <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
                                   <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
@@ -1203,7 +1203,7 @@ export default function AnalyticsPage() {
                                   </div>
                                 </div>
                               )}
-                              {isStaff && otherSec && (
+                              {canDoAccounting && otherSec && (
                                 <div style={{ background: '#fef3c7', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 12, padding: '10px 14px', display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 12 }}>
                                   <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0, color: '#b45309', marginTop: 1 }} />
                                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>

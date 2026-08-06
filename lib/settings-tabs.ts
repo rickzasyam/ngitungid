@@ -10,7 +10,7 @@
 // Ingat: menyembunyikan tab BUKAN kontrol keamanan. Penjaga sesungguhnya ada di
 // requireOwner()/requireAkunting() pada route API masing-masing.
 
-import { isOwner, isStaff, type Role } from '@/lib/roles'
+import { isOwner, isInternal, type Role } from '@/lib/roles'
 
 export type SettingsTabId =
   | 'general'
@@ -45,7 +45,7 @@ export function isSettingsTabVisible(role: Role | null | undefined, id: Settings
   const tab = SETTINGS_TABS.find(t => t.id === id)
   if (!tab) return false
   // Staf: semua tab, kecuali yang ownerOnly hanya untuk owner.
-  if (isStaff(role)) return !tab.ownerOnly || isOwner(role)
+  if (isInternal(role)) return !tab.ownerOnly || isOwner(role)
   return USER_VISIBLE_TABS.includes(id)
 }
 

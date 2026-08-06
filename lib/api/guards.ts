@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import type { Session } from 'next-auth'
-import { isOwner, isStaff } from '@/lib/roles'
+import { isOwner, canDoAccounting } from '@/lib/roles'
 
 // Helper auth untuk route handler. Pola pemakaian:
 //   const g = await requireAkunting()
@@ -37,7 +37,7 @@ export async function requireUser(): Promise<Guarded> {
 export async function requireAkunting(): Promise<Guarded> {
   const session = await auth()
   if (!session?.user) return { error: unauthorized() }
-  if (!isStaff(session.user.role)) return { error: forbidden() }
+  if (!canDoAccounting(session.user.role)) return { error: forbidden() }
   return { user: session.user }
 }
 

@@ -42,7 +42,7 @@ const ROUTE_ACTIVE_MAP: Record<string, string> = {
 export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
-  const { activeClient, setActiveClient, isStaff, clients } = useClient()
+  const { activeClient, setActiveClient, isInternal, canDoAccounting, clients } = useClient()
   // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
   // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
   // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
@@ -87,10 +87,10 @@ export function Sidebar() {
   }, [])
 
   useEffect(() => {
-    // Badge pendingMapping cuma relevan untuk staf (item "COA Mapping" hanya
+    // Badge pendingMapping cuma relevan bagi yang boleh mapping (item "COA Mapping" hanya
     // tampil ke staf). Role 'user' tidak perlu — jangan panggil /api/reports/list
     // untuknya (selaras spek read-only Dashboard + Analytics).
-    if (!activeClient || !isStaff) { setPendingMapping(0); return }
+    if (!activeClient || !canDoAccounting) { setPendingMapping(0); return }
     let alive = true
     fetch(`/api/reports/list?clientId=${activeClient.id}`)
       .then(r => (r.ok ? r.json() : { reports: [] }))
@@ -99,7 +99,7 @@ export function Sidebar() {
       })
       .catch(() => { if (alive) setPendingMapping(0) })
     return () => { alive = false }
-  }, [activeClient, pathname, isStaff])
+  }, [activeClient, pathname, canDoAccounting])
 
   // Slides the nav capsule to the active item. `snap` skips the transition
   // (first paint, and window resize where an animated chase would lag/jitter).
@@ -162,10 +162,10 @@ export function Sidebar() {
     { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
     { id: 'settings', label: 'Settings', icon: Settings },
     // Saat sesi masih 'loading', role belum ke-resolve (client-context default
-    // 'user') → isStaff sementara false. JANGAN sembunyikan menu staf di window
+    // 'user') → canDoAccounting sementara false. JANGAN sembunyikan menu staf di window
     // itu, kalau tidak item seperti Upload "hilang" sekejap tiap halaman dibuka
     // lalu muncul lagi. Setelah sesi resolved, filter normal berlaku.
-  ].filter((item) => status === 'loading' || isStaff || !item.staffOnly)
+  ].filter((item) => status === 'loading' || canDoAccounting || !item.staffOnly)
 
   // Progres laporan klien aktif. Menggantikan "% storage used" yang dulu
   // dihitung dari hash UUID — angka yang tidak pernah berubah walau laporan
@@ -189,19 +189,19 @@ export function Sidebar() {
    *  bisa mereka tindaklanjuti. Mereka cukup tahu datanya sampai kapan. */
   const progressLabel = (() => {
     if (progress.kind === 'none') return 'Belum ada laporan'
-    if (!isStaff) return progress.lastMonth ? `Terakhir: ${formatMonth(progress.lastMonth)}` : 'Belum ada laporan'
+    if (!isInternal) return progress.lastMonth ? `Terakhir: ${formatMonth(progress.lastMonth)}` : 'Belum ada laporan'
     if (progress.kind === 'no-window') return 'Terkini'
     return `${progress.completed} dari ${progress.total} bulan`
   })()
   /** Baris kedua (staf saja) — konteks, bukan pengulangan. */
   const progressHint = (() => {
-    if (!isStaff || progress.kind === 'none') return null
+    if (!isInternal || progress.kind === 'none') return null
     const belumLengkap = progress.incompleteMonths.at(-1)
     if (belumLengkap) return `${formatMonth(belumLengkap)} belum lengkap`
     return progress.lastMonth ? `Terakhir: ${formatMonth(progress.lastMonth)}` : null
   })()
   // Owner & akunting sama-sama boleh pindah klien (semua staf lihat semua klien).
-  const canSwitch = isStaff
+  const canSwitch = isInternal
 
   const handleSelectClient = (client: ClientInfo | null) => {
     setActiveClient(client)
@@ -473,7 +473,7 @@ export function Sidebar() {
                     <>
                       <div className="flex items-center justify-between mb-0.5">
                         <p className="text-[11px] whitespace-nowrap overflow-hidden" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                          {isStaff ? 'Mengelola klien' : 'Workspace Bisnis'}
+                          {isInternal ? 'Mengelola klien' : 'Workspace Bisnis'}
                         </p>
                         {canSwitch && <ChevronDown className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.5)' }} />}
                       </div>
@@ -483,7 +483,7 @@ export function Sidebar() {
                       {/* Bar hanya bermakna kalau ada jendela penilaian; untuk
                           klien tanpa laporan atau role 'user' ia dihilangkan
                           supaya tidak memberi kesan "0% = tertinggal". */}
-                      {isStaff && progress.kind === 'ratio' && (
+                      {isInternal && progress.kind === 'ratio' && (
                         <div className="w-full h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
                           <div
                             className="h-full rounded-full transition-all duration-500"

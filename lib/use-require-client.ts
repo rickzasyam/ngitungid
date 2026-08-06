@@ -5,16 +5,17 @@ import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 
 export function useRequireClient() {
-  const { activeClient, isLoaded, isStaff } = useClient()
+  const { activeClient, isLoaded, isInternal } = useClient()
   const router = useRouter()
 
   useEffect(() => {
-    // Staf (owner/akunting) tanpa klien aktif → Admin Overview untuk memilih.
+    // Orang dalam tanpa klien aktif → Admin Overview untuk memilih. Pakai
+    // isInternal (bukan canDoAccounting): memilih klien bukan pekerjaan akunting.
     // Role 'user' dipin ke kliennya sendiri, jadi tidak pernah dibounce ke sini.
-    if (isLoaded && isStaff && !activeClient) {
+    if (isLoaded && isInternal && !activeClient) {
       router.push('/admin-overview')
     }
-  }, [isLoaded, isStaff, activeClient, router])
+  }, [isLoaded, isInternal, activeClient, router])
 
   return { activeClient, isLoaded }
 }
