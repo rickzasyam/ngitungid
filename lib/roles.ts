@@ -5,7 +5,7 @@
 //
 // Harus sinkron dengan userRoleEnum (lib/db/schema.ts) & types/next-auth.d.ts.
 
-export type Role = 'owner' | 'akunting' | 'user'
+export type Role = 'owner' | 'akunting' | 'user' | 'finance'
 
 /**
  * Orang DALAM NgitungID (lawan kata: klien). Boleh berpindah klien, melihat
@@ -21,7 +21,7 @@ export type Role = 'owner' | 'akunting' | 'user'
  * memutuskan begitu. Pisahkan dulu, baru tambah role.
  */
 export function isInternal(role: Role | null | undefined): boolean {
-  return role === 'owner' || role === 'akunting'
+  return role === 'owner' || role === 'akunting' || role === 'finance'
 }
 
 /**
@@ -50,6 +50,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
   akunting: 'Akunting',
   user: 'Klien',
+  finance: 'Finance',
 }
 
 /**
@@ -59,7 +60,7 @@ export const ROLE_LABEL: Record<Role, string> = {
  * `clientId` null — lihat `resolveNewAccountClientId` di lib/api/account.ts.
  * Urutan array = urutan tampil di dropdown Role.
  */
-export const CREATABLE_ROLES: Role[] = ['akunting', 'owner', 'user']
+export const CREATABLE_ROLES: Role[] = ['akunting', 'owner', 'user', 'finance']
 
 /**
  * Role yang boleh membaca data KLIEN MANA PUN.
@@ -74,7 +75,9 @@ export const CREATABLE_ROLES: Role[] = ['akunting', 'owner', 'user']
  * ada di daftar ini, ia hanya bisa melihat kliennya sendiri — itu default yang
  * benar untuk kesalahan.
  */
-export const ALL_CLIENT_ACCESS_ROLES: readonly Role[] = ['owner', 'akunting']
+// finance ditambahkan dengan sadar: ia MEMBUAT klien, jadi harus melihat
+// semuanya. Bukan warisan otomatis — daftar ini allowlist.
+export const ALL_CLIENT_ACCESS_ROLES: readonly Role[] = ['owner', 'akunting', 'finance']
 
 /**
  * Boleh-kah pengguna dengan `role` ini melihat DATA milik `targetClientId`?

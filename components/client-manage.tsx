@@ -96,8 +96,14 @@ export function ClientCardMenu({
         >
           {item(Pencil, 'Edit klien', onEdit)}
           {isOwner && item(Users2, 'Kelola Akunting', onAssign)}
-          <div style={{ height: 1, background: '#f0f0f0', margin: '4px 0' }} />
-          {item(Trash2, 'Hapus klien', onDelete, true)}
+          {/* Hapus klien → OWNER SAJA (2026-08-06). Menghapus klien meng-cascade
+              seluruh Master COA, laporan, riwayat mapping, dan setelannya.
+              Sebelumnya akunting punya tombol ini; pengurangan itu DISENGAJA dan
+              berdiri sendiri — pertanyaan soal role finance hanya membuatnya
+              terlihat. Divider ikut bersembunyi supaya tidak ada garis
+              menggantung di bawah item terakhir. */}
+          {isOwner && <div style={{ height: 1, background: '#f0f0f0', margin: '4px 0' }} />}
+          {isOwner && item(Trash2, 'Hapus klien', onDelete, true)}
         </div>
       )}
     </div>

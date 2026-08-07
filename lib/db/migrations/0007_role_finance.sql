@@ -1,0 +1,23 @@
+-- 0007 — tambah role 'finance' ke enum user_role
+--
+-- DITULIS TANGAN, mengikuti preseden 0003_stormy_vermin.sql. JANGAN diganti
+-- hasil auto-generate drizzle-kit: untuk perubahan enum, drizzle-kit membuat
+-- kolom jadi text → DROP TYPE → CREATE TYPE baru → cast balik. Di database yang
+-- sudah ada isinya itu PASTI GAGAL, dan kalau sempat separuh jalan kolom `role`
+-- tertinggal sebagai text — jauh lebih parah daripada migrasi yang tidak jalan.
+--
+-- ADD VALUE tidak menyentuh satu baris data pun: ia hanya menambah label baru di
+-- akhir enum. Baris yang ada tetap menunjuk OID yang sama, tidak ada rewrite
+-- tabel, tidak ada cast.
+--
+-- CATATAN POSTGRES: nilai enum yang baru di-ADD TIDAK BOLEH DIPAKAI di
+-- transaksi yang sama. Karena itu migrasi ini HANYA menambah nilainya —
+-- tidak ada satu pun akun yang di-assign 'finance' di sini. Pembuatan akun
+-- finance adalah langkah terpisah lewat Settings → Kelola Akun (atau skrip
+-- tersendiri), setelah migrasi ini commit. Preseden yang sama dipakai saat
+-- 'owner' ditambahkan di 0003 dan promosinya dipisah ke db:promote-owner.
+--
+-- Setelah ini, 'finance' ADA di enum tapi belum punya hak apa pun sampai
+-- lib/roles.ts, lib/route-access.ts, lib/settings-tabs.ts dan guard API ikut
+-- diperbarui — semuanya di commit yang sama.
+ALTER TYPE "public"."user_role" ADD VALUE 'finance';

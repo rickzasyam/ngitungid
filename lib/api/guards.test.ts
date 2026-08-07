@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/auth', () => ({ auth: vi.fn() }))
 
 import { auth } from '@/lib/auth'
-import { requireUser, requireAkunting, requireOwner } from './guards'
+import { requireUser, requireAkunting, requireOwner, requireInternal, requireFinance } from './guards'
 
 const authMock = vi.mocked(auth)
 
@@ -100,5 +100,79 @@ describe('requireUser — cukup login apa pun', () => {
     authMock.mockResolvedValue(null as never)
     const g = await requireUser()
     expect(g.error?.status).toBe(401)
+  })
+})
+
+// ══ Role 'finance' (2026-08-06) ══════════════════════════════════
+describe('finance di lapisan API', () => {
+  it('DITOLAK requireAkunting — tidak boleh upload/extract/mapping', async () => {
+    // Inti keputusannya: finance TIDAK dilipat ke requireAkunting. Kalau test
+    // ini merah, finance mendapat POST /api/upload, retry-extract, mapping,
+    // dan semua aksi tulis laporan sekaligus.
+    authMock.mockResolvedValue(asRole('finance') as never)
+    const g = await requireAkunting()
+    expect('error' in g).toBe(true)
+    expect(g.error?.status).toBe(403)
+  })
+
+  it('DITOLAK requireOwner', async () => {
+    authMock.mockResolvedValue(asRole('finance') as never)
+    const g = await requireOwner()
+    expect(g.error?.status).toBe(403)
+  })
+
+  it('DITERIMA requireInternal — boleh buat & ubah klien', async () => {
+    authMock.mockResolvedValue(asRole('finance') as never)
+    const g = await requireInternal()
+    expect('error' in g).toBe(false)
+    expect(g.user?.role).toBe('finance')
+  })
+
+  it('DITERIMA requireUser — Dashboard/Analytics/Laporan tetap terbuka', async () => {
+    authMock.mockResolvedValue(asRole('finance') as never)
+    const g = await requireUser()
+    expect('error' in g).toBe(false)
+  })
+
+  it('DITERIMA requireFinance', async () => {
+    authMock.mockResolvedValue(asRole('finance') as never)
+    const g = await requireFinance()
+    expect('error' in g).toBe(false)
+  })
+})
+
+describe('requireInternal — orang dalam, bukan klien', () => {
+  it('owner & akunting diterima', async () => {
+    for (const r of ['owner', 'akunting']) {
+      authMock.mockResolvedValue(asRole(r) as never)
+      expect('error' in (await requireInternal()), r).toBe(false)
+    }
+  })
+
+  it('user (klien) DITOLAK 403', async () => {
+    authMock.mockResolvedValue(asRole('user') as never)
+    expect((await requireInternal()).error?.status).toBe(403)
+  })
+
+  it('tanpa sesi → 401', async () => {
+    authMock.mockResolvedValue(null as never)
+    expect((await requireInternal()).error?.status).toBe(401)
+  })
+})
+
+describe('requireFinance — TIDAK sama dengan requireAkunting', () => {
+  it('owner ikut lolos (mewarisi, konsisten dgn hirarki guard lain)', async () => {
+    authMock.mockResolvedValue(asRole('owner') as never)
+    expect('error' in (await requireFinance())).toBe(false)
+  })
+
+  it('akunting DITOLAK — finance bukan turunan akunting', async () => {
+    authMock.mockResolvedValue(asRole('akunting') as never)
+    expect((await requireFinance()).error?.status).toBe(403)
+  })
+
+  it('user DITOLAK', async () => {
+    authMock.mockResolvedValue(asRole('user') as never)
+    expect((await requireFinance()).error?.status).toBe(403)
   })
 })

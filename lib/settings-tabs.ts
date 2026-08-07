@@ -40,11 +40,24 @@ export const SETTINGS_TABS: { id: SettingsTabId; ownerOnly?: boolean }[] = [
  */
 export const USER_VISIBLE_TABS: SettingsTabId[] = ['general', 'coa', 'account']
 
+/**
+ * Tab yang boleh dilihat role 'finance'. Daftar SENDIRI, bukan turunan.
+ *
+ * finance adalah orang dalam, jadi tanpa cabang khusus ia akan jatuh ke cabang
+ * isInternal() dan melihat SEMUA tab termasuk Master COA & Analytics Display —
+ * padahal ia tidak mengerjakan akunting. Cabangnya diperiksa LEBIH DULU
+ * daripada isInternal() justru karena itu.
+ */
+export const FINANCE_VISIBLE_TABS: SettingsTabId[] = ['general', 'account']
+
 /** Boleh-kah `role` melihat tab `id`? */
 export function isSettingsTabVisible(role: Role | null | undefined, id: SettingsTabId): boolean {
   const tab = SETTINGS_TABS.find(t => t.id === id)
   if (!tab) return false
-  // Staf: semua tab, kecuali yang ownerOnly hanya untuk owner.
+  // finance DULUAN — ia juga isInternal, jadi kalau urutannya dibalik ia akan
+  // ikut mendapat Master COA, Analytics Display, dan (kalau owner) Kelola Akun.
+  if (role === 'finance') return FINANCE_VISIBLE_TABS.includes(id)
+  // Orang dalam lain: semua tab, kecuali yang ownerOnly hanya untuk owner.
   if (isInternal(role)) return !tab.ownerOnly || isOwner(role)
   return USER_VISIBLE_TABS.includes(id)
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clients, users } from '@/lib/db/schema'
-import { requireAkunting } from '@/lib/api/guards'
+import { requireInternal, requireOwner } from '@/lib/api/guards'
 import { dbWriteErrorResponse, isFkViolation } from '@/lib/api/db-errors'
 
 export const runtime = 'nodejs'
@@ -19,8 +19,10 @@ const bad = (msg: string) => NextResponse.json({ error: msg }, { status: 400 })
 // PATCH /api/clients/[id] — akunting ATAU owner.
 // multipart/form-data: name?, type?, logo? (File), removeLogo? ('1')
 // Dipakai form "Edit Klien" di Admin Overview.
+// Mengubah nama/jenis/logo klien = mengelola entitas klien → requireInternal
+// (owner, akunting, finance).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAkunting()
+  const g = await requireInternal()
   if ('error' in g) return g.error
 
   const { id } = await params
@@ -90,8 +92,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // report_line_items, coa_mapping_history, client_metric_visibility,
 // client_assignments. Karena itu ada dua lapis pengaman: nama harus diketik
 // persis, dan akun viewer yang terpasang menghalangi penghapusan.
+// OWNER SAJA (2026-08-06). Menghapus klien meng-cascade seluruh Master COA,
+// laporan, riwayat mapping, dan setelannya. Sebelumnya akunting juga bisa;
+// pengurangan itu DISENGAJA dan berdiri sendiri dari pertanyaan role finance.
+// UI-nya (kebab Admin Overview) ikut digerbangi isOwner.
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const g = await requireAkunting()
+  const g = await requireOwner()
   if ('error' in g) return g.error
 
   const { id } = await params

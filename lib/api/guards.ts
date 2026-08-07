@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import type { Session } from 'next-auth'
-import { isOwner, canDoAccounting } from '@/lib/roles'
+import { isOwner, isInternal, canDoAccounting } from '@/lib/roles'
 
 // Helper auth untuk route handler. Pola pemakaian:
 //   const g = await requireAkunting()
@@ -38,6 +38,34 @@ export async function requireAkunting(): Promise<Guarded> {
   const session = await auth()
   if (!session?.user) return { error: unauthorized() }
   if (!canDoAccounting(session.user.role)) return { error: forbidden() }
+  return { user: session.user }
+}
+
+/**
+ * Butuh role ORANG DALAM (owner / akunting / finance) — bukan klien.
+ * Dipakai untuk surface yang mengelola KLIEN sebagai entitas (buat/ubah klien),
+ * yang bukan pekerjaan akunting tapi juga bukan hak klien.
+ */
+export async function requireInternal(): Promise<Guarded> {
+  const session = await auth()
+  if (!session?.user) return { error: unauthorized() }
+  if (!isInternal(session.user.role)) return { error: forbidden() }
+  return { user: session.user }
+}
+
+/**
+ * Butuh role 'finance' (owner ikut lolos, konsisten dengan hirarki di file ini:
+ * owner mewarisi kemampuan role lain).
+ *
+ * SENGAJA terpisah dari requireAkunting — finance TIDAK boleh upload, extraction
+ * review, atau COA mapping. Melipat finance ke requireAkunting akan memberikan
+ * ketiganya sekaligus.
+ */
+export async function requireFinance(): Promise<Guarded> {
+  const session = await auth()
+  if (!session?.user) return { error: unauthorized() }
+  const role = session.user.role
+  if (role !== 'finance' && !isOwner(role)) return { error: forbidden() }
   return { user: session.user }
 }
 

@@ -53,7 +53,9 @@ export const lineItemStatusEnum = pgEnum('line_item_status', [
 // akunting : upload, review, mapping, kelola klien, lihat semua klien.
 //            (dulu bernama 'admin' — fungsinya sama).
 // user     : klien, read-only Dashboard + Analytics. TIDAK berubah.
-export const userRoleEnum = pgEnum('user_role', ['akunting', 'user', 'owner'])
+// 'finance' ditambahkan 2026-08-06 lewat migrasi 0007 (ALTER TYPE ... ADD VALUE).
+// Urutan di sini HARUS sama dengan urutan nilai di Postgres.
+export const userRoleEnum = pgEnum('user_role', ['akunting', 'user', 'owner', 'finance'])
 
 // Bahasa antarmuka per-user. Daftarnya memang tertutup, jadi enum tepat di sini.
 // CATATAN: kolomnya SUDAH tersimpan & bertahan, tapi BELUM punya efek

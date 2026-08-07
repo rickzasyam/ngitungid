@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { asc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { clients, financialReports } from '@/lib/db/schema'
-import { requireAkunting, requireUser } from '@/lib/api/guards'
+import { requireInternal, requireUser } from '@/lib/api/guards'
 
 // hasLogo (bukan bytea-nya) supaya UI tahu harus render <img> atau inisial tanpa
 // menarik logonya untuk tiap klien. updatedAt dipakai sebagai cache-buster
@@ -69,8 +69,11 @@ export async function GET() {
 }
 
 // POST /api/clients — akunting/owner. Body { name, type }.
+// Membuat klien = mengelola klien sebagai ENTITAS, bukan pekerjaan akunting.
+// requireInternal: owner, akunting, DAN finance — finance memang yang
+// meng-onboard klien baru.
 export async function POST(req: Request) {
-  const g = await requireAkunting()
+  const g = await requireInternal()
   if ('error' in g) return g.error
 
   const body = (await req.json().catch(() => null)) as { name?: unknown; type?: unknown } | null

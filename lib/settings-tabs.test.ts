@@ -80,3 +80,24 @@ describe('konsistensi daftar', () => {
     expect(isSettingsTabVisible('owner', 'tidak-ada' as SettingsTabId)).toBe(false)
   })
 })
+
+// ══ Role 'finance' ═══════════════════════════════════════════════
+describe('finance — hanya General + Account', () => {
+  it('melihat PERSIS General & Account', () => {
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'account'])
+  })
+
+  it('TIDAK melihat Master COA, Analytics Display, Kelola Akun, Notifications', () => {
+    // finance juga isInternal, jadi tanpa cabang khusus (yang diperiksa LEBIH
+    // DULU) ia akan jatuh ke cabang orang-dalam dan mendapat semuanya.
+    for (const id of ['coa', 'analytics', 'users', 'notifications'] as const) {
+      expect(isSettingsTabVisible('finance', id), id).toBe(false)
+    }
+  })
+
+  it('daftar role lain tidak bergeser', () => {
+    expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
+    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'analytics', 'account', 'notifications'])
+    expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
+  })
+})

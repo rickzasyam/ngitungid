@@ -89,8 +89,8 @@ describe('CREATABLE_ROLES', () => {
   // Ketiganya bisa dibuat lewat form "Buat Akun" milik Owner. 'user' (klien)
   // ditambahkan 2026-07-19 — validasinya beda (WAJIB clientId), ditegakkan di
   // resolveNewAccountClientId, bukan di daftar ini.
-  it('mencakup akunting, owner, dan user', () => {
-    expect(CREATABLE_ROLES).toEqual(['akunting', 'owner', 'user'])
+  it('mencakup akunting, owner, user, dan finance', () => {
+    expect(CREATABLE_ROLES).toEqual(['akunting', 'owner', 'user', 'finance'])
   })
 })
 
@@ -128,14 +128,17 @@ describe('canAccessClientData — scoping antar-klien ASIMETRIS', () => {
   // pun diubah dan tanpa satu test pun merah. Sekarang daftarnya allowlist, dan
   // test ini yang menjaga arah kegagalannya tetap menolak.
   it('role yang TIDAK terdaftar ditolak, walau bukan "user"', () => {
-    const unknown = 'finance' as Role // belum ada di ALL_CLIENT_ACCESS_ROLES
-    expect(canAccessClientData(unknown, null, CLIENT_A)).toBe(false)
-    expect(canAccessClientData(unknown, CLIENT_B, CLIENT_A)).toBe(false)
+    // Sengaja memakai role yang belum pernah ada — 'finance' dulu dipakai di
+    // sini, lalu resmi ditambahkan ke allowlist, dan test ini ikut merah.
+    // Itu justru buktinya bekerja: daftar allowlist harus diubah dengan sadar.
+    const unlisted = 'auditor' as Role
+    expect(canAccessClientData(unlisted, null, CLIENT_A)).toBe(false)
+    expect(canAccessClientData(unlisted, CLIENT_B, CLIENT_A)).toBe(false)
   })
 
   it('role tak dikenal masih boleh KLIENNYA SENDIRI kalau ownClientId cocok', () => {
     // Bukan penolakan total: aturannya sama dengan 'user' — hanya miliknya.
-    expect(canAccessClientData('finance' as Role, CLIENT_A, CLIENT_A)).toBe(true)
+    expect(canAccessClientData('auditor' as Role, CLIENT_A, CLIENT_A)).toBe(true)
   })
 
   it('null/undefined role ditolak untuk klien mana pun', () => {
@@ -143,7 +146,92 @@ describe('canAccessClientData — scoping antar-klien ASIMETRIS', () => {
     expect(canAccessClientData(undefined, CLIENT_B, CLIENT_A)).toBe(false)
   })
 
-  it('ALL_CLIENT_ACCESS_ROLES berisi persis owner & akunting', () => {
-    expect([...ALL_CLIENT_ACCESS_ROLES]).toEqual(['owner', 'akunting'])
+  it('ALL_CLIENT_ACCESS_ROLES berisi persis owner, akunting & finance', () => {
+    // 'user' TIDAK boleh masuk daftar ini — itu inti scoping antar-klien.
+    expect([...ALL_CLIENT_ACCESS_ROLES]).toEqual(['owner', 'akunting', 'finance'])
+    expect(ALL_CLIENT_ACCESS_ROLES).not.toContain('user')
+  })
+})
+
+// ══ Role 'finance' (2026-08-06) ══════════════════════════════════
+// Orang dalam yang TIDAK mengerjakan akunting. Ini role pertama yang memisahkan
+// isInternal dari canDoAccounting; sebelum ini keduanya selalu identik.
+describe('finance — orang dalam, bukan akunting', () => {
+  it('finance ADALAH orang dalam', () => {
+    expect(isInternal('finance')).toBe(true)
+  })
+
+  it('finance TIDAK boleh mengerjakan akunting', () => {
+    // Inti pemisahan isStaff. Kalau ini true, finance mendapat Upload,
+    // Extraction Review, COA Mapping, dan semua aksi tulis /laporan.
+    expect(canDoAccounting('finance')).toBe(false)
+  })
+
+  it('finance bukan owner', () => {
+    expect(isOwner('finance')).toBe(false)
+  })
+
+  it('predikat isInternal & canDoAccounting kini BERBEDA — itu maksudnya', () => {
+    expect(isInternal('finance')).not.toBe(canDoAccounting('finance'))
+  })
+
+  it('finance boleh membaca data klien MANA PUN (ia yang membuat klien)', () => {
+    const A = 'aaaaaaaa-0000-0000-0000-000000000001'
+    const B = 'bbbbbbbb-0000-0000-0000-000000000002'
+    expect(canAccessClientData('finance', null, A)).toBe(true)
+    expect(canAccessClientData('finance', B, A)).toBe(true)
+    expect(ALL_CLIENT_ACCESS_ROLES).toContain('finance')
+  })
+
+  it('punya label & bisa dibuat lewat Kelola Akun', () => {
+    expect(ROLE_LABEL.finance).toBe('Finance')
+    expect(CREATABLE_ROLES).toContain('finance')
+  })
+
+  it('owner/akunting/user TIDAK berubah oleh penambahan finance', () => {
+    expect(isInternal('owner')).toBe(true)
+    expect(isInternal('akunting')).toBe(true)
+    expect(isInternal('user')).toBe(false)
+    expect(canDoAccounting('owner')).toBe(true)
+    expect(canDoAccounting('akunting')).toBe(true)
+    expect(canDoAccounting('user')).toBe(false)
+    expect(isOwner('owner')).toBe(true)
+    expect(isOwner('akunting')).toBe(false)
+  })
+})
+
+// ══ Menu kebab kartu klien (Admin Overview) ══════════════════════
+// KEBIJAKANNYA yang diuji, bukan render-nya — project ini tidak punya setup
+// component-testing, dan menambah React Testing Library demi satu menu tidak
+// sepadan. Ketiga item di ClientCardMenu digerbangi persis oleh predikat di
+// bawah, dan kebab-nya sendiri oleh isInternal di app/admin-overview/page.tsx.
+describe('kebab klien: siapa melihat item apa', () => {
+  const seesKebab = isInternal
+  const seesEdit = isInternal      // kebab tampil → Edit selalu ikut
+  const seesAssign = isOwner
+  const seesDelete = isOwner       // 2026-08-06: dulu semua yang melihat kebab
+
+  it('owner melihat Edit, Kelola Akunting, dan Hapus', () => {
+    expect(seesKebab('owner')).toBe(true)
+    expect(seesEdit('owner')).toBe(true)
+    expect(seesAssign('owner')).toBe(true)
+    expect(seesDelete('owner')).toBe(true)
+  })
+
+  it('akunting melihat Edit tapi TIDAK Hapus — pengurangan yang disengaja', () => {
+    expect(seesEdit('akunting')).toBe(true)
+    expect(seesDelete('akunting')).toBe(false)
+    expect(seesAssign('akunting')).toBe(false)
+  })
+
+  it('finance melihat Edit tapi TIDAK Hapus', () => {
+    expect(seesKebab('finance')).toBe(true)
+    expect(seesEdit('finance')).toBe(true)
+    expect(seesDelete('finance')).toBe(false)
+    expect(seesAssign('finance')).toBe(false)
+  })
+
+  it('user (klien) tidak melihat kebab sama sekali', () => {
+    expect(seesKebab('user')).toBe(false)
   })
 })

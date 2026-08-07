@@ -8,18 +8,40 @@
 // (General + Master COA, read-only). TIDAK boleh proses kerja: upload, COA
 // mapping, extraction review, admin overview. owner & akunting = staf, penuh.
 
-import type { Role } from '@/lib/roles'
+import { canDoAccounting, isInternal, type Role } from '@/lib/roles'
 
-// Prefix surface KERJA staf yang tetap terkunci untuk 'user' (dan turunannya,
-// mis. /coa-mapping/abc). /extraction-review & /admin-overview ikut walau tak
-// punya item nav 1:1 — keduanya alur kerja staf. Catatan: /laporan & /settings
-// SENGAJA TIDAK di sini — user boleh membukanya (read-only; kontrol tulis
-// disembunyikan di komponen & ditegakkan requireAkunting/Owner di API).
-export const STAFF_ONLY_PREFIXES = [
+// Prefix surface KERJA AKUNTING (dan turunannya, mis. /coa-mapping/abc).
+// Catatan: /laporan & /settings SENGAJA TIDAK di sini — user boleh membukanya
+// (read-only; kontrol tulis disembunyikan di komponen & ditegakkan
+// requireAkunting/Owner di API).
+export const ACCOUNTING_ONLY_PREFIXES = [
   '/upload',
   '/coa-mapping',
   '/extraction-review',
-  '/admin-overview',
+] as const
+
+/**
+ * Prefix untuk ORANG DALAM, tapi BUKAN pekerjaan akunting.
+ *
+ * /admin-overview adalah PEMILIH KLIEN — persis yang dibutuhkan setiap role
+ * internal, termasuk finance. Tidak ada pekerjaan akunting di halaman itu, dan
+ * aksi destruktifnya (hapus klien) sudah digerbangi isOwner sejak pemecahan
+ * kebab 2026-08-06.
+ *
+ * KENAPA DIPISAH: dulu /admin-overview satu daftar dengan surface akunting,
+ * sementara useRequireClient memantulkan SETIAP role internal tanpa klien aktif
+ * ke sana. Untuk role internal yang tidak boleh akunting (finance) itu berarti:
+ * dipantulkan ke /admin-overview → proxy menolak → dilempar ke /dashboard →
+ * dipantulkan lagi. Loop tak berujung, dan baru terpicu saat akun finance
+ * PERTAMA dibuat. Setiap prefix baru di sini WAJIB dicek terhadap tujuan
+ * pantulan useRequireClient.
+ */
+export const INTERNAL_ONLY_PREFIXES = ['/admin-overview'] as const
+
+/** Gabungan keduanya — surface yang tertutup untuk role 'user' (klien). */
+export const STAFF_ONLY_PREFIXES = [
+  ...ACCOUNTING_ONLY_PREFIXES,
+  ...INTERNAL_ONLY_PREFIXES,
 ] as const
 
 /** Tujuan redirect saat 'user' mencoba membuka surface staf. */
@@ -38,6 +60,22 @@ function matchesPrefix(pathname: string, prefix: string): boolean {
  * (Dashboard, Analytics, dsb).
  */
 export function isPathAllowedForRole(role: Role, pathname: string): boolean {
-  if (role !== 'user') return true
-  return !STAFF_ONLY_PREFIXES.some((p) => matchesPrefix(pathname, p))
+  // Surface kerja akunting: HANYA yang boleh mengerjakan akunting.
+  //
+  // Dulu barisnya `if (role !== 'user') return true` — gagal terbuka, sama
+  // seperti canAccessClientData. Setiap role baru otomatis mendapat Upload,
+  // Extraction Review, dan COA Mapping tanpa ada yang memutuskan begitu.
+  // Sekarang gerbangnya canDoAccounting(), jadi 'finance' ditolak secara
+  // EKSPLISIT — bukan karena kebetulan tidak ada di daftar mana pun.
+  if (ACCOUNTING_ONLY_PREFIXES.some((p) => matchesPrefix(pathname, p))) {
+    return canDoAccounting(role)
+  }
+  // Surface orang dalam (pemilih klien): semua role internal, termasuk finance.
+  // Digerbangi isInternal — bukan canDoAccounting — supaya tidak bertabrakan
+  // dengan pantulan useRequireClient ke halaman yang sama.
+  if (INTERNAL_ONLY_PREFIXES.some((p) => matchesPrefix(pathname, p))) {
+    return isInternal(role)
+  }
+  // Sisanya terbuka untuk semua role yang login.
+  return true
 }
