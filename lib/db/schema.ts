@@ -242,6 +242,24 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// ── layanan ──────────────────────────────────────────────────
+// Master jasa yang dijual — GLOBAL, bukan per-klien: layanan yang sama dijual
+// lintas klien. (Bandingkan master_coa yang memang per-klien.)
+//
+// TIDAK PERNAH DIHAPUS. Kontrak mencatat layanan apa yang dijual; menghapus
+// sebuah layanan akan melubangi setiap kontrak lama yang memuatnya. Hanya ada
+// penanda `aktif`: false menyembunyikannya dari picker kontrak BARU, sementara
+// kontrak yang sudah memakainya tetap menampilkannya normal.
+// Tidak ada endpoint DELETE — jangan dibuat.
+export const layanan = pgTable('layanan', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  nama: text('nama').notNull().unique('layanan_nama_unique'),
+  deskripsi: text('deskripsi'),
+  aktif: boolean('aktif').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // ── client_assignments ───────────────────────────────────────
 // Catatan "siapa pegang klien apa" — MURNI TRACKING/organisasi. Tabel ini
 // TIDAK dipakai untuk membatasi akses: semua akunting tetap boleh membuka &

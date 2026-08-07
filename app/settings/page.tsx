@@ -29,12 +29,14 @@ import {
   Bell,
   Building2,
   KeyRound,
+  Package,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
 import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
 import { MIN_PASSWORD } from '@/lib/api/password-change'
 import { visibleSettingsTabs, type SettingsTabId } from '@/lib/settings-tabs'
+import { NAMA_MIN, NAMA_MAX, DESKRIPSI_MAX, type LayananRow } from '@/lib/layanan'
 import { defaultMetricVisibility, type MetricId } from '@/lib/analytics/metric-visibility'
 import { usePreferences } from '@/lib/preferences-context'
 import type { Preferences, Language, CurrencyFormat } from '@/lib/api/preferences'
@@ -159,10 +161,11 @@ type TabId = SettingsTabId
 // Menambah tab baru berarti menambahnya di lib/settings-tabs.ts DULU, sehingga
 // test visibilitas memaksa keputusan akses dibuat eksplisit.
 const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe; scoped: boolean; soon?: boolean }> = {
-  general:       { label: 'General',           desc: 'Bahasa, format, timezone',    Icon: Globe,             scoped: false },
+  general:       { label: 'General',           desc: 'Bahasa & format nominal',     Icon: Globe,             scoped: false },
   coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
   analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
   users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
+  layanan:       { label: 'Layanan',           desc: 'Master jasa yang dijual',     Icon: Package,           scoped: false },
   account:       { label: 'Account',           desc: 'Password & keamanan',         Icon: User,              scoped: false },
   notifications: { label: 'Notifications',     desc: 'Email & pengingat',           Icon: Bell,              scoped: false, soon: true },
 }
@@ -1337,6 +1340,254 @@ function UsersTab() {
   )
 }
 
+// ── Tab: Layanan (owner + finance) ───────────────────────────
+// Master jasa yang dijual — GLOBAL, bukan per-klien (karena itu `scoped: false`
+// dan tidak ada chip klien aktif di tab ini).
+//
+// TIDAK ADA TOMBOL HAPUS, dan jangan ditambahkan. Kontrak mencatat layanan apa
+// yang dijual; menghapus satu baris melubangi setiap kontrak lama yang
+// memuatnya. Menonaktifkan menyembunyikannya dari picker kontrak BARU sementara
+// kontrak lama tetap menampilkannya normal (lib/layanan.ts).
+function LayananTab() {
+  const [rows, setRows] = useState<LayananRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
+  // null = form tertutup; { id: null } = tambah baru; { id } = edit baris itu.
+  const [form, setForm] = useState<{ id: string | null; nama: string; deskripsi: string } | null>(null)
+
+  // Muat ulang lewat penghitung, bukan memanggil fungsi ber-setState langsung
+  // dari efek: setState sinkron di dalam badan efek memicu render berantai.
+  // Semua setState di bawah berada SETELAH await, di dalam callback async —
+  // pola yang sama dengan PreferencesProvider. Sekalian dapat pembatalan
+  // (`alive`), yang tidak dimiliki tab-tab sebelah.
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = useCallback(() => setReloadKey(k => k + 1), [])
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const res = await fetch('/api/layanan')
+        if (!res.ok) throw new Error('Gagal memuat daftar layanan.')
+        const d = (await res.json()) as { layanan: LayananRow[] }
+        if (!alive) return
+        setRows(d.layanan)
+        setError(null)
+      } catch (err) {
+        if (alive) setError(err instanceof Error ? err.message : 'Gagal memuat daftar layanan.')
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [reloadKey])
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form) return
+    setSaving(true)
+    setError(null)
+    setOkMsg(null)
+    try {
+      const isEdit = form.id !== null
+      const res = await fetch(isEdit ? `/api/layanan/${form.id}` : '/api/layanan', {
+        method: isEdit ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nama: form.nama, deskripsi: form.deskripsi }),
+      })
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) throw new Error(payload?.error ?? 'Gagal menyimpan layanan.')
+      setOkMsg(isEdit ? 'Layanan diperbarui.' : `Layanan "${form.nama.trim()}" ditambahkan.`)
+      setForm(null)
+      reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan layanan.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleAktif = async (row: LayananRow) => {
+    setSaving(true)
+    setError(null)
+    setOkMsg(null)
+    // Optimistic: balikkan kalau request gagal, supaya UI tidak berbohong.
+    const previous = rows
+    setRows(rs => rs.map(r => (r.id === row.id ? { ...r, aktif: !r.aktif } : r)))
+    try {
+      const res = await fetch(`/api/layanan/${row.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aktif: !row.aktif }),
+      })
+      if (!res.ok) {
+        const p = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(p?.error ?? 'Gagal mengubah status.')
+      }
+      setOkMsg(!row.aktif ? `"${row.nama}" diaktifkan.` : `"${row.nama}" dinonaktifkan — tidak muncul lagi di kontrak baru.`)
+    } catch (err) {
+      setRows(previous)
+      setError(err instanceof Error ? err.message : 'Gagal mengubah status.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #e5e7eb',
+    fontSize: 13, color: '#1f2430', background: 'white',
+  }
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: 5,
+  }
+
+  const aktifCount = rows.filter(r => r.aktif).length
+
+  return (
+    <>
+      <SettingsCard>
+        <SectionHeading
+          Icon={Package}
+          accent="linear-gradient(135deg, #bbb3f3 0%, #a5b4fc 100%)"
+          title="Master Layanan"
+          subtitle="Jasa yang dijual ke klien — dipakai bersama semua klien, bukan per-klien"
+        />
+
+        <div className="flex items-center justify-between gap-3 mt-4">
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            {loading ? 'Memuat…' : `${aktifCount} aktif dari ${rows.length} layanan`}
+          </p>
+          {!form && (
+            <button
+              type="button"
+              onClick={() => setForm({ id: null, nama: '', deskripsi: '' })}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-200 enabled:hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+              style={{ background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
+            >
+              <Plus className="w-3.5 h-3.5" /> Tambah Layanan
+            </button>
+          )}
+        </div>
+
+        {form && (
+          <form onSubmit={submit} className="space-y-3 mt-4 rounded-2xl p-4" style={{ background: 'var(--color-muted-bg)' }}>
+            <div>
+              <label style={labelStyle} htmlFor="ly-nama">NAMA LAYANAN</label>
+              <input
+                id="ly-nama" style={inputStyle} value={form.nama} autoFocus required
+                minLength={NAMA_MIN} maxLength={NAMA_MAX}
+                onChange={e => setForm(f => (f ? { ...f, nama: e.target.value } : f))}
+                placeholder="mis. Setup SCM"
+              />
+            </div>
+            <div>
+              <label style={labelStyle} htmlFor="ly-desk">DESKRIPSI (opsional)</label>
+              <input
+                id="ly-desk" style={inputStyle} value={form.deskripsi} maxLength={DESKRIPSI_MAX}
+                onChange={e => setForm(f => (f ? { ...f, deskripsi: e.target.value } : f))}
+                placeholder="Penjelasan singkat isi layanan"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button" onClick={() => { setForm(null); setError(null) }} disabled={saving}
+                className="px-4 py-2 rounded-full text-xs font-medium transition-colors hover:bg-(--color-border-subtle) disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ background: 'white', color: 'var(--color-text-primary)' }}
+              >
+                Batal
+              </button>
+              <button
+                type="submit" disabled={saving || form.nama.trim().length < NAMA_MIN}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all enabled:hover:-translate-y-px disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+                style={{
+                  background: saving ? 'var(--color-muted-dark)' : 'var(--color-accent-primary)',
+                  color: saving ? 'var(--color-text-muted)' : 'var(--color-accent-primary-fg)',
+                }}
+              >
+                {saving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Menyimpan…</> : form.id ? 'Simpan Perubahan' : 'Tambah'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="mt-1 min-h-[18px]">
+          {error && <span role="alert" className="text-xs font-medium" style={{ color: '#dc2626' }}>{error}</span>}
+          {!error && okMsg && <span role="status" className="text-xs font-medium" style={{ color: '#15803d' }}>{okMsg}</span>}
+        </div>
+
+        {!loading && rows.length === 0 && (
+          <p className="text-xs text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
+            Belum ada layanan. Tambahkan jasa yang dijual ke klien.
+          </p>
+        )}
+
+        <div className="mt-3 space-y-1.5">
+          {rows.map(row => (
+            <div
+              key={row.id}
+              className="flex items-center gap-3 px-3.5 py-3 rounded-2xl"
+              style={{ background: 'var(--color-muted-bg)' }}
+            >
+              <div className="flex-1 min-w-0">
+                {/* Nama layanan TIDAK dicoret & tidak diberi label "(dihapus)"
+                    walau nonaktif — bagi kontrak lama ia memang benar-benar
+                    dijual. Statusnya ditunjukkan pill terpisah di kanan. */}
+                <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                  {row.nama}
+                </p>
+                {row.deskripsi && (
+                  <p className="text-[11px] truncate" style={{ color: 'var(--color-text-muted)' }}>{row.deskripsi}</p>
+                )}
+              </div>
+
+              <span
+                className="text-[10px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0"
+                style={
+                  row.aktif
+                    ? { background: '#f0fdf4', color: '#15803d' }
+                    : { background: 'var(--color-muted-dark)', color: 'var(--color-text-muted)' }
+                }
+              >
+                {row.aktif ? 'Aktif' : 'Nonaktif'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setForm({ id: row.id, nama: row.nama, deskripsi: row.deskripsi ?? '' })}
+                aria-label={`Edit ${row.nama}`}
+                className="inline-flex items-center justify-center rounded-full flex-shrink-0 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Toggle aktif — TIDAK ada tombol hapus di baris ini, disengaja. */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={row.aktif}
+                aria-label={`${row.aktif ? 'Nonaktifkan' : 'Aktifkan'} ${row.nama}`}
+                onClick={() => void toggleAktif(row)}
+                disabled={saving}
+                className="flex-shrink-0 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) rounded-full"
+              >
+                <SwitchVisual on={row.aktif} accent="var(--color-accent-primary)" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[11px] mt-4" style={{ color: 'var(--color-text-muted)' }}>
+          Layanan tidak bisa dihapus. Menonaktifkan membuatnya tidak muncul lagi saat
+          membuat kontrak baru, sementara kontrak lama yang memakainya tetap utuh.
+        </p>
+      </SettingsCard>
+    </>
+  )
+}
+
 // ── Tab: Account (semua role) ────────────────────────────────
 // Ganti password AKUN SENDIRI. Terlihat untuk SEMUA role, termasuk klien —
 // lihat lib/settings-tabs.ts. Endpoint POST /api/account/password tidak
@@ -1604,6 +1855,8 @@ export default function SettingsPage() {
               {activeNav.id === 'general' && <GeneralTab readOnly={!isInternal} />}
 
               {activeNav.id === 'users' && isOwner && <UsersTab />}
+
+              {activeNav.id === 'layanan' && <LayananTab />}
 
               {activeNav.id === 'account' && <AccountTab />}
 

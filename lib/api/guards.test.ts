@@ -5,7 +5,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/auth', () => ({ auth: vi.fn() }))
 
 import { auth } from '@/lib/auth'
-import { requireUser, requireAkunting, requireOwner, requireInternal, requireFinance } from './guards'
+import {
+  requireUser, requireAkunting, requireOwner, requireInternal, requireFinance, requireCommercial,
+} from './guards'
 
 const authMock = vi.mocked(auth)
 
@@ -174,5 +176,41 @@ describe('requireFinance — TIDAK sama dengan requireAkunting', () => {
   it('user DITOLAK', async () => {
     authMock.mockResolvedValue(asRole('user') as never)
     expect((await requireFinance()).error?.status).toBe(403)
+  })
+})
+
+// ══ requireCommercial — matriks role master Layanan ══════════════
+describe('requireCommercial — owner + finance, TANPA akunting', () => {
+  it('owner diterima', async () => {
+    authMock.mockResolvedValue(asRole('owner') as never)
+    expect('error' in (await requireCommercial())).toBe(false)
+  })
+
+  it('finance diterima', async () => {
+    authMock.mockResolvedValue(asRole('finance') as never)
+    expect('error' in (await requireCommercial())).toBe(false)
+  })
+
+  it('akunting DITOLAK 403 — ia membukukan, bukan menentukan yang dijual', async () => {
+    authMock.mockResolvedValue(asRole('akunting') as never)
+    expect((await requireCommercial()).error?.status).toBe(403)
+  })
+
+  it('user (klien) DITOLAK 403', async () => {
+    authMock.mockResolvedValue(asRole('user') as never)
+    expect((await requireCommercial()).error?.status).toBe(403)
+  })
+
+  it('tanpa sesi → 401 (bukan 403)', async () => {
+    authMock.mockResolvedValue(null as never)
+    expect((await requireCommercial()).error?.status).toBe(401)
+  })
+
+  it('BACA layanan lebih longgar daripada TULIS: akunting lolos requireInternal', async () => {
+    // GET /api/layanan pakai requireInternal — akunting perlu melihat katalog
+    // untuk memahami kontrak klien yang ia bukukan, ia hanya tak boleh mengubah.
+    authMock.mockResolvedValue(asRole('akunting') as never)
+    expect('error' in (await requireInternal())).toBe(false)
+    expect((await requireCommercial()).error?.status).toBe(403)
   })
 })

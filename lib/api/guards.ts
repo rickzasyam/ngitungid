@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import type { Session } from 'next-auth'
-import { isOwner, isInternal, canDoAccounting } from '@/lib/roles'
+import { isOwner, isInternal, canDoAccounting, canManageCommercial } from '@/lib/roles'
 
 // Helper auth untuk route handler. Pola pemakaian:
 //   const g = await requireAkunting()
@@ -50,6 +50,17 @@ export async function requireInternal(): Promise<Guarded> {
   const session = await auth()
   if (!session?.user) return { error: unauthorized() }
   if (!isInternal(session.user.role)) return { error: forbidden() }
+  return { user: session.user }
+}
+
+/**
+ * Butuh hak KOMERSIAL: owner atau finance, TANPA akunting.
+ * Dipakai untuk tulis master Layanan (dan Kontrak nanti).
+ */
+export async function requireCommercial(): Promise<Guarded> {
+  const session = await auth()
+  if (!session?.user) return { error: unauthorized() }
+  if (!canManageCommercial(session.user.role)) return { error: forbidden() }
   return { user: session.user }
 }
 

@@ -82,9 +82,11 @@ describe('konsistensi daftar', () => {
 })
 
 // ══ Role 'finance' ═══════════════════════════════════════════════
-describe('finance — hanya General + Account', () => {
-  it('melihat PERSIS General & Account', () => {
-    expect(visibleSettingsTabs('finance')).toEqual(['general', 'account'])
+describe('finance — General + Layanan + Account', () => {
+  it('melihat PERSIS ketiganya', () => {
+    // 'layanan' masuk sejak 2026-08-07 lewat flag commercialOnly, BUKAN lewat
+    // FINANCE_VISIBLE_TABS — tab commercialOnly diperiksa lebih dulu.
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'layanan', 'account'])
   })
 
   it('TIDAK melihat Master COA, Analytics Display, Kelola Akun, Notifications', () => {
@@ -99,5 +101,38 @@ describe('finance — hanya General + Account', () => {
     expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
     expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'analytics', 'account', 'notifications'])
     expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
+  })
+})
+
+// ══ Tab Layanan (owner + finance) ════════════════════════════════
+describe('tab Layanan — komersial, bukan akunting', () => {
+  it('owner & finance MELIHAT', () => {
+    expect(isSettingsTabVisible('owner', 'layanan')).toBe(true)
+    expect(isSettingsTabVisible('finance', 'layanan')).toBe(true)
+  })
+
+  it('akunting TIDAK melihat — walau ia isInternal dan tab-nya bukan ownerOnly', () => {
+    // Justru kasus yang paling mudah bocor: cabang isInternal akan
+    // meloloskannya kalau commercialOnly tidak diperiksa lebih dulu.
+    expect(isSettingsTabVisible('akunting', 'layanan')).toBe(false)
+  })
+
+  it('klien TIDAK melihat', () => {
+    expect(isSettingsTabVisible('user', 'layanan')).toBe(false)
+    expect(isSettingsTabVisible(null, 'layanan')).toBe(false)
+  })
+
+  it('daftar lengkap per role', () => {
+    expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'layanan', 'account'])
+    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'analytics', 'account', 'notifications'])
+    expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
+  })
+
+  it('tab lain tidak ikut bergeser karena penambahan Layanan', () => {
+    expect(isSettingsTabVisible('akunting', 'coa')).toBe(true)
+    expect(isSettingsTabVisible('finance', 'coa')).toBe(false)
+    expect(isSettingsTabVisible('akunting', 'users')).toBe(false)
+    expect(isSettingsTabVisible('owner', 'users')).toBe(true)
   })
 })

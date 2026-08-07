@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isOwner, isInternal, canDoAccounting, canAccessClientData,
+  isOwner, isInternal, canDoAccounting, canManageCommercial, canAccessClientData,
   ALL_CLIENT_ACCESS_ROLES, ROLE_LABEL, CREATABLE_ROLES, type Role,
 } from './roles'
 
@@ -233,5 +233,33 @@ describe('kebab klien: siapa melihat item apa', () => {
 
   it('user (klien) tidak melihat kebab sama sekali', () => {
     expect(seesKebab('user')).toBe(false)
+  })
+})
+
+// ══ canManageCommercial ══════════════════════════════════════════
+describe('canManageCommercial — master Layanan & (nanti) Kontrak', () => {
+  it('owner & finance boleh', () => {
+    expect(canManageCommercial('owner')).toBe(true)
+    expect(canManageCommercial('finance')).toBe(true)
+  })
+
+  it('akunting TIDAK boleh — ini yang membedakannya dari isInternal', () => {
+    expect(canManageCommercial('akunting')).toBe(false)
+    expect(isInternal('akunting')).toBe(true) // ia tetap orang dalam
+  })
+
+  it('klien & sesi kosong tidak boleh', () => {
+    expect(canManageCommercial('user')).toBe(false)
+    expect(canManageCommercial(null)).toBe(false)
+    expect(canManageCommercial(undefined)).toBe(false)
+  })
+
+  it('BUKAN subset maupun superset canDoAccounting — keduanya saling silang', () => {
+    // akunting: boleh akunting, tidak boleh komersial.
+    expect(canDoAccounting('akunting') && !canManageCommercial('akunting')).toBe(true)
+    // finance: sebaliknya.
+    expect(!canDoAccounting('finance') && canManageCommercial('finance')).toBe(true)
+    // owner: keduanya.
+    expect(canDoAccounting('owner') && canManageCommercial('owner')).toBe(true)
   })
 })

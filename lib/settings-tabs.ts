@@ -10,22 +10,26 @@
 // Ingat: menyembunyikan tab BUKAN kontrol keamanan. Penjaga sesungguhnya ada di
 // requireOwner()/requireAkunting() pada route API masing-masing.
 
-import { isOwner, isInternal, type Role } from '@/lib/roles'
+import { isOwner, isInternal, canManageCommercial, type Role } from '@/lib/roles'
 
 export type SettingsTabId =
   | 'general'
   | 'coa'
   | 'analytics'
   | 'users'
+  | 'layanan'
   | 'account'
   | 'notifications'
 
 /** Urutan array = urutan tampil di nav kiri. */
-export const SETTINGS_TABS: { id: SettingsTabId; ownerOnly?: boolean }[] = [
+export const SETTINGS_TABS: { id: SettingsTabId; ownerOnly?: boolean; commercialOnly?: boolean }[] = [
   { id: 'general' },
   { id: 'coa' },
   { id: 'analytics' },
   { id: 'users', ownerOnly: true },
+  // Master Layanan: katalog jasa yang dijual. owner + finance, TANPA akunting —
+  // akunting mengerjakan pembukuan klien, bukan menentukan apa yang dijual.
+  { id: 'layanan', commercialOnly: true },
   { id: 'account' },
   { id: 'notifications' },
 ]
@@ -48,14 +52,20 @@ export const USER_VISIBLE_TABS: SettingsTabId[] = ['general', 'coa', 'account']
  * padahal ia tidak mengerjakan akunting. Cabangnya diperiksa LEBIH DULU
  * daripada isInternal() justru karena itu.
  */
+// CATATAN: 'layanan' TIDAK di daftar ini — tab commercialOnly ditangani lebih
+// dulu lewat canManageCommercial(), jadi finance mendapatnya dari sana.
 export const FINANCE_VISIBLE_TABS: SettingsTabId[] = ['general', 'account']
 
 /** Boleh-kah `role` melihat tab `id`? */
 export function isSettingsTabVisible(role: Role | null | undefined, id: SettingsTabId): boolean {
   const tab = SETTINGS_TABS.find(t => t.id === id)
   if (!tab) return false
-  // finance DULUAN — ia juga isInternal, jadi kalau urutannya dibalik ia akan
-  // ikut mendapat Master COA, Analytics Display, dan (kalau owner) Kelola Akun.
+  // commercialOnly PALING DULU — berlaku lintas role, termasuk owner (yang
+  // lolos lewat canManageCommercial) dan akunting (yang TIDAK, walau ia
+  // isInternal dan tab-nya bukan ownerOnly).
+  if (tab.commercialOnly) return canManageCommercial(role)
+  // finance berikutnya — ia juga isInternal, jadi kalau urutannya dibalik ia
+  // akan ikut mendapat Master COA, Analytics Display, dan Kelola Akun.
   if (role === 'finance') return FINANCE_VISIBLE_TABS.includes(id)
   // Orang dalam lain: semua tab, kecuali yang ownerOnly hanya untuk owner.
   if (isInternal(role)) return !tab.ownerOnly || isOwner(role)

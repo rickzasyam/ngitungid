@@ -57,6 +57,13 @@
       "when": 1785986400000,
       "tag": "0007_role_finance",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786072800000,
+      "tag": "0008_layanan",
+      "breakpoints": true
     }
   ]
 }

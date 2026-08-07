@@ -63,6 +63,21 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const CREATABLE_ROLES: Role[] = ['akunting', 'owner', 'user', 'finance']
 
 /**
+ * Boleh mengelola data KOMERSIAL: master Layanan, dan (Phase 3) Kontrak.
+ *
+ * owner + finance, TANPA akunting. Bukan turunan dari predikat lain: akunting
+ * mengerjakan pembukuan klien, bukan menentukan jasa apa yang dijual dan dengan
+ * harga berapa. Memakai canDoAccounting di sini akan memberi akunting kendali
+ * atas katalog komersial, dan memakai isInternal akan memberikannya juga.
+ *
+ * Dipisah sebagai PREDIKAT, bukan cek role inline di route, supaya kalau
+ * kelak ada role komersial lain cukup satu tempat yang berubah.
+ */
+export function canManageCommercial(role: Role | null | undefined): boolean {
+  return role === 'owner' || role === 'finance'
+}
+
+/**
  * Role yang boleh membaca data KLIEN MANA PUN.
  *
  * ALLOWLIST, bukan blocklist — dan itu inti perubahannya. Versi lama berbunyi
