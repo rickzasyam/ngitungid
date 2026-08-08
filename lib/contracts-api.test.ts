@@ -63,10 +63,14 @@ describe('matriks guard endpoint kontrak', () => {
     return src.slice(start, next.length ? Math.min(...next) : undefined)
   }
 
-  it('GET /api/contracts → requireInternal + canAccessClientData', () => {
+  it('GET /api/contracts → requireUser + canAccessClientData (klien boleh kontraknya sendiri)', () => {
     const h = handler(LIST, 'GET')
-    expect(h).toContain('requireInternal()')
+    expect(h).toContain('requireUser()')
+    // Keduanya WAJIB berpasangan: requireUser sendirian meloloskan setiap klien
+    // ke ?clientId= milik klien lain. Kalau baris scoping ini hilang, gerbangnya
+    // bukan longgar — ia bocor antar-klien.
     expect(h).toContain('canAccessClientData(')
+    expect(h).not.toContain('requireInternal()')
   })
 
   it('POST /api/contracts → requireCommercial (owner + finance, bukan akunting)', () => {
@@ -81,13 +85,23 @@ describe('matriks guard endpoint kontrak', () => {
     expect(handler(DETAIL, 'DELETE')).toContain('requireCommercial()')
   })
 
-  it('tulis kontrak TIDAK pernah memakai requireAkunting maupun requireInternal', () => {
+  it('tulis kontrak TIDAK pernah memakai requireAkunting/requireInternal/requireUser', () => {
     // Kalau salah satunya muncul di POST/PATCH/DELETE, akunting mendapat kendali
     // atas kontrak — persis yang dipisahkan lewat canManageCommercial.
-    for (const m of ['POST'] as const) expect(handler(LIST, m)).not.toContain('requireAkunting')
+    for (const m of ['POST'] as const) {
+      expect(handler(LIST, m)).not.toContain('requireAkunting')
+      expect(handler(LIST, m)).not.toContain('requireInternal')
+    }
     for (const m of ['PATCH', 'DELETE'] as const) {
       expect(handler(DETAIL, m)).not.toContain('requireAkunting')
       expect(handler(DETAIL, m)).not.toContain('requireInternal')
+    }
+    // Dan JANGAN pernah requireUser di sisi tulis — sejak GET dibuka untuk
+    // klien, requireUser hidup di file yang sama dan jadi tetangga terdekat
+    // yang salah untuk disalin ke handler tulis.
+    expect(handler(LIST, 'POST')).not.toContain('requireUser')
+    for (const m of ['PATCH', 'DELETE'] as const) {
+      expect(handler(DETAIL, m)).not.toContain('requireUser')
     }
   })
 

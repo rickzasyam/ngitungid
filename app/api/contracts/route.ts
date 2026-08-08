@@ -4,7 +4,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import { randomUUID } from 'node:crypto'
 import { db } from '@/lib/db'
 import { clients, contracts, contractLayanan, layanan } from '@/lib/db/schema'
-import { requireInternal, requireCommercial } from '@/lib/api/guards'
+import { requireUser, requireCommercial } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 import { validateContract, MAX_DOKUMEN_BYTES } from '@/lib/contracts'
@@ -35,12 +35,22 @@ const listCols = {
 
 // GET /api/contracts?clientId=… — daftar kontrak satu klien.
 //
-// requireInternal + canAccessClientData: staf & finance boleh klien mana pun.
-// Role 'user' (klien) SENGAJA tidak lolos requireInternal, jadi ia tidak bisa
-// memakai endpoint ini sama sekali — pembacaan kontrak oleh klien akan
-// ditambahkan bersama UI-nya (Phase 3b) lewat requireUser + scoping yang sama.
+// requireUser + canAccessClientData — ASIMETRIS, pola yang sama dengan
+// GET /api/clients/[id]/coa dan GET /api/reports/list: staf & finance boleh
+// klien mana pun, role 'user' (klien) HANYA kliennya sendiri.
+//
+// Dulu requireInternal. Gerbang itu menutup DAFTAR untuk klien sementara
+// GET /api/contracts/[id]/dokumen — byte PDF kontraknya seutuhnya — sudah
+// terbuka bagi klien lewat requireUser. Jadi ia tidak menjaga apa pun yang
+// belum terbuka di sebelahnya; ia cuma membuat klien bisa membaca dokumennya
+// tanpa bisa menemukan id-nya. Response ini pun ketat LEBIH SEDIKIT daripada
+// route dokumen: metadata saja, tanpa byte.
+//
+// requireUser di sini hanya aman BERPASANGAN dengan canAccessClientData di
+// bawah — tanpa itu setiap klien bisa membaca kontrak klien lain dengan
+// menukar ?clientId=.
 export async function GET(req: Request) {
-  const g = await requireInternal()
+  const g = await requireUser()
   if ('error' in g) return g.error
 
   const clientId = new URL(req.url).searchParams.get('clientId') ?? ''
