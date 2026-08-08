@@ -11,6 +11,7 @@ import {
   timestamp,
   unique,
   index,
+  primaryKey,
   customType,
 } from 'drizzle-orm/pg-core'
 
@@ -61,6 +62,11 @@ export const userRoleEnum = pgEnum('user_role', ['akunting', 'user', 'owner', 'f
 // CATATAN: kolomnya SUDAH tersimpan & bertahan, tapi BELUM punya efek
 // penerjemahan apa pun — i18n adalah Task 4.
 export const userLanguageEnum = pgEnum('user_language', ['id', 'en'])
+
+// Jenis kontrak — daftar TERTUTUP dari brief, jadi enum tepat di sini.
+// reguler : berulang/retainer, ditagih tiap bulan pada tanggalPenagihan
+// project : sekali jalan, berbatas tanggalMulai–tanggalAkhir
+export const jenisKontrakEnum = pgEnum('jenis_kontrak', ['reguler', 'project'])
 
 // ── clients ──────────────────────────────────────────────────
 // logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
@@ -259,6 +265,82 @@ export const layanan = pgTable('layanan', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
+
+// ── contracts ────────────────────────────────────────────────
+// Kontrak klien + dokumen PDF-nya.
+//
+// dokumen disimpan bytea DI DALAM DB, sama seperti financial_reports.source_pdf
+// (keputusan 2026-08-06): kontrak 1-2 per klien per tahun vs 12 laporan, jadi
+// volumenya strictly lebih kecil daripada yang sudah dibawa mekanisme sekarang.
+// KOLOM INI TIDAK BOLEH IKUT DI QUERY DAFTAR — selalu pilih kolom eksplisit,
+// jangan pernah select *. Satu daftar kontrak yang tak sengaja menarik blob
+// akan menyeret puluhan MB lewat serverless function.
+//
+// STATUS TIDAK DISIMPAN. Aktif/akan datang/berakhir DITURUNKAN dari
+// tanggalMulai–tanggalAkhir terhadap hari ini (lib/contracts.ts). Kolom status
+// akan langsung basi begitu tanggal lewat tanpa ada yang menulis ulang.
+//
+// noKontrak unik PER KLIEN, bukan global: dua klien berbeda boleh saja memakai
+// penomoran yang kebetulan sama, dan memaksakan unik global akan menolak
+// kontrak yang sah.
+export const contracts = pgTable(
+  'contracts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    noKontrak: text('no_kontrak').notNull(),
+    jenis: jenisKontrakEnum('jenis').notNull(),
+    // `date`, PERSIS seperti period_start/period_end. Sampai ke UI sebagai
+    // string 'YYYY-MM-DD' dan HARUS diperlakukan sebagai string sampai akhir —
+    // jangan pernah new Date()/Intl/toISOString di atasnya. Lihat lib/contracts.ts.
+    tanggalMulai: date('tanggal_mulai').notNull(),
+    tanggalAkhir: date('tanggal_akhir').notNull(),
+    // Hari dalam bulan (1-31) untuk penagihan. Integer, bukan date: ini pola
+    // berulang, bukan satu tanggal tertentu.
+    tanggalPenagihan: integer('tanggal_penagihan').notNull(),
+    // numeric(18,2) — SAMA dengan report_line_items.amount. Driver
+    // mengembalikannya sebagai STRING, jadi nilainya tidak pernah lewat float
+    // JS; konversi ke number dilakukan eksplisit di titik pakai.
+    nominal: numeric('nominal', { precision: 18, scale: 2 }).notNull(),
+    dokumen: bytea('dokumen').notNull(),
+    namaDokumen: text('nama_dokumen').notNull(),
+    ukuranDokumen: integer('ukuran_dokumen').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    unique('contracts_client_no_kontrak_unique').on(table.clientId, table.noKontrak),
+    index('contracts_client_id_idx').on(table.clientId),
+  ]
+)
+
+// ── contract_layanan ─────────────────────────────────────────
+// Satu kontrak memuat banyak layanan.
+//
+// onDelete BERBEDA di dua sisi, dan itu disengaja:
+//   contractId → CASCADE  : hapus kontrak, baris penghubungnya ikut hilang.
+//   layananId  → RESTRICT : PERTAHANAN TERAKHIR aturan "layanan tidak pernah
+//                           dihapus". Tidak ada endpoint DELETE untuk layanan,
+//                           tapi kalau suatu hari ada yang menambahkannya,
+//                           Postgres yang akan menolak selama masih ada kontrak
+//                           yang memakainya. JANGAN diubah jadi CASCADE.
+export const contractLayanan = pgTable(
+  'contract_layanan',
+  {
+    contractId: uuid('contract_id')
+      .notNull()
+      .references(() => contracts.id, { onDelete: 'cascade' }),
+    layananId: uuid('layanan_id')
+      .notNull()
+      .references(() => layanan.id, { onDelete: 'restrict' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contractId, table.layananId] }),
+    index('contract_layanan_layanan_id_idx').on(table.layananId),
+  ]
+)
 
 // ── client_assignments ───────────────────────────────────────
 // Catatan "siapa pegang klien apa" — MURNI TRACKING/organisasi. Tabel ini
