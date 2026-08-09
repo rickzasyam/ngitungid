@@ -1,0 +1,49 @@
+// Kebijakan TOMBOL di halaman Kontrak, per role. Murni (tanpa I/O, tanpa React).
+//
+// Ada sebagai modul terpisah karena proyek ini tidak punya setup
+// component-testing — jadi kebijakan UI diuji sebagai PREDIKAT, bukan lewat
+// render. Preseden: kebab Admin Overview (2026-08-06), yang diuji dengan cara
+// yang sama.
+//
+// Yang dijaga di sini: role 'user' (klien) BOLEH membuka /kontrak, dan itu
+// membuatnya satu-satunya halaman tempat klien melihat tombol-tombol tulis
+// kalau tidak ada yang menahannya. API sudah menolak lewat requireCommercial,
+// tapi tombol yang bisa diklik lalu gagal 403 adalah bug UI, bukan keamanan
+// yang bekerja.
+
+import { canManageCommercial, canViewContracts, type Role } from '@/lib/roles'
+
+export interface ContractActions {
+  /** Boleh membuka halamannya sama sekali. */
+  lihat: boolean
+  /** Preview dokumen PDF — hak baca, sama luasnya dengan `lihat`. */
+  preview: boolean
+  buat: boolean
+  ganti: boolean
+  hapus: boolean
+  /** Tombol "+ Layanan Baru" di dalam form — menulis ke katalog GLOBAL. */
+  layananBaru: boolean
+}
+
+/**
+ * Dua sumbu, bukan satu tangga:
+ *   canViewContracts   → owner + finance + klien (akunting DITOLAK)
+ *   canManageCommercial → owner + finance        (akunting & klien DITOLAK)
+ *
+ * Setiap aksi tulis di-AND dengan `lihat`. Itu bukan hiasan: kalau suatu saat
+ * sebuah role masuk canManageCommercial tapi tidak canViewContracts, ia akan
+ * mendapat tombol di halaman yang tidak boleh ia buka — kombinasi yang tidak
+ * akan pernah terlihat sampai role itu benar-benar dibuat.
+ */
+export function contractActions(role: Role | null | undefined): ContractActions {
+  const lihat = canViewContracts(role)
+  const kelola = lihat && canManageCommercial(role)
+  return {
+    lihat,
+    preview: lihat,
+    buat: kelola,
+    ganti: kelola,
+    hapus: kelola,
+    layananBaru: kelola,
+  }
+}

@@ -17,13 +17,16 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import {
   FileSignature, Loader2, Trash2, Pencil, Eye, Inbox, RotateCw, Plus, X, Check,
+  AlertTriangle,
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { useClient } from '@/lib/client-context'
 import { useRupiah } from '@/lib/preferences-context'
 import { PdfPreviewModal } from '@/components/ui/pdf-preview-modal'
 import { ModalShell } from '@/components/ui/modal-portal'
-import { canManageCommercial } from '@/lib/roles'
+import { DateRangePicker } from '@/components/date-range-picker'
+import { contractActions } from '@/lib/contract-actions'
+import { localDateToYmd, ymdToLocalDate } from '@/lib/ymd'
 import { layananOptionsForContract, type LayananRow } from '@/lib/layanan'
 import {
   CONTRACT_JENIS, MAX_DOKUMEN_BYTES, TANGGAL_PENAGIHAN_MIN, TANGGAL_PENAGIHAN_MAX,
@@ -121,8 +124,10 @@ export default function KontrakPage() {
   const { activeClient, isLoaded } = useRequireClient()
   const { role, clients } = useClient()
   const { rupiah } = useRupiah()
-  // Tulis = owner + finance. Klien membuka halaman ini read-only.
-  const bolehKelola = canManageCommercial(role)
+  // Kebijakan tombol per role — SATU sumber (lib/contract-actions.ts, teruji),
+  // bukan cek role yang ditulis ulang di tiap tempat tombolnya muncul.
+  const aksi = contractActions(role)
+  const bolehKelola = aksi.buat
   const clientId = activeClient?.id ?? null
 
   const [contracts, setContracts] = useState<Contract[]>([])
@@ -156,6 +161,12 @@ export default function KontrakPage() {
   const [formBanner, setFormBanner] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loadingForm, setLoadingForm] = useState(false)
+
+  // Form "Layanan Baru" inline. null = tertutup; `konfirmasi` = langkah kedua.
+  const [layananBaru, setLayananBaru] = useState<{ nama: string; deskripsi: string } | null>(null)
+  const [layananErr, setLayananErr] = useState<string | null>(null)
+  const [layananKonfirmasi, setLayananKonfirmasi] = useState(false)
+  const [savingLayanan, setSavingLayanan] = useState(false)
 
   useEffect(() => {
     if (!clientId || !dataKey) return
@@ -243,11 +254,14 @@ export default function KontrakPage() {
   }
 
   const closeForm = () => {
-    if (saving) return
+    if (saving || savingLayanan) return
     setForm(null)
     setEditing(null)
     setFormErr({})
     setFormBanner(null)
+    setLayananBaru(null)
+    setLayananErr(null)
+    setLayananKonfirmasi(false)
   }
 
   // ── Simpan ─────────────────────────────────────────────────────
@@ -329,6 +343,61 @@ export default function KontrakPage() {
     () => layananOptionsForContract(layanan, form?.layananIds ?? []),
     [layanan, form?.layananIds]
   )
+
+  // Bentuk Date untuk DateRangePicker — DITURUNKAN dari string di state, bukan
+  // sumber kebenaran kedua. Yang tersimpan & terkirim tetap 'YYYY-MM-DD'.
+  //
+  // SENGAJA tanpa useMemo: DateRangePicker tidak pernah bergantung pada
+  // IDENTITAS objek ini (dibaca lewat value?.from / value?.to, dan disalin ke
+  // state internal hanya saat panel dibuka), jadi memoisasi tidak membeli apa
+  // pun — sementara deps [form?.tanggalMulai, form?.tanggalAkhir] membuat React
+  // Compiler menyerah mengoptimalkan seluruh komponen ini (ia menyimpulkan
+  // `form` sebagai dependensi, lebih longgar daripada yang ditulis).
+  const rentang = {
+    from: form?.tanggalMulai ? ymdToLocalDate(form.tanggalMulai) : undefined,
+    to: form?.tanggalAkhir ? ymdToLocalDate(form.tanggalAkhir) : undefined,
+  }
+
+  /**
+   * Buat layanan lewat endpoint yang SUDAH ada (POST /api/layanan) — tidak ada
+   * endpoint pembuatan kedua. Dipanggil hanya setelah konfirmasi, karena
+   * layanan TIDAK PERNAH bisa dihapus: salah ketik di form kontrak yang sedang
+   * buru-buru akan permanen di katalog global.
+   */
+  const handleCreateLayanan = async () => {
+    if (!layananBaru) return
+    const nama = layananBaru.nama.trim()
+    const deskripsi = layananBaru.deskripsi.trim()
+    setSavingLayanan(true)
+    setLayananErr(null)
+    try {
+      const res = await fetch('/api/layanan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nama, deskripsi: deskripsi === '' ? null : deskripsi }),
+      })
+      if (!res.ok) {
+        // 409 (nama duplikat) & 400 sama-sama tentang FIELD nama — ditampilkan
+        // di bawah input-nya, bukan sebagai toast yang keburu hilang.
+        setLayananErr(await readError(res, 'Gagal menyimpan layanan.'))
+        setLayananKonfirmasi(false)
+        return
+      }
+      const d: { layanan: LayananRow } = await res.json()
+      // Katalog bertambah DAN layanan barunya langsung tercentang. Sisa isi
+      // form tidak disentuh sama sekali — kehilangan kontrak setengah jadi demi
+      // menambah satu layanan justru meniadakan guna tombol ini.
+      setLayanan(prev => [...prev, d.layanan].sort((a, b) => a.nama.localeCompare(b.nama)))
+      setForm(f => (f ? { ...f, layananIds: [...f.layananIds, d.layanan.id] } : f))
+      setLayananBaru(null)
+      setLayananKonfirmasi(false)
+    } catch {
+      setLayananErr('Gagal menyimpan layanan. Coba lagi.')
+      setLayananKonfirmasi(false)
+    } finally {
+      setSavingLayanan(false)
+    }
+  }
 
   if (!isLoaded || !activeClient) return null
 
@@ -480,38 +549,40 @@ export default function KontrakPage() {
                                     Preview di balik menu adalah bagaimana fitur jadi
                                     tak terlihat (pelajaran dari rail /upload). */}
                                 <div className="inline-flex items-center gap-2">
-                                  <button
-                                    aria-label={`Preview dokumen kontrak ${c.noKontrak}`}
-                                    title="Lihat dokumen kontrak (preview inline)"
-                                    onClick={() => { setPreview(c); setActionError(null) }}
-                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                                    style={{ ...ghostBtn(false), color: '#374151' }}
-                                  >
-                                    <Eye className="w-3.5 h-3.5" /> Preview
-                                  </button>
-                                  {bolehKelola && (
-                                    <>
-                                      <button
-                                        aria-label={`Ganti kontrak ${c.noKontrak}`}
-                                        title="Ubah data kontrak / ganti dokumennya"
-                                        disabled={busy !== null || loadingForm}
-                                        onClick={() => void openEdit(c)}
-                                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                                        style={{ ...ghostBtn(busy !== null || loadingForm), color: '#374151' }}
-                                      >
-                                        <Pencil className="w-3.5 h-3.5" /> Ganti
-                                      </button>
-                                      <button
-                                        aria-label={`Hapus kontrak ${c.noKontrak}`}
-                                        title="Hapus kontrak"
-                                        disabled={busy !== null}
-                                        onClick={() => { setConfirmDeleteId(c.id); setActionError(null) }}
-                                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                                        style={{ ...ghostBtn(busy !== null), color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)' }}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" /> Hapus
-                                      </button>
-                                    </>
+                                  {aksi.preview && (
+                                    <button
+                                      aria-label={`Preview dokumen kontrak ${c.noKontrak}`}
+                                      title="Lihat dokumen kontrak (preview inline)"
+                                      onClick={() => { setPreview(c); setActionError(null) }}
+                                      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                      style={{ ...ghostBtn(false), color: '#374151' }}
+                                    >
+                                      <Eye className="w-3.5 h-3.5" /> Preview
+                                    </button>
+                                  )}
+                                  {aksi.ganti && (
+                                    <button
+                                      aria-label={`Ganti kontrak ${c.noKontrak}`}
+                                      title="Ubah data kontrak / ganti dokumennya"
+                                      disabled={busy !== null || loadingForm}
+                                      onClick={() => void openEdit(c)}
+                                      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                      style={{ ...ghostBtn(busy !== null || loadingForm), color: '#374151' }}
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" /> Ganti
+                                    </button>
+                                  )}
+                                  {aksi.hapus && (
+                                    <button
+                                      aria-label={`Hapus kontrak ${c.noKontrak}`}
+                                      title="Hapus kontrak"
+                                      disabled={busy !== null}
+                                      onClick={() => { setConfirmDeleteId(c.id); setActionError(null) }}
+                                      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                      style={{ ...ghostBtn(busy !== null), color: '#dc2626', borderColor: 'rgba(220,38,38,0.25)' }}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" /> Hapus
+                                    </button>
                                   )}
                                 </div>
                               </td>
@@ -655,27 +726,32 @@ export default function KontrakPage() {
               {errText(formErr.jenis)}
             </div>
 
-            {/* 4 — Tanggal Mulai & Akhir. <input type="date"> memberi & menerima
-                'YYYY-MM-DD' apa adanya — tidak ada objek Date di jalur ini. */}
-            <div className="flex gap-3 flex-wrap">
-              <div style={{ flex: 1, minWidth: 180 }}>
-                <label htmlFor="k-mulai" style={label}>Tanggal Mulai</label>
-                <input
-                  id="k-mulai" type="date" value={form.tanggalMulai}
-                  onChange={e => setForm({ ...form, tanggalMulai: e.target.value })}
-                  style={input(!!formErr.tanggalMulai)}
-                />
-                {errText(formErr.tanggalMulai)}
-              </div>
-              <div style={{ flex: 1, minWidth: 180 }}>
-                <label htmlFor="k-akhir" style={label}>Tanggal Akhir</label>
-                <input
-                  id="k-akhir" type="date" value={form.tanggalAkhir}
-                  onChange={e => setForm({ ...form, tanggalAkhir: e.target.value })}
-                  style={input(!!formErr.tanggalAkhir)}
-                />
-                {errText(formErr.tanggalAkhir)}
-              </div>
+            {/* 4 — Tanggal Mulai & Akhir, SATU rentang.
+                Dulu dua <input type="date"> bawaan browser, yang merender
+                mm/dd/yyyy — urutan AS di app berbahasa Indonesia, tempat
+                "03/04" terbaca 3 April oleh pembacanya dan 4 Maret oleh
+                widget-nya. Sekarang memakai DateRangePicker yang SUDAH ada
+                (filter periode Laporan/Analytics); tidak ada picker ketiga.
+                Panelnya z-[70], di atas ModalShell (z-50) — memang dirancang
+                untuk dipakai di dalam modal.
+
+                Nilainya tetap STRING 'YYYY-MM-DD' di state; konversi ke/dari
+                Date HANYA di batas ini, lewat lib/ymd.ts (konstruksi & baca
+                sama-sama komponen lokal, jadi round-trip-nya identitas). */}
+            <div>
+              <span style={label}>Periode Kontrak</span>
+              <DateRangePicker
+                value={rentang}
+                onChange={r =>
+                  setForm({
+                    ...form,
+                    tanggalMulai: r?.from ? localDateToYmd(r.from) : '',
+                    tanggalAkhir: r?.to ? localDateToYmd(r.to) : '',
+                  })
+                }
+                placeholder="Pilih tanggal mulai & akhir"
+              />
+              {errText(formErr.tanggalMulai ?? formErr.tanggalAkhir)}
             </div>
 
             {/* 5 — Tanggal Penagihan */}
@@ -711,7 +787,9 @@ export default function KontrakPage() {
               <span style={label}>Layanan</span>
               {opsiLayanan.length === 0 ? (
                 <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                  Belum ada layanan aktif. Tambahkan lewat Settings → Layanan.
+                  {aksi.layananBaru
+                    ? 'Belum ada layanan aktif. Tambahkan langsung di bawah, atau lewat Settings → Layanan.'
+                    : 'Belum ada layanan aktif. Tambahkan lewat Settings → Layanan.'}
                 </p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 190, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 10, padding: 12 }}>
@@ -742,6 +820,113 @@ export default function KontrakPage() {
                 </div>
               )}
               {errText(formErr.layananIds)}
+
+              {/* "+ Layanan Baru" — supaya kontrak tidak perlu ditinggalkan
+                  hanya untuk menambah satu jasa. Digerbangi aksi.layananBaru
+                  (canManageCommercial): klien & akunting akan dapat 403 dari
+                  POST /api/layanan, jadi tombolnya tidak boleh ada bagi mereka. */}
+              {aksi.layananBaru && !layananBaru && (
+                <button
+                  type="button"
+                  onClick={() => { setLayananBaru({ nama: '', deskripsi: '' }); setLayananErr(null); setLayananKonfirmasi(false) }}
+                  className="inline-flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  style={{ gap: 6, marginTop: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, minHeight: 32, border: '1px dashed #d4d4d8', background: 'white', color: '#374151', cursor: 'pointer' }}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Layanan Baru
+                </button>
+              )}
+
+              {aksi.layananBaru && layananBaru && (
+                <div style={{ marginTop: 10, border: '1px solid #ececec', borderRadius: 12, padding: 12, background: '#fcfcfd' }}>
+                  <label htmlFor="lb-nama" style={{ ...label, fontSize: 11.5 }}>Nama Layanan</label>
+                  <input
+                    id="lb-nama"
+                    value={layananBaru.nama}
+                    onChange={e => { setLayananBaru({ ...layananBaru, nama: e.target.value }); setLayananKonfirmasi(false); setLayananErr(null) }}
+                    placeholder="mis. Setup SCM"
+                    disabled={savingLayanan}
+                    aria-invalid={!!layananErr}
+                    aria-describedby={layananErr ? 'lb-nama-err' : undefined}
+                    style={{ ...input(!!layananErr), padding: '8px 11px', fontSize: 12.5 }}
+                  />
+                  {layananErr && <p id="lb-nama-err" style={{ fontSize: 11.5, color: '#b91c1c', marginTop: 5 }}>{layananErr}</p>}
+
+                  <label htmlFor="lb-desk" style={{ ...label, fontSize: 11.5, marginTop: 10 }}>Deskripsi (opsional)</label>
+                  <input
+                    id="lb-desk"
+                    value={layananBaru.deskripsi}
+                    onChange={e => { setLayananBaru({ ...layananBaru, deskripsi: e.target.value }); setLayananKonfirmasi(false) }}
+                    placeholder="Keterangan singkat"
+                    disabled={savingLayanan}
+                    style={{ ...input(false), padding: '8px 11px', fontSize: 12.5 }}
+                  />
+
+                  {!layananKonfirmasi ? (
+                    <div className="flex items-center gap-2" style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        disabled={layananBaru.nama.trim().length < 2 || savingLayanan}
+                        onClick={() => { setLayananErr(null); setLayananKonfirmasi(true) }}
+                        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                        style={{
+                          padding: '7px 14px', fontSize: 12, fontWeight: 600, minHeight: 32, border: 'none',
+                          background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)',
+                          cursor: layananBaru.nama.trim().length < 2 ? 'default' : 'pointer',
+                          opacity: layananBaru.nama.trim().length < 2 ? 0.5 : 1,
+                        }}
+                      >
+                        Simpan Layanan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setLayananBaru(null); setLayananErr(null); setLayananKonfirmasi(false) }}
+                        className="rounded-full"
+                        style={{ padding: '7px 14px', fontSize: 12, minHeight: 32, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    /* KONFIRMASI — menyebut namanya, dan menyebut kenapa ini
+                       tidak bisa dibatalkan nanti. Layanan tidak punya endpoint
+                       DELETE dan tidak akan pernah punya; yang ada cuma
+                       menonaktifkan, dan itu tidak menghapus nama yang salah
+                       ketik dari katalog. */
+                    <div style={{ marginTop: 12, background: '#fffbeb', border: '1px solid rgba(180,83,9,0.2)', borderRadius: 10, padding: '10px 12px' }}>
+                      <div className="flex items-start" style={{ gap: 8 }}>
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: '#b45309', marginTop: 1 }} />
+                        <p style={{ fontSize: 12, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
+                          Tambahkan <strong>&ldquo;{layananBaru.nama.trim()}&rdquo;</strong> ke katalog Layanan?
+                          {' '}Layanan <strong>tidak pernah bisa dihapus</strong> — hanya bisa dinonaktifkan supaya
+                          berhenti muncul di picker. Nama yang salah ketik akan permanen di katalog global dan ikut
+                          terlihat pada kontrak klien lain.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2" style={{ marginTop: 10 }}>
+                        <button
+                          type="button"
+                          disabled={savingLayanan}
+                          onClick={() => void handleCreateLayanan()}
+                          className="inline-flex items-center gap-1.5 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                          style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, minHeight: 32, border: 'none', background: '#b45309', color: 'white', cursor: savingLayanan ? 'default' : 'pointer' }}
+                        >
+                          {savingLayanan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          {savingLayanan ? 'Menyimpan…' : 'Ya, tambahkan'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingLayanan}
+                          onClick={() => setLayananKonfirmasi(false)}
+                          className="rounded-full"
+                          style={{ padding: '7px 14px', fontSize: 12, minHeight: 32, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 8 — Dokumen */}
