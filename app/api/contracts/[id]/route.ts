@@ -3,7 +3,8 @@ import { eq, inArray } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { contracts, contractLayanan, layanan } from '@/lib/db/schema'
-import { requireCommercial } from '@/lib/api/guards'
+import { requireUser, requireCommercial } from '@/lib/api/guards'
+import { canAccessClientData } from '@/lib/roles'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 import { validateContract, MAX_DOKUMEN_BYTES } from '@/lib/contracts'
 
@@ -25,6 +26,42 @@ const cols = {
   ukuranDokumen: contracts.ukuranDokumen,
   createdAt: contracts.createdAt,
   updatedAt: contracts.updatedAt,
+}
+
+// GET /api/contracts/[id] — satu kontrak + id layanannya. TANPA byte dokumen.
+//
+// Ada supaya form edit mengambil recordnya secara OTORITATIF, bukan menyaring
+// dari state daftar: state itu basi (kontrak bisa berubah sejak daftar dimuat)
+// atau tidak ada sama sekali pada direct load / refresh halaman edit.
+//
+// requireUser + canAccessClientData dengan URUTAN yang sama seperti route
+// dokumen di sebelah dan /api/reports/[id]/pdf: baris diambil DULU, pemeriksaan
+// klien menyusul memakai `row.clientId` — BUKAN id yang datang dari request.
+// Membaliknya berarti mempercayai pemanggil untuk menyebutkan kliennya sendiri.
+// Berbeda dari route daftar yang memang menerima ?clientId=, di sini tidak ada
+// clientId dari pemanggil sama sekali, jadi urutan itu satu-satunya cara benar.
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const g = await requireUser()
+  if ('error' in g) return g.error
+
+  const { id } = await params
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json({ error: 'ID kontrak tidak valid.' }, { status: 400 })
+  }
+
+  const [row] = await db.select(cols).from(contracts).where(eq(contracts.id, id)).limit(1)
+  if (!row) return NextResponse.json({ error: 'Kontrak tidak ditemukan.' }, { status: 404 })
+  if (!canAccessClientData(g.user.role, g.user.clientId, row.clientId)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Query terpisah, bukan join — join menggandakan baris kontrak per layanan.
+  const links = await db
+    .select({ layananId: contractLayanan.layananId })
+    .from(contractLayanan)
+    .where(eq(contractLayanan.contractId, id))
+
+  return NextResponse.json({ contract: { ...row, layananIds: links.map(l => l.layananId) } })
 }
 
 // PATCH /api/contracts/[id] — ubah kontrak. owner + finance SAJA.

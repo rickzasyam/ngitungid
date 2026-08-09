@@ -20,6 +20,23 @@ const LIST = read('app', 'api', 'contracts', 'route.ts')
 const DETAIL = read('app', 'api', 'contracts', '[id]', 'route.ts')
 const DOKUMEN = read('app', 'api', 'contracts', '[id]', 'dokumen', 'route.ts')
 
+/**
+ * Ambil badan satu handler HTTP dari source.
+ *
+ * Di module scope (bukan di dalam satu describe) karena dipakai DUA kelompok
+ * test: matriks guard, dan pemeriksaan blob per-handler — sejak route detail
+ * punya GET, "tidak menyentuh dokumen" harus bisa ditanyakan per handler, bukan
+ * cuma untuk seluruh file.
+ */
+const handler = (src: string, method: string): string => {
+  const start = src.indexOf(`export async function ${method}(`)
+  expect(start, `${method} ada`).toBeGreaterThan(-1)
+  const next = ['GET', 'POST', 'PATCH', 'DELETE']
+    .map(m => src.indexOf(`export async function ${m}(`, start + 1))
+    .filter(i => i > -1)
+  return src.slice(start, next.length ? Math.min(...next) : undefined)
+}
+
 // ══ BLOB TIDAK PERNAH IKUT DI DAFTAR ═════════════════════════════
 describe('kolom dokumen tidak pernah masuk query daftar', () => {
   it('route daftar TIDAK menyebut contracts.dokumen sama sekali', () => {
@@ -27,11 +44,21 @@ describe('kolom dokumen tidak pernah masuk query daftar', () => {
     expect(LIST).not.toContain('contracts.dokumen')
   })
 
-  it('route detail (PATCH/DELETE) TIDAK menyebutnya di daftar kolom', () => {
+  it('route detail (GET/PATCH/DELETE) TIDAK menyebutnya di daftar kolom', () => {
     // PATCH boleh MENULIS dokumen (lewat dokumenPatch), tapi tidak boleh
-    // MEMBACANYA ke dalam response.
+    // MEMBACANYA ke dalam response. GET memakai daftar kolom yang sama.
     const cols = DETAIL.slice(DETAIL.indexOf('const cols = {'), DETAIL.indexOf('}', DETAIL.indexOf('const cols = {')))
     expect(cols).not.toContain('dokumen')
+  })
+
+  it('GET /api/contracts/[id] TIDAK menyentuh byte dokumen sama sekali', () => {
+    // Gerbang yang sebenarnya. `cols` yang bersih tidak menolong kalau handler
+    // GET menambahkan select-nya sendiri — dan GET detail adalah handler baru
+    // yang paling mungkin "sekalian" mengembalikan dokumennya demi form edit.
+    // Form itu cukup tahu namaDokumen & ukurannya; byte-nya lewat /dokumen.
+    const h = handler(DETAIL, 'GET')
+    expect(h).not.toContain('contracts.dokumen')
+    expect(h).not.toContain('dokumen:')
   })
 
   it('hanya route dokumen yang memilih contracts.dokumen', () => {
@@ -53,16 +80,6 @@ describe('kolom dokumen tidak pernah masuk query daftar', () => {
 
 // ══ GUARD PER ENDPOINT ═══════════════════════════════════════════
 describe('matriks guard endpoint kontrak', () => {
-  /** Ambil badan satu handler HTTP dari source. */
-  const handler = (src: string, method: string): string => {
-    const start = src.indexOf(`export async function ${method}(`)
-    expect(start, `${method} ada`).toBeGreaterThan(-1)
-    const next = ['GET', 'POST', 'PATCH', 'DELETE']
-      .map(m => src.indexOf(`export async function ${m}(`, start + 1))
-      .filter(i => i > -1)
-    return src.slice(start, next.length ? Math.min(...next) : undefined)
-  }
-
   it('GET /api/contracts → requireUser + canAccessClientData (klien boleh kontraknya sendiri)', () => {
     const h = handler(LIST, 'GET')
     expect(h).toContain('requireUser()')
@@ -109,6 +126,18 @@ describe('matriks guard endpoint kontrak', () => {
     expect(DOKUMEN).toContain('requireUser()')
     expect(DOKUMEN).toContain('canAccessClientData(')
   })
+
+  it('GET /api/contracts/[id] → requireUser + canAccessClientData', () => {
+    const h = handler(DETAIL, 'GET')
+    expect(h).toContain('requireUser()')
+    expect(h).toContain('canAccessClientData(')
+    // requireCommercial di sini akan mengunci form edit dari klien yang justru
+    // berhak membaca kontraknya sendiri; requireInternal akan melakukan hal yang
+    // sama. Baca kontrak SATUAN mengikuti route daftar, bukan sisi tulis di
+    // file yang sama.
+    expect(h).not.toContain('requireCommercial()')
+    expect(h).not.toContain('requireInternal()')
+  })
 })
 
 // ══ URUTAN PEMERIKSAAN AKSES ═════════════════════════════════════
@@ -125,6 +154,19 @@ describe('scoping dokumen memakai clientId milik KONTRAK', () => {
 
   it('yang dipakai adalah row.clientId, bukan parameter request', () => {
     expect(DOKUMEN).toMatch(/canAccessClientData\([^)]*row\.clientId/)
+  })
+
+  it('GET detail ikut aturan yang sama: select DULU, cek klien menyusul', () => {
+    // Route ini TIDAK menerima clientId dari pemanggil sama sekali, jadi
+    // satu-satunya sumber yang sah adalah baris kontraknya sendiri. Kalau suatu
+    // saat ada yang menambahkan ?clientId= "biar hemat satu query", urutan ini
+    // yang menahannya.
+    const h = handler(DETAIL, 'GET')
+    const iSelect = h.indexOf('.from(contracts)')
+    const iCheck = h.indexOf('canAccessClientData(')
+    expect(iSelect).toBeGreaterThan(-1)
+    expect(iCheck).toBeGreaterThan(iSelect)
+    expect(h).toMatch(/canAccessClientData\([^)]*row\.clientId/)
   })
 
   it('runtime nodejs (bytea + neon-http tidak jalan di edge)', () => {
