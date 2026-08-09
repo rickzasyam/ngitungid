@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isPathAllowedForRole, STAFF_ONLY_PREFIXES, ACCOUNTING_ONLY_PREFIXES,
-  INTERNAL_ONLY_PREFIXES, USER_HOME,
+  INTERNAL_ONLY_PREFIXES, CONTRACT_PREFIXES, USER_HOME,
 } from './route-access'
 import { isInternal, type Role } from './roles'
 
@@ -191,6 +191,71 @@ describe('pembagian daftar prefix', () => {
       for (const r of ['owner', 'akunting', 'finance'] as const) {
         expect(isPathAllowedForRole(r, p), `${r} ${p}`).toBe(true)
       }
+    }
+  })
+
+  it('CONTRACT_PREFIXES TIDAK ikut STAFF_ONLY — klien justru boleh ke sana', () => {
+    for (const p of CONTRACT_PREFIXES) {
+      expect((STAFF_ONLY_PREFIXES as readonly string[]).includes(p), p).toBe(false)
+    }
+  })
+})
+
+// ══ /kontrak — matriks LENGKAP per role ══════════════════════════
+//
+// Bentuk yang tidak dimiliki surface lain: klien BOLEH, akunting TIDAK.
+// Karena itu ia diuji role-per-role secara eksplisit, bukan lewat konstanta
+// STAFF_ROLES / USER_ALLOWED yang mengasumsikan "staf ⊇ klien".
+describe('isPathAllowedForRole — /kontrak', () => {
+  const HARAP: [Role, boolean][] = [
+    ['owner', true],
+    ['finance', true],
+    ['user', true],
+    ['akunting', false], // satu-satunya yang ditolak — pembukuan ≠ komersial
+  ]
+
+  it.each(HARAP)('%s → %s', (role, boleh) => {
+    expect(isPathAllowedForRole(role, '/kontrak')).toBe(boleh)
+  })
+
+  it.each(HARAP)('%s → %s juga untuk sub-path /kontrak/<id>', (role, boleh) => {
+    expect(isPathAllowedForRole(role, '/kontrak/abc-123')).toBe(boleh)
+    expect(isPathAllowedForRole(role, '/kontrak/abc/edit')).toBe(boleh)
+  })
+
+  it('role KELIMA — yang belum terdaftar — DITOLAK (allowlist, bukan blocklist)', () => {
+    // Role berikutnya tidak boleh mewarisi halaman komersial hanya karena tidak
+    // ada di daftar larangan mana pun. Ini kegagalan yang sama yang dulu ada di
+    // canAccessClientData & isPathAllowedForRole, dan arah kegagalannya harus
+    // MENOLAK. Sengaja di-cast: nilainya memang belum ada di type Role.
+    const rolebaru = 'marketing' as Role
+    expect(isPathAllowedForRole(rolebaru, '/kontrak')).toBe(false)
+    expect(isPathAllowedForRole(rolebaru, '/kontrak/abc')).toBe(false)
+  })
+
+  it('prefix match tidak bocor ke path yang cuma berawalan sama', () => {
+    // '/kontraktor' BUKAN sub-path '/kontrak' → tidak boleh ikut tergerbangi.
+    expect(isPathAllowedForRole('akunting', '/kontraktor')).toBe(true)
+    expect(isPathAllowedForRole('user', '/kontraktor')).toBe(true)
+  })
+
+  it('akunting yang membuka /kontrak dilempar SEKALI lalu berhenti', () => {
+    // Tujuan pantulannya (USER_HOME) wajib halaman yang akunting memang boleh,
+    // kalau tidak ia ikut berputar seperti kasus finance 2026-08-06.
+    expect(settle('akunting', '/kontrak', true)).toEqual(['/kontrak', USER_HOME])
+  })
+
+  it('owner/finance DENGAN klien aktif berhenti di /kontrak; user selalu berhenti', () => {
+    for (const r of ['owner', 'finance'] as const) {
+      expect(settle(r, '/kontrak', true), r).toEqual(['/kontrak'])
+    }
+    expect(settle('user', '/kontrak', false)).toEqual(['/kontrak'])
+  })
+
+  it('owner/finance TANPA klien aktif sampai di pemilih klien, bukan loop', () => {
+    for (const r of ['owner', 'finance'] as const) {
+      expect(() => settle(r, '/kontrak', false), r).not.toThrow()
+      expect(settle(r, '/kontrak', false).at(-1), r).toBe('/admin-overview')
     }
   })
 })

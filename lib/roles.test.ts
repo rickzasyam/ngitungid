@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  isOwner, isInternal, canDoAccounting, canManageCommercial, canAccessClientData,
-  ALL_CLIENT_ACCESS_ROLES, ROLE_LABEL, CREATABLE_ROLES, type Role,
+  isOwner, isInternal, canDoAccounting, canManageCommercial, canViewContracts,
+  canAccessClientData, ALL_CLIENT_ACCESS_ROLES, CONTRACT_VIEW_ROLES,
+  ROLE_LABEL, CREATABLE_ROLES, type Role,
 } from './roles'
 
 // isStaff() DIHAPUS dan dipecah jadi dua predikat. Dulu satu fungsi itu berarti
@@ -261,5 +262,62 @@ describe('canManageCommercial — master Layanan & (nanti) Kontrak', () => {
     expect(!canDoAccounting('finance') && canManageCommercial('finance')).toBe(true)
     // owner: keduanya.
     expect(canDoAccounting('owner') && canManageCommercial('owner')).toBe(true)
+  })
+})
+
+// ══ canViewContracts — bentuk yang tidak dimiliki predikat lain ══
+//
+// SATU-SATUNYA predikat di file ini yang memberi klien sesuatu yang TIDAK
+// dimiliki akunting. Kalau suatu saat ada yang "merapikan" dengan menyusunnya
+// dari canManageCommercial atau isInternal, salah satu ujungnya patah — dan
+// test di bawah menyebutkan ujung mana.
+describe('canViewContracts — owner + finance + klien, TANPA akunting', () => {
+  it('owner & finance boleh (mereka yang mengelola kontrak)', () => {
+    expect(canViewContracts('owner')).toBe(true)
+    expect(canViewContracts('finance')).toBe(true)
+  })
+
+  it('user (klien) BOLEH — kontraknya sendiri adalah dokumen miliknya', () => {
+    expect(canViewContracts('user')).toBe(true)
+  })
+
+  it('akunting DITOLAK — pembukuan klien bukan urusan komersial', () => {
+    expect(canViewContracts('akunting')).toBe(false)
+  })
+
+  it('null/undefined ditolak (sesi belum resolve = jangan tampilkan)', () => {
+    expect(canViewContracts(null)).toBe(false)
+    expect(canViewContracts(undefined)).toBe(false)
+  })
+
+  it('role yang BELUM TERDAFTAR ditolak — allowlist, bukan blocklist', () => {
+    // Arah kegagalan yang benar. Kalau daftar ini pernah dibalik jadi
+    // "semua kecuali akunting", role berikutnya diam-diam mendapat halaman
+    // komersial tanpa ada yang memutuskan begitu — persis cacat lama
+    // canAccessClientData.
+    expect(canViewContracts('marketing' as Role)).toBe(false)
+  })
+
+  it('BUKAN turunan canManageCommercial: klien ada di sini, tidak di sana', () => {
+    expect(canViewContracts('user')).toBe(true)
+    expect(canManageCommercial('user')).toBe(false)
+  })
+
+  it('BUKAN turunan isInternal: akunting internal tapi tidak boleh lihat kontrak', () => {
+    expect(isInternal('akunting')).toBe(true)
+    expect(canViewContracts('akunting')).toBe(false)
+  })
+
+  it('melihat ≠ mengelola — klien boleh lihat, tidak boleh tulis', () => {
+    // Guard tulis (requireCommercial) berdiri di predikat yang BERBEDA. Kalau
+    // keduanya pernah disatukan, klien mendapat tombol simpan.
+    for (const r of ['user'] as const) {
+      expect(canViewContracts(r) && !canManageCommercial(r)).toBe(true)
+    }
+  })
+
+  it('CONTRACT_VIEW_ROLES tepat berisi 3 role & konsisten dengan predikatnya', () => {
+    expect([...CONTRACT_VIEW_ROLES].sort()).toEqual(['finance', 'owner', 'user'])
+    for (const r of CONTRACT_VIEW_ROLES) expect(canViewContracts(r), r).toBe(true)
   })
 })

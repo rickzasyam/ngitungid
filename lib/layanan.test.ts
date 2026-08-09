@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   selectableLayanan,
   resolveLayanan,
+  layananOptionsForContract,
   layananDisplayName,
   validateLayanan,
   NAMA_MIN,
@@ -144,5 +145,70 @@ describe('validateLayanan', () => {
 
   it('partial: nama yang DIKIRIM tetap divalidasi', () => {
     expect(validateLayanan({ nama: 'A' }, { partial: true }).ok).toBe(false)
+  })
+})
+
+// ══ PICKER FORM KONTRAK — kasus yang jadi alasan seluruh desain ══
+//
+// Form EDIT mengirim ISI PICKER ke PATCH. Jadi apa pun yang tidak muncul di
+// picker akan HILANG dari kontrak begitu form disimpan — tanpa error, tanpa
+// peringatan, tanpa ada yang memutuskan begitu. Kalau picker memakai
+// selectableLayanan(), setiap kontrak yang memuat layanan nonaktif kehilangan
+// layanan itu hanya karena dibuka dan disimpan ulang.
+describe('layananOptionsForContract — nonaktif yang SUDAH terpilih tetap tampil', () => {
+  it('kontrak yang memuat layanan nonaktif TETAP menampilkannya sebagai opsi', () => {
+    const opts = layananOptionsForContract(ALL, [SETUP_SCM.id])
+    expect(opts.map(l => l.id)).toContain(SETUP_SCM.id)
+  })
+
+  it('INI YANG DICEGAH: menyimpan ulang tidak boleh menjatuhkan layanan nonaktif', () => {
+    // Simulasi jalur form: opsi → yang tercentang → payload PATCH.
+    const tersimpan = [SETUP_SCM.id, PEMBUKUAN.id]
+    const opts = layananOptionsForContract(ALL, tersimpan)
+    const tercentang = opts.filter(l => tersimpan.includes(l.id)).map(l => l.id)
+    // Tidak ada yang diklik — user cuma membuka form lalu menekan Simpan.
+    expect([...tercentang].sort()).toEqual([...tersimpan].sort())
+
+    // Pembanding: picker yang "benar" untuk kontrak BARU justru salah di sini.
+    const salah = selectableLayanan(ALL).filter(l => tersimpan.includes(l.id)).map(l => l.id)
+    expect(salah).not.toContain(SETUP_SCM.id)
+    expect(salah).toHaveLength(1) // Setup SCM menguap tanpa jejak
+  })
+
+  it('nonaktif yang TIDAK terpilih tetap disembunyikan (bukan "tampilkan semua")', () => {
+    const opts = layananOptionsForContract(ALL, [PEMBUKUAN.id])
+    expect(opts.map(l => l.id)).not.toContain(SETUP_SCM.id)
+  })
+
+  it('kontrak BARU (belum ada pilihan) = persis selectableLayanan', () => {
+    expect(layananOptionsForContract(ALL, [])).toEqual(selectableLayanan(ALL))
+  })
+
+  it('urutan mengikuti `all`, jadi yang nonaktif duduk di tempat alfabetisnya', () => {
+    // Bukan ditempel di ujung daftar — itu akan jadi penanda visual "berbeda",
+    // persis yang dilarang: kontrak lama merender layanannya NORMAL.
+    const opts = layananOptionsForContract(ALL, [SETUP_SCM.id])
+    expect(opts.map(l => l.id)).toEqual(ALL.map(l => l.id))
+  })
+
+  it('id asing di selectedIds tidak memunculkan entri hantu', () => {
+    const opts = layananOptionsForContract(ALL, ['99999999-9999-9999-9999-999999999999'])
+    expect(opts).toEqual(selectableLayanan(ALL))
+    expect(opts.every(l => l !== null)).toBe(true)
+  })
+
+  it('tidak memutasi input', () => {
+    const salinan = [...ALL]
+    layananOptionsForContract(ALL, [SETUP_SCM.id])
+    expect(ALL).toEqual(salinan)
+  })
+
+  it('konsisten dengan resolveLayanan: yang di-resolve pasti bisa dipilih ulang', () => {
+    // Dua fungsi ini harus sepakat, kalau tidak kontrak bisa MENAMPILKAN
+    // layanan yang form-nya sendiri tidak bisa mempertahankannya.
+    const ids = [SETUP_SCM.id, PAJAK.id]
+    const terpasang = resolveLayanan(ALL, ids).filter((l): l is LayananRow => l !== null)
+    const opts = layananOptionsForContract(ALL, ids)
+    for (const l of terpasang) expect(opts.map(o => o.id), l.nama).toContain(l.id)
   })
 })

@@ -52,6 +52,34 @@ export function resolveLayanan(
   return ids.map(id => byId.get(id) ?? null)
 }
 
+/**
+ * Opsi picker untuk form kontrak — gabungan yang benar dari kedua fungsi di
+ * atas, dan satu-satunya yang boleh dipakai form EDIT.
+ *
+ * `selectableLayanan()` saja SALAH di form edit, dan salahnya senyap: kontrak
+ * lama boleh memuat layanan yang kini nonaktif. Kalau picker hanya menampilkan
+ * yang aktif, layanan itu tidak muncul sebagai tercentang — lalu ikut TERHAPUS
+ * dari kontrak begitu form disimpan, karena yang dikirim ke PATCH adalah isi
+ * picker. Tidak ada error, tidak ada peringatan; kontrak yang tadinya memuat
+ * "Setup SCM" diam-diam kehilangan satu layanan hanya karena dibuka dan
+ * disimpan lagi.
+ *
+ * Itu persis kerusakan yang dicegah oleh aturan "layanan tidak pernah dihapus",
+ * tapi lewat pintu belakang UI — jadi pagarnya harus berdiri di sini juga.
+ *
+ * Aturannya: semua yang AKTIF, ditambah yang SUDAH TERPILIH walau nonaktif.
+ * Urutan mengikuti `all` (query sudah urut nama) supaya yang nonaktif duduk di
+ * tempat alfabetisnya, tidak menonjol di ujung daftar — ia tidak diberi penanda
+ * apa pun, konsisten dengan resolveLayanan().
+ */
+export function layananOptionsForContract(
+  all: readonly LayananRow[],
+  selectedIds: readonly string[]
+): LayananRow[] {
+  const selected = new Set(selectedIds)
+  return all.filter(l => l.aktif || selected.has(l.id))
+}
+
 /** Nama untuk ditampilkan. Sengaja TIDAK menambah "(nonaktif)" atau coretan —
  *  lihat catatan di kepala file. */
 export function layananDisplayName(l: LayananRow): string {

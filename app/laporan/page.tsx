@@ -16,7 +16,7 @@ import {
 import { useRequireClient } from '@/lib/use-require-client'
 import { useClient } from '@/lib/client-context'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { ModalShell } from '@/components/ui/modal-portal'
+import { PdfPreviewModal } from '@/components/ui/pdf-preview-modal'
 import type { RetryState } from '@/lib/reports/retry-policy'
 
 type ReportType = 'laba_rugi' | 'neraca' | 'arus_kas'
@@ -99,72 +99,6 @@ function MapProgress({ mapped, total }: { mapped: number; total: number }) {
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width .3s' }} />
       </div>
     </div>
-  )
-}
-
-// Preview PDF inline (semua role) — iframe ke GET /api/reports/[id]/pdf (browser
-// render PDF native, tanpa library). Tutup dengan Esc / tombol / klik backdrop.
-//
-// Dulu slide-over yang menempel di kanan selebar 680px. Masalahnya muncul begitu
-// user zoom in di viewer PDF bawaan browser: halaman A4 melebar di dalam panel
-// sempit itu lalu terpotong kiri-kanan, dan tidak ada ruang untuk digeser.
-// Sekarang modal di TENGAH lewat ModalShell — sekalian ikut memusat ke area
-// konten dan tetap benar saat sidebar dilipat.
-function PdfPreview({ report, onClose }: { report: ReportMeta; onClose: () => void }) {
-  const titleId = `pdf-preview-title-${report.id}`
-
-  // Fokus awal dipasang lewat ref callback, BUKAN useEffect. ModalShell menaruh
-  // isinya di portal yang baru muncul setelah render pertamanya, jadi saat efek
-  // milik komponen ini jalan tombolnya belum ada dan .focus() diam-diam tidak
-  // kena sasaran. Ref callback dipanggil tepat ketika node menempel.
-  // useCallback([]) menjaga identitasnya stabil supaya fokus tidak direbut ulang
-  // tiap render.
-  const setCloseBtn = useCallback((node: HTMLButtonElement | null) => {
-    node?.focus()
-  }, [])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  return (
-    // max-w-4xl (896px) — cukup lebar untuk membaca A4 pada zoom normal, masih
-    // menyisakan backdrop di kiri-kanan supaya jelas ini modal.
-    // h-[85vh] (bukan cuma max-w) disengaja: ModalShell hanya MEMBATASI tinggi,
-    // tidak memberi tinggi. Tanpa ini `flex-1` di pembungkus iframe punya
-    // flex-basis 0 pada sumbu utama sehingga iframe jatuh ke tinggi bawaannya
-    // (150px) dan modal terlihat kuncup.
-    <ModalShell onDismiss={onClose} labelledBy={titleId} className="max-w-4xl h-[85vh]">
-      <div className="flex items-center justify-between gap-3 flex-shrink-0" style={{ padding: '15px 20px', borderBottom: '1px solid #f0f0f0' }}>
-        <div className="min-w-0 flex items-center gap-2.5">
-          <div className="flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, borderRadius: 9, background: TYPE_ACCENT[report.reportType] + '22' }}>
-            <FileText className="w-4 h-4" style={{ color: '#1f2430' }} />
-          </div>
-          <div className="min-w-0">
-            <div id={titleId} style={{ fontSize: 13.5, fontWeight: 700, color: '#1f2430' }}>{TYPE_LABEL[report.reportType]}</div>
-            <div className="truncate" style={{ fontSize: 11.5, color: 'var(--color-text-muted)', maxWidth: 440 }} title={report.sourceFileName}>{report.sourceFileName}</div>
-          </div>
-        </div>
-        <button
-          ref={setCloseBtn}
-          onClick={onClose}
-          aria-label="Tutup preview"
-          className="inline-flex items-center justify-center rounded-full flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-          style={{ width: 34, height: 34, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-muted)', cursor: 'pointer' }}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="flex-1 min-h-0" style={{ background: '#525659' }}>
-        <iframe
-          src={`/api/reports/${report.id}/pdf`}
-          title={`PDF ${TYPE_LABEL[report.reportType]} — ${report.sourceFileName}`}
-          style={{ width: '100%', height: '100%', border: 'none' }}
-        />
-      </div>
-    </ModalShell>
   )
 }
 
@@ -643,7 +577,13 @@ export default function LaporanPage() {
       </div>
 
       {previewReport && (
-        <PdfPreview report={previewReport} onClose={() => setPreviewReport(null)} />
+        <PdfPreviewModal
+          src={`/api/reports/${previewReport.id}/pdf`}
+          title={TYPE_LABEL[previewReport.reportType]}
+          subtitle={previewReport.sourceFileName}
+          accent={TYPE_ACCENT[previewReport.reportType]}
+          onClose={() => setPreviewReport(null)}
+        />
       )}
     </div>
   )

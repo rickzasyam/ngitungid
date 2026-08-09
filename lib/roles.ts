@@ -78,6 +78,31 @@ export function canManageCommercial(role: Role | null | undefined): boolean {
 }
 
 /**
+ * Role yang boleh MELIHAT halaman Kontrak (/kontrak).
+ *
+ * ALLOWLIST, dan bentuknya tidak sama dengan predikat mana pun di atas:
+ * owner + finance + **user**, dengan **akunting satu-satunya yang ditolak**.
+ * Itu bukan kekeliruan urutan — ini predikat pertama yang memberi klien sesuatu
+ * yang tidak dimiliki akunting:
+ *   - akunting membukukan pekerjaan klien; kontrak (apa yang dijual, berapa
+ *     harganya, kapan ditagih) bukan bagian dari pembukuan itu.
+ *   - klien BOLEH melihat kontraknya sendiri — itu dokumen miliknya. Batas
+ *     antar-kliennya dijaga canAccessClientData di API, bukan di sini.
+ *
+ * Karena itu ia tidak bisa disusun dari canManageCommercial (kehilangan klien)
+ * maupun isInternal (kebalikannya: memasukkan akunting, membuang klien).
+ *
+ * **Role baru WAJIB ditambahkan dengan sadar** — daftar ini menolak secara
+ * default, sama seperti ALL_CLIENT_ACCESS_ROLES di bawah dan karena alasan yang
+ * sama.
+ */
+export const CONTRACT_VIEW_ROLES: readonly Role[] = ['owner', 'finance', 'user']
+
+export function canViewContracts(role: Role | null | undefined): boolean {
+  return !!role && CONTRACT_VIEW_ROLES.includes(role)
+}
+
+/**
  * Role yang boleh membaca data KLIEN MANA PUN.
  *
  * ALLOWLIST, bukan blocklist — dan itu inti perubahannya. Versi lama berbunyi

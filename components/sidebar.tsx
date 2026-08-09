@@ -6,6 +6,7 @@ import {
   BarChart2,
   Upload,
   Files,
+  FileSignature,
   ArrowRightLeft,
   Package,
   Settings,
@@ -25,7 +26,7 @@ import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { useClient, ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
-import { ROLE_LABEL } from '@/lib/roles'
+import { ROLE_LABEL, canViewContracts } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
 import { computeReportProgress, formatMonth, monthsBehind } from '@/lib/clients/report-progress'
 
@@ -42,7 +43,7 @@ const ROUTE_ACTIVE_MAP: Record<string, string> = {
 export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
-  const { activeClient, setActiveClient, isInternal, canDoAccounting, clients } = useClient()
+  const { activeClient, setActiveClient, isInternal, canDoAccounting, clients, role } = useClient()
   // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
   // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
   // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
@@ -159,13 +160,23 @@ export function Sidebar() {
     { id: 'upload', label: 'Upload', icon: Upload, staffOnly: true },
     { id: 'laporan', label: 'Laporan', icon: Files },
     { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined, staffOnly: true },
+    // Kontrak: owner + finance + klien, TANPA akunting — satu-satunya item yang
+    // TIDAK mengikuti sumbu staffOnly (yang berarti "staf boleh, klien tidak").
+    // Karena itu ia memakai predikatnya sendiri, dan predikat yang SAMA dengan
+    // yang dipakai proxy (lib/route-access.ts) — menyembunyikan menu bukan
+    // kontrol akses, ini cuma supaya menu tidak menawarkan halaman yang akan
+    // memantulkan penggunanya.
+    { id: 'kontrak', label: 'Kontrak', icon: FileSignature, contractOnly: true },
     { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
     { id: 'settings', label: 'Settings', icon: Settings },
     // Saat sesi masih 'loading', role belum ke-resolve (client-context default
     // 'user') → canDoAccounting sementara false. JANGAN sembunyikan menu staf di window
     // itu, kalau tidak item seperti Upload "hilang" sekejap tiap halaman dibuka
     // lalu muncul lagi. Setelah sesi resolved, filter normal berlaku.
-  ].filter((item) => status === 'loading' || canDoAccounting || !item.staffOnly)
+  ].filter((item) => {
+    if (item.contractOnly) return status === 'loading' || canViewContracts(role)
+    return status === 'loading' || canDoAccounting || !item.staffOnly
+  })
 
   // Progres laporan klien aktif. Menggantikan "% storage used" yang dulu
   // dihitung dari hash UUID — angka yang tidak pernah berubah walau laporan

@@ -8,7 +8,7 @@
 // (General + Master COA, read-only). TIDAK boleh proses kerja: upload, COA
 // mapping, extraction review, admin overview. owner & akunting = staf, penuh.
 
-import { canDoAccounting, isInternal, type Role } from '@/lib/roles'
+import { canDoAccounting, canViewContracts, isInternal, type Role } from '@/lib/roles'
 
 // Prefix surface KERJA AKUNTING (dan turunannya, mis. /coa-mapping/abc).
 // Catatan: /laporan & /settings SENGAJA TIDAK di sini — user boleh membukanya
@@ -38,7 +38,25 @@ export const ACCOUNTING_ONLY_PREFIXES = [
  */
 export const INTERNAL_ONLY_PREFIXES = ['/admin-overview'] as const
 
-/** Gabungan keduanya — surface yang tertutup untuk role 'user' (klien). */
+/**
+ * Prefix KONTRAK — bentuk KETIGA, dan sengaja tidak dilipat ke dua daftar di
+ * atas karena tidak berbentuk seperti keduanya: yang boleh adalah owner,
+ * finance, DAN klien, sementara **akunting ditolak**.
+ *
+ * Ini satu-satunya surface tempat klien boleh masuk tapi akunting tidak, jadi
+ * ia tidak bisa ikut STAFF_ONLY_PREFIXES (yang justru berarti "klien dilarang").
+ * Kebijakan role-nya sendiri ada di canViewContracts() — di lib/roles.ts
+ * bersama predikat role lain, bukan diulang di sini.
+ *
+ * Aman terhadap pantulan useRequireClient: hook itu memantulkan role INTERNAL
+ * tanpa klien aktif ke /admin-overview, dan owner + finance dua-duanya lolos
+ * INTERNAL_ONLY_PREFIXES di sana — jadi tidak ada loop seperti kasus finance
+ * 2026-08-06. Klien tidak pernah dipantulkan (ia dipin ke kliennya sendiri).
+ */
+export const CONTRACT_PREFIXES = ['/kontrak'] as const
+
+/** Gabungan keduanya — surface yang tertutup untuk role 'user' (klien).
+ *  CONTRACT_PREFIXES SENGAJA tidak ikut: klien justru boleh ke sana. */
 export const STAFF_ONLY_PREFIXES = [
   ...ACCOUNTING_ONLY_PREFIXES,
   ...INTERNAL_ONLY_PREFIXES,
@@ -75,6 +93,12 @@ export function isPathAllowedForRole(role: Role, pathname: string): boolean {
   // dengan pantulan useRequireClient ke halaman yang sama.
   if (INTERNAL_ONLY_PREFIXES.some((p) => matchesPrefix(pathname, p))) {
     return isInternal(role)
+  }
+  // Surface kontrak: owner + finance + klien, TANPA akunting. Digerbangi di
+  // sini dan bukan hanya di filter menu sidebar — item menu yang disembunyikan
+  // bukan kontrol akses, ia cuma tidak diklik.
+  if (CONTRACT_PREFIXES.some((p) => matchesPrefix(pathname, p))) {
+    return canViewContracts(role)
   }
   // Sisanya terbuka untuk semua role yang login.
   return true
