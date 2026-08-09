@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest'
 import {
   CONTRACT_JENIS,
   contractStatus,
+  contractDisplayStatus,
+  countExpiringSoon,
+  expiringWindow,
+  tambahHari,
+  EXPIRING_SOON_DAYS,
+  DISPLAY_STATUS_LABEL,
   sisaHari,
   hariAntara,
   isValidYmd,
@@ -212,5 +218,159 @@ describe('validateContract', () => {
 
   it('batas unggah dokumen sama dengan /api/upload (25MB)', () => {
     expect(MAX_DOKUMEN_BYTES).toBe(25 * 1024 * 1024)
+  })
+})
+
+// ══ 3c — STATUS TAMPILAN & BADGE ═════════════════════════════════
+// Semua perbandingan di bawah string-based; tidak ada Date yang dibangun untuk
+// membandingkan apa pun. 'HARI INI' selalu diberikan sebagai argumen.
+const HARI_INI = '2026-08-09'
+
+describe('contractDisplayStatus — batas H-7 diuji EKSPLISIT', () => {
+  // Kontrak sudah berjalan (mulai jauh di belakang), yang berbeda cuma akhirnya.
+  const mulai = '2026-01-01'
+  const st = (akhir: string) => contractDisplayStatus(mulai, akhir, HARI_INI)
+
+  it('berakhir 7 hari lagi → akan_berakhir (kuning)', () => {
+    expect(sisaHari('2026-08-16', HARI_INI)).toBe(7)
+    expect(st('2026-08-16')).toBe('akan_berakhir')
+  })
+
+  it('berakhir 8 hari lagi → aktif (hijau)', () => {
+    // Sisi seberang batas. Kalau ambangnya bergeser jadi 8, test ini merah.
+    expect(sisaHari('2026-08-17', HARI_INI)).toBe(8)
+    expect(st('2026-08-17')).toBe('aktif')
+  })
+
+  it('batasnya persis EXPIRING_SOON_DAYS, bukan angka yang kebetulan 7', () => {
+    const tepat = tambahHari(HARI_INI, EXPIRING_SOON_DAYS)
+    const lewat = tambahHari(HARI_INI, EXPIRING_SOON_DAYS + 1)
+    expect(st(tepat)).toBe('akan_berakhir')
+    expect(st(lewat)).toBe('aktif')
+  })
+
+  it('berakhir kemarin → selesai (merah)', () => {
+    expect(st('2026-08-08')).toBe('selesai')
+  })
+
+  it('berakhir HARI INI → masih akan_berakhir, belum selesai', () => {
+    // Rentang inklusif: kontrak yang berakhir hari ini masih berlaku hari ini.
+    // Ini yang menahan badge berubah merah sehari lebih cepat.
+    expect(sisaHari(HARI_INI, HARI_INI)).toBe(0)
+    expect(st(HARI_INI)).toBe('akan_berakhir')
+  })
+
+  it('berakhir besok → akan_berakhir; lusa-nya lagi tetap akan_berakhir', () => {
+    expect(st(tambahHari(HARI_INI, 1))).toBe('akan_berakhir')
+    expect(st(tambahHari(HARI_INI, 2))).toBe('akan_berakhir')
+  })
+
+  it('setiap hari 0..7 kuning, 8..14 hijau — sapuan penuh melintasi batas', () => {
+    for (let d = 0; d <= 7; d++) expect(st(tambahHari(HARI_INI, d)), `H+${d}`).toBe('akan_berakhir')
+    for (let d = 8; d <= 14; d++) expect(st(tambahHari(HARI_INI, d)), `H+${d}`).toBe('aktif')
+  })
+
+  it('belum mulai → akan_datang, TIDAK dilipat ke aktif walau berakhir dekat', () => {
+    // Kontrak yang baru mulai lusa dan berakhir 5 hari lagi bukan kontrak yang
+    // "akan berakhir" — ia belum berjalan sama sekali.
+    expect(contractDisplayStatus(tambahHari(HARI_INI, 2), tambahHari(HARI_INI, 5), HARI_INI))
+      .toBe('akan_datang')
+  })
+
+  it('mulai HARI INI sudah dihitung berjalan', () => {
+    expect(contractDisplayStatus(HARI_INI, '2026-12-31', HARI_INI)).toBe('aktif')
+  })
+
+  it('kontrak lama yang berakhir bertahun lalu tetap selesai', () => {
+    expect(contractDisplayStatus('2024-01-01', '2024-12-31', HARI_INI)).toBe('selesai')
+  })
+
+  it('setiap status punya label', () => {
+    for (const s of ['akan_datang', 'aktif', 'akan_berakhir', 'selesai'] as const) {
+      expect(DISPLAY_STATUS_LABEL[s]).toBeTruthy()
+    }
+  })
+})
+
+describe('tambahHari — ujung bulan & tahun tanpa objek Date', () => {
+  it('melintasi akhir bulan', () => {
+    expect(tambahHari('2026-01-31', 1)).toBe('2026-02-01')
+    expect(tambahHari('2026-04-30', 1)).toBe('2026-05-01')
+  })
+
+  it('melintasi akhir tahun ke DEPAN, bukan mundur', () => {
+    expect(tambahHari('2026-12-31', 1)).toBe('2027-01-01')
+  })
+
+  it('mundur juga benar', () => {
+    expect(tambahHari('2026-01-01', -1)).toBe('2025-12-31')
+  })
+
+  it('29 Februari kabisat ada; tahun biasa loncat ke 1 Maret', () => {
+    expect(tambahHari('2024-02-28', 1)).toBe('2024-02-29')
+    expect(tambahHari('2026-02-28', 1)).toBe('2026-03-01')
+  })
+
+  it('konsisten dengan hariAntara (dua arah cocok)', () => {
+    for (const n of [0, 1, 7, 30, 365, 1000]) {
+      expect(hariAntara('2026-08-09', tambahHari('2026-08-09', n)), String(n)).toBe(n)
+    }
+  })
+})
+
+describe('expiringWindow — jendela yang dikirim ke SQL', () => {
+  it('dari HARI INI sampai H+7, inklusif', () => {
+    expect(expiringWindow(HARI_INI)).toEqual({ from: '2026-08-09', to: '2026-08-16' })
+  })
+
+  it('lebarnya persis EXPIRING_SOON_DAYS hari', () => {
+    const w = expiringWindow(HARI_INI)
+    expect(hariAntara(w.from, w.to)).toBe(EXPIRING_SOON_DAYS)
+  })
+
+  it('setiap tanggal DI DALAM jendela memang akan_berakhir', () => {
+    // Ini yang mengikat jendela SQL ke keputusan reducer: kalau keduanya
+    // menyimpang, kontrak akan ikut terhitung SQL tapi ditolak reducer.
+    const w = expiringWindow(HARI_INI)
+    for (let d = 0; d <= EXPIRING_SOON_DAYS; d++) {
+      const akhir = tambahHari(w.from, d)
+      expect(contractDisplayStatus('2026-01-01', akhir, HARI_INI), akhir).toBe('akan_berakhir')
+    }
+  })
+})
+
+describe('countExpiringSoon — angka badge sidebar', () => {
+  const rows = [
+    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-16' }, // H+7  → kuning
+    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-09' }, // hari ini → kuning
+    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-17' }, // H+8  → hijau
+    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-08' }, // kemarin → merah
+    { tanggalMulai: '2026-08-11', tanggalAkhir: '2026-08-14' }, // belum mulai
+    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-12-31' }, // jauh → hijau
+  ]
+
+  it('menghitung PERSIS yang akan_berakhir', () => {
+    expect(countExpiringSoon(rows, HARI_INI)).toBe(2)
+  })
+
+  it('cocok dengan menghitung badge satu per satu (sumber tunggal)', () => {
+    const manual = rows.filter(
+      r => contractDisplayStatus(r.tanggalMulai, r.tanggalAkhir, HARI_INI) === 'akan_berakhir'
+    ).length
+    expect(countExpiringSoon(rows, HARI_INI)).toBe(manual)
+  })
+
+  it('kontrak yang BELUM MULAI tidak pernah ikut terhitung', () => {
+    const belumMulai = [{ tanggalMulai: tambahHari(HARI_INI, 2), tanggalAkhir: tambahHari(HARI_INI, 5) }]
+    expect(countExpiringSoon(belumMulai, HARI_INI)).toBe(0)
+  })
+
+  it('daftar kosong → 0 (badge tidak muncul)', () => {
+    expect(countExpiringSoon([], HARI_INI)).toBe(0)
+  })
+
+  it('bergeser sehari mengubah hitungan sebagaimana mestinya', () => {
+    // Besok, kontrak H+8 masuk jendela dan yang berakhir hari ini keluar.
+    expect(countExpiringSoon(rows, tambahHari(HARI_INI, 1))).toBe(2)
   })
 })

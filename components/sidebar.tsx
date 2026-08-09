@@ -28,6 +28,8 @@ import { useClient, ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import { ROLE_LABEL, canViewContracts } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
+import { countExpiringSoon } from '@/lib/contracts'
+import { todayYmd } from '@/lib/ymd'
 import { computeReportProgress, formatMonth, monthsBehind } from '@/lib/clients/report-progress'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
@@ -62,6 +64,15 @@ export function Sidebar() {
   // badge "9" bisa muncul di sebelah halaman yang bilang "0 akun belum
   // dipetakan". Sekarang keduanya menghitung hal yang sama.
   const [pendingMapping, setPendingMapping] = useState(0)
+  // Kontrak yang akan berakhir (H-7) untuk klien aktif. Disimpan MENTAH lalu
+  // digerbangi saat dirender (lihat `expiringSoon` di bawah) — bukan di-nol-kan
+  // lewat setState sinkron di dalam efek seperti pendingMapping, yang menambah
+  // warning react-hooks/set-state-in-effect. Baseline repo ini 24 dan tetap 24.
+  const [expiringRaw, setExpiringRaw] = useState(0)
+  // Jam dibaca SEKALI, bukan per render — dan lewat helper yang sama dengan
+  // yang dipakai halaman /kontrak, supaya badge sidebar & badge per baris tidak
+  // pernah memakai "hari ini" yang berbeda.
+  const [hariIni] = useState(todayYmd)
   const workspaceRef = useRef<HTMLDivElement>(null)
 
   const capsuleRef = useRef<HTMLDivElement>(null)
@@ -101,6 +112,33 @@ export function Sidebar() {
       .catch(() => { if (alive) setPendingMapping(0) })
     return () => { alive = false }
   }, [activeClient, pathname, canDoAccounting])
+
+  // Badge Kontrak — bentuk efek yang SAMA dengan badge COA Mapping di atas:
+  // fetch saat klien/rute berubah, setState hanya di callback promise, flag
+  // `alive` membatalkan respons yang datang setelah klien berganti.
+  //
+  // Pembagian kerjanya juga sama: SQL mempersempit ke kandidat dalam jendela
+  // (GET /api/contracts/expiring), `countExpiringSoon()` di lib/contracts.ts
+  // yang memutuskan — jadi angka di sini dan badge di baris /kontrak berasal
+  // dari SATU definisi. `hariIni` ikut dikirim karena server berjalan UTC
+  // sementara penggunanya WIB.
+  //
+  // Role 'user' IKUT melihat badge ini: itu kontraknya sendiri yang akan
+  // berakhir. Akunting tidak — ia tidak punya item menu Kontrak sama sekali.
+  useEffect(() => {
+    if (!activeClient || !canViewContracts(role)) return
+    let alive = true
+    fetch(`/api/contracts/expiring?clientId=${activeClient.id}&hariIni=${hariIni}`)
+      .then(r => (r.ok ? r.json() : { contracts: [] }))
+      .then((d: { contracts?: { tanggalMulai: string; tanggalAkhir: string }[] }) => {
+        if (alive) setExpiringRaw(countExpiringSoon(d.contracts ?? [], hariIni))
+      })
+      .catch(() => { if (alive) setExpiringRaw(0) })
+    return () => { alive = false }
+  }, [activeClient, pathname, role, hariIni])
+
+  // Gerbang dipasang saat RENDER, bukan dengan menulis 0 ke state di dalam efek.
+  const expiringSoon = activeClient && canViewContracts(role) ? expiringRaw : 0
 
   // Slides the nav capsule to the active item. `snap` skips the transition
   // (first paint, and window resize where an animated chase would lag/jitter).
@@ -166,7 +204,7 @@ export function Sidebar() {
     // yang dipakai proxy (lib/route-access.ts) — menyembunyikan menu bukan
     // kontrol akses, ini cuma supaya menu tidak menawarkan halaman yang akan
     // memantulkan penggunanya.
-    { id: 'kontrak', label: 'Kontrak', icon: FileSignature, contractOnly: true },
+    { id: 'kontrak', label: 'Kontrak', icon: FileSignature, badge: expiringSoon > 0 ? String(expiringSoon) : undefined, contractOnly: true },
     { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
     { id: 'settings', label: 'Settings', icon: Settings },
     // Saat sesi masih 'loading', role belum ke-resolve (client-context default

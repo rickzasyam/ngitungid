@@ -26,11 +26,12 @@ import { PdfPreviewModal } from '@/components/ui/pdf-preview-modal'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { contractActions } from '@/lib/contract-actions'
-import { localDateToYmd, ymdToLocalDate } from '@/lib/ymd'
 import { layananOptionsForContract, type LayananRow } from '@/lib/layanan'
+import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
 import {
   CONTRACT_JENIS, MAX_DOKUMEN_BYTES, TANGGAL_PENAGIHAN_MIN, TANGGAL_PENAGIHAN_MAX,
-  type ContractJenis,
+  contractDisplayStatus, DISPLAY_STATUS_LABEL,
+  type ContractJenis, type ContractDisplayStatus,
 } from '@/lib/contracts'
 
 type Contract = {
@@ -67,6 +68,38 @@ const HARI_PENAGIHAN = Array.from(
   { length: TANGGAL_PENAGIHAN_MAX - TANGGAL_PENAGIHAN_MIN + 1 },
   (_, i) => TANGGAL_PENAGIHAN_MIN + i
 )
+
+// ══ BADGE STATUS (3c) ════════════════════════════════════════════
+// Tone memakai palet badge yang SUDAH dipakai StatusBadge di /laporan — hijau
+// / kuning / merah / sky yang sama. Tidak ada warna baru yang dikarang.
+const STATUS_TONE: Record<ContractDisplayStatus, { bg: string; color: string }> = {
+  aktif: { bg: '#f0fdf4', color: '#15803d' },
+  akan_berakhir: { bg: '#fffbeb', color: '#b45309' },
+  selesai: { bg: '#fef2f2', color: '#b91c1c' },
+  // 'akan_datang' tidak disebut di brief 3c tapi BISA terjadi (kontrak
+  // ditandatangani di muka). Memakai tone `info` (sky) yang sudah ada, bukan
+  // dilipat ke hijau — kontrak yang belum berjalan bukan kontrak aktif.
+  akan_datang: { bg: '#f0f9ff', color: '#0284c7' },
+}
+
+/** `hariIni` DITERUSKAN dari pemanggil, tidak dibaca sendiri di sini — kalau
+ *  tiap badge membaca jamnya masing-masing, dua baris di tabel yang sama bisa
+ *  tidak sepakat tepat saat tengah malam lewat. */
+function StatusBadge({ c, hariIni }: { c: ContractDates; hariIni: string }) {
+  const status = contractDisplayStatus(c.tanggalMulai, c.tanggalAkhir, hariIni)
+  const tone = STATUS_TONE[status]
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full"
+      style={{ padding: '4px 10px', fontSize: 11.5, fontWeight: 600, background: tone.bg, color: tone.color, whiteSpace: 'nowrap' }}
+    >
+      <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.color, flexShrink: 0 }} />
+      {DISPLAY_STATUS_LABEL[status]}
+    </span>
+  )
+}
+
+type ContractDates = { tanggalMulai: string; tanggalAkhir: string }
 
 const fmtUkuran = (bytes: number) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -129,6 +162,12 @@ export default function KontrakPage() {
   const aksi = contractActions(role)
   const bolehKelola = aksi.buat
   const clientId = activeClient?.id ?? null
+
+  // "Hari ini" dibaca SEKALI di sini lalu diteruskan ke setiap badge. Bukan
+  // dibaca ulang per komponen: dua bagian halaman yang membaca jamnya sendiri
+  // bisa berbeda tepat saat tengah malam lewat, dan satu baris akan bilang
+  // "Akan Berakhir" sementara tetangganya sudah "Selesai".
+  const [hariIni] = useState(todayYmd)
 
   const [contracts, setContracts] = useState<Contract[]>([])
   const [layanan, setLayanan] = useState<LayananRow[]>([])
@@ -512,6 +551,7 @@ export default function KontrakPage() {
                         <th style={{ ...th, minWidth: 150 }}>Klien</th>
                         <th style={th}>Jenis</th>
                         <th style={{ ...th, minWidth: 190 }}>Periode</th>
+                        <th style={{ ...th, minWidth: 130 }}>Status</th>
                         <th style={{ ...th, textAlign: 'right', minWidth: 130 }}>Nominal</th>
                         <th style={{ ...th, textAlign: 'right' }}>Tgl Penagihan</th>
                         <th style={{ ...th, textAlign: 'right' }}>Aksi</th>
@@ -537,6 +577,7 @@ export default function KontrakPage() {
                               <td style={{ ...td, color: '#374151', whiteSpace: 'nowrap' }}>
                                 {fmtTanggal(c.tanggalMulai)} – {fmtTanggal(c.tanggalAkhir)}
                               </td>
+                              <td style={td}><StatusBadge c={c} hariIni={hariIni} /></td>
                               {/* numeric → string dari driver; Number() secara EKSPLISIT
                                   di batas ini, bukan dibiarkan ter-coerce diam-diam. */}
                               <td style={{ ...td, textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -591,7 +632,7 @@ export default function KontrakPage() {
                             {/* Konfirmasi hapus — MENYEBUT nomor kontraknya, bukan "kontrak ini". */}
                             {confirming && (
                               <tr style={{ borderBottom: '1px solid #f5f5f6' }}>
-                                <td colSpan={7} style={{ padding: '10px 14px', background: '#fef2f2' }}>
+                                <td colSpan={8} style={{ padding: '10px 14px', background: '#fef2f2' }}>
                                   <div className="flex items-center justify-between flex-wrap gap-3">
                                     <span style={{ fontSize: 12.5, color: '#b91c1c' }}>
                                       Hapus kontrak <strong>{c.noKontrak}</strong> ({JENIS_LABEL[c.jenis]}, {fmtTanggal(c.tanggalMulai)} – {fmtTanggal(c.tanggalAkhir)})? Dokumen PDF-nya ikut terhapus dan tidak bisa dikembalikan.

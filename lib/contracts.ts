@@ -70,6 +70,12 @@ export function hariAntara(a: string, b: string): number {
   return julian(b) - julian(a)
 }
 
+/** Geser tanggal 'YYYY-MM-DD' sejauh `n` hari. Lewat hari-berurut Julian, jadi
+ *  ujung bulan & kabisat benar tanpa objek Date. */
+export function tambahHari(ymd: string, n: number): string {
+  return dariJulian(julian(ymd) + n)
+}
+
 function julian(ymd: string): number {
   const [y, m, d] = ymd.split('-').map(Number)
   // Algoritma hari-berurut Fliegel–Van Flandern; murni aritmetika integer.
@@ -78,6 +84,108 @@ function julian(ymd: string): number {
   const mm = m + 12 * a - 3
   return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4)
     - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045
+}
+
+/** Kebalikan julian(). Fliegel–Van Flandern arah balik; integer semua. */
+function dariJulian(jd: number): string {
+  let l = jd + 68569
+  const n = Math.floor((4 * l) / 146097)
+  l -= Math.floor((146097 * n + 3) / 4)
+  const i = Math.floor((4000 * (l + 1)) / 1461001)
+  l = l - Math.floor((1461 * i) / 4) + 31
+  const j = Math.floor((80 * l) / 2447)
+  const d = l - Math.floor((2447 * j) / 80)
+  l = Math.floor(j / 11)
+  const m = j + 2 - 12 * l
+  const y = 100 * (n - 49) + i + l
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+// ══ STATUS TAMPILAN (3c) ═══════════════════════════════════════════════════
+// DITURUNKAN dari tanggal, tidak pernah disimpan. Kolom status akan basi begitu
+// tanggalnya lewat, dan tidak ada proses yang menulisnya ulang.
+
+/**
+ * Ambang "akan berakhir": H-7.
+ *
+ * Hidup DI SINI, di modul murni yang sama dengan reducer-nya — BUKAN ditulis
+ * langsung di SQL. Ambang yang tercecer di dalam query akan menyimpang dari
+ * yang dipakai UI tanpa satu test pun merah, dan gejalanya adalah badge sidebar
+ * yang tidak cocok dengan badge di barisnya sendiri.
+ */
+export const EXPIRING_SOON_DAYS = 7
+
+export type ContractDisplayStatus = 'akan_datang' | 'aktif' | 'akan_berakhir' | 'selesai'
+
+export const DISPLAY_STATUS_LABEL: Record<ContractDisplayStatus, string> = {
+  akan_datang: 'Akan Datang',
+  aktif: 'Aktif',
+  akan_berakhir: 'Akan Berakhir',
+  selesai: 'Selesai',
+}
+
+/**
+ * Status yang ditampilkan sebagai badge.
+ *
+ * MENYUSUN contractStatus() + sisaHari() yang sudah ada — bukan menghitung
+ * ulang rentangnya. Yang ditambahkan hanya pembelahan 'aktif' menjadi
+ * aktif / akan_berakhir memakai EXPIRING_SOON_DAYS.
+ *
+ * 'akan_datang' TIDAK dilipat ke 'aktif': kontrak yang belum mulai bukan
+ * kontrak yang sedang berjalan, dan menampilkannya hijau akan menyatakan
+ * sesuatu yang tidak benar. Ia memakai tone `info` yang sudah ada di app ini.
+ *
+ * Batasnya INKLUSIF di kedua ujung, mengikuti contractStatus(): kontrak yang
+ * berakhir HARI INI masih berjalan hari ini (sisaHari = 0 → akan_berakhir),
+ * dan baru 'selesai' pada hari SESUDAHNYA.
+ */
+export function contractDisplayStatus(
+  tanggalMulai: string,
+  tanggalAkhir: string,
+  hariIni: string
+): ContractDisplayStatus {
+  const dasar = contractStatus(tanggalMulai, tanggalAkhir, hariIni)
+  if (dasar === 'berakhir') return 'selesai'
+  if (dasar === 'akan_datang') return 'akan_datang'
+  return sisaHari(tanggalAkhir, hariIni) <= EXPIRING_SOON_DAYS ? 'akan_berakhir' : 'aktif'
+}
+
+export interface ContractDates {
+  tanggalMulai: string
+  tanggalAkhir: string
+}
+
+/**
+ * Jendela tanggal untuk menyaring kandidat "akan berakhir" DI SQL.
+ *
+ * Dikembalikan sebagai dua string supaya query cukup memakainya sebagai
+ * PARAMETER — tidak ada aritmetika tanggal maupun angka 7 di dalam SQL.
+ */
+export function expiringWindow(hariIni: string): { from: string; to: string } {
+  return { from: hariIni, to: tambahHari(hariIni, EXPIRING_SOON_DAYS) }
+}
+
+/**
+ * Reducer badge sidebar: berapa kontrak yang berstatus 'akan_berakhir'.
+ *
+ * ⚠️ KEMBARAN: filter di GET /api/contracts/expiring adalah padanan SQL dari
+ * fungsi ini — sudah mulai (`tanggal_mulai <= hariIni`), belum berakhir, dan
+ * berakhir dalam jendela expiringWindow(). Kalau aturan di sini berubah, SQL di
+ * sana WAJIB ikut. Pola & bahayanya sama persis dengan needsMapping() vs kolom
+ * unmappedCount di /api/reports/list.
+ *
+ * Karena itu fungsi ini tetap dijalankan atas baris yang SUDAH disaring SQL:
+ * SQL yang mempersempit, modul ini yang memutuskan.
+ */
+export function countExpiringSoon(
+  rows: readonly ContractDates[],
+  hariIni: string
+): number {
+  let n = 0
+  for (const r of rows) {
+    if (contractDisplayStatus(r.tanggalMulai, r.tanggalAkhir, hariIni) === 'akan_berakhir') n++
+  }
+  return n
 }
 
 // ── Validasi input tulis ─────────────────────────────────────
