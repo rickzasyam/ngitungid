@@ -30,6 +30,7 @@ import { ROLE_LABEL, canViewContracts } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
 import { countExpiringSoon } from '@/lib/contracts'
 import { todayYmd } from '@/lib/ymd'
+import { navItemsForRole, navKey, type NavItemId } from '@/lib/nav-items'
 import { computeReportProgress, formatMonth, monthsBehind } from '@/lib/clients/report-progress'
 
 const STORAGE_KEY = 'ngitungid-sidebar-collapsed'
@@ -40,6 +41,20 @@ const CAPSULE_TRANSITION = 'transform .48s cubic-bezier(.34,1.42,.5,1), height .
 const ROUTE_ACTIVE_MAP: Record<string, string> = {
   '/extraction-review': 'upload',
   '/admin-overview': '',
+}
+
+// id → ikon. Terpisah dari lib/nav-items.ts supaya modul itu tetap murni (bisa
+// diuji sebagai data, tanpa menyeret lucide-react). Record ber-key NavItemId,
+// jadi tsc yang menagih ikon untuk setiap item baru.
+const NAV_ICONS: Record<NavItemId, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  analytics: BarChart2,
+  upload: Upload,
+  laporan: Files,
+  kontrak: FileSignature,
+  'coa-mapping': ArrowRightLeft,
+  operational: Package,
+  settings: Settings,
 }
 
 export function Sidebar() {
@@ -140,6 +155,21 @@ export function Sidebar() {
   // Gerbang dipasang saat RENDER, bukan dengan menulis 0 ke state di dalam efek.
   const expiringSoon = activeClient && canViewContracts(role) ? expiringRaw : 0
 
+  // Daftar nav + urutannya datang dari lib/nav-items.ts (murni & teruji per
+  // role); di sini cuma ditempeli ikon dan badge. Dihitung SEBELUM efek kapsul
+  // karena `daftarKey` jadi salah satu dependensinya.
+  const menuItems = navItemsForRole(role, { sessionLoading: status === 'loading' }).map(item => ({
+    ...item,
+    icon: NAV_ICONS[item.id],
+    badge:
+      item.id === 'coa-mapping'
+        ? (pendingMapping > 0 ? String(pendingMapping) : undefined)
+        : item.id === 'kontrak'
+          ? (expiringSoon > 0 ? String(expiringSoon) : undefined)
+          : undefined,
+  }))
+  const daftarKey = navKey(menuItems)
+
   // Slides the nav capsule to the active item. `snap` skips the transition
   // (first paint, and window resize where an animated chase would lag/jitter).
   const positionCapsule = useCallback((snap: boolean) => {
@@ -170,10 +200,24 @@ export function Sidebar() {
     }
   }, [activeItem])
 
+  // `daftarKey` WAJIB ada di dependensi ini. Kapsul diposisikan dari
+  // activeEl.offsetTop, dan offsetTop item aktif berubah begitu daftarnya
+  // berubah panjang — yang PASTI terjadi: saat `status === 'loading'` seluruh
+  // item tampil, lalu menyusut begitu sesi resolve. Tanpa key ini efeknya tidak
+  // pernah jalan lagi (activeItem & isCollapsed tidak berubah), kapsul memakai
+  // ukuran susunan yang sudah usang, dan untuk finance di /kontrak ia parkir di
+  // bawah Settings sementara item aktifnya sendiri tak terlihat.
+  //
+  // Perubahan DAFTAR di-snap, bukan dianimasikan: itu bukan navigasi pengguna,
+  // jadi kapsul yang meluncur dari posisi lama hanya akan terlihat seperti
+  // gangguan. Navigasi (activeItem berubah) tetap beranimasi seperti biasa.
+  const lastDaftarKey = useRef(daftarKey)
   useLayoutEffect(() => {
-    positionCapsule(!hasPositionedCapsule.current)
+    const daftarBerubah = lastDaftarKey.current !== daftarKey
+    lastDaftarKey.current = daftarKey
+    positionCapsule(!hasPositionedCapsule.current || daftarBerubah)
     hasPositionedCapsule.current = true
-  }, [activeItem, isCollapsed, positionCapsule])
+  }, [activeItem, isCollapsed, daftarKey, positionCapsule])
 
   useEffect(() => {
     const onResize = () => positionCapsule(true)
@@ -186,35 +230,6 @@ export function Sidebar() {
     setIsCollapsed(next)
     localStorage.setItem(STORAGE_KEY, String(next))
   }
-
-  // staffOnly: surface KERJA staf, disembunyikan dari role 'user' (klien) —
-  // pelengkap guard proxy (lib/route-access.ts), bukan pengganti: route
-  // protection tetap yang menegakkan akses. User (read-only) melihat Dashboard,
-  // Analytics, Laporan (monitoring) & Settings (General + Master COA read-only);
-  // Upload/COA Mapping/Operational tetap staffOnly.
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'analytics', label: 'Analytics', icon: BarChart2 },
-    { id: 'upload', label: 'Upload', icon: Upload, staffOnly: true },
-    { id: 'laporan', label: 'Laporan', icon: Files },
-    { id: 'coa-mapping', label: 'COA Mapping', icon: ArrowRightLeft, badge: pendingMapping > 0 ? String(pendingMapping) : undefined, staffOnly: true },
-    // Kontrak: owner + finance + klien, TANPA akunting — satu-satunya item yang
-    // TIDAK mengikuti sumbu staffOnly (yang berarti "staf boleh, klien tidak").
-    // Karena itu ia memakai predikatnya sendiri, dan predikat yang SAMA dengan
-    // yang dipakai proxy (lib/route-access.ts) — menyembunyikan menu bukan
-    // kontrol akses, ini cuma supaya menu tidak menawarkan halaman yang akan
-    // memantulkan penggunanya.
-    { id: 'kontrak', label: 'Kontrak', icon: FileSignature, badge: expiringSoon > 0 ? String(expiringSoon) : undefined, contractOnly: true },
-    { id: 'operational', label: 'Operational', icon: Package, comingSoon: true, staffOnly: true },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    // Saat sesi masih 'loading', role belum ke-resolve (client-context default
-    // 'user') → canDoAccounting sementara false. JANGAN sembunyikan menu staf di window
-    // itu, kalau tidak item seperti Upload "hilang" sekejap tiap halaman dibuka
-    // lalu muncul lagi. Setelah sesi resolved, filter normal berlaku.
-  ].filter((item) => {
-    if (item.contractOnly) return status === 'loading' || canViewContracts(role)
-    return status === 'loading' || canDoAccounting || !item.staffOnly
-  })
 
   // Progres laporan klien aktif. Menggantikan "% storage used" yang dulu
   // dihitung dari hash UUID — angka yang tidak pernah berubah walau laporan

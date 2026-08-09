@@ -434,6 +434,18 @@ textarea::placeholder {
 .ng-nav-link[data-active='true'] {
   color: var(--color-bg-sidebar);
   font-weight: 600;
+  /* LATAR SENDIRI, bukan cuma kapsul yang mengambang di belakangnya.
+     Warnanya --color-bg-sidebar (#222124) di atas lime (#daf163) = 12,8:1,
+     lolos AAA. Tapi kalau lime-nya cuma datang dari .ng-nav-capsule — sebuah
+     div absolute yang posisinya DIUKUR dengan JS — maka setiap kegagalan
+     pengukuran menghasilkan #222124 di atas #222124: teks yang hilang sama
+     sekali, bukan sekadar geser. Itu yang terjadi 2026-08-09 pada finance di
+     /kontrak, dan mode gagal seperti itu tidak boleh dibiarkan mungkin.
+     Sekarang kapsul murni ANIMASI; keterbacaan berdiri sendiri di sini.
+     Radius disamakan dengan kapsul (18px, bukan rounded-2xl 16px) supaya
+     keduanya bertumpuk persis dan tidak ada tepi lime yang mengintip. */
+  background: var(--color-accent-primary);
+  border-radius: 18px;
 }
 
 .ng-nav-link:not([data-active='true']):not([data-soon='true']):hover,
