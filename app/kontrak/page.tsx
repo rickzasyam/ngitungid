@@ -25,7 +25,7 @@ import { useRupiah } from '@/lib/preferences-context'
 import { PdfPreviewModal } from '@/components/ui/pdf-preview-modal'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { contractActions } from '@/lib/contract-actions'
+import { contractActions, canCreateContract } from '@/lib/contract-actions'
 import { layananOptionsForContract, type LayananRow } from '@/lib/layanan'
 import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
 import {
@@ -105,8 +105,14 @@ const fmtUkuran = (bytes: number) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 
 // ── Form ─────────────────────────────────────────────────────────
+// KLIEN SENGAJA TIDAK ADA DI SINI. Pemilik "klien mana" untuk seluruh app
+// adalah switcher di sidebar — Dashboard, Analytics, dan Laporan semuanya
+// mengikutinya. Selector kedua di dalam form ini adalah sumber kebenaran yang
+// bersaing, dan sudah menghasilkan kerusakan nyata: Graphicook aktif di sidebar
+// sementara Rasyuka terpilih di form → kontrak tersimpan di bawah klien yang
+// daftarnya tidak ada di layar. Menghapus FIELD-nya (bukan sekadar mengunci
+// dropdown-nya) membuat keadaan itu tidak bisa diungkapkan lagi.
 type FormState = {
-  clientId: string
   noKontrak: string
   jenis: ContractJenis
   tanggalMulai: string
@@ -119,8 +125,7 @@ type FormState = {
 
 type FieldKey = keyof Omit<FormState, 'file'> | 'dokumen'
 
-const emptyForm = (clientId: string): FormState => ({
-  clientId,
+const emptyForm = (): FormState => ({
   noKontrak: '',
   jenis: 'reguler',
   tanggalMulai: '',
@@ -148,20 +153,26 @@ function fieldForError(status: number, msg: string): FieldKey | null {
   if (m.includes('nominal')) return 'nominal'
   if (m.includes('layanan')) return 'layananIds'
   if (m.includes('jenis kontrak')) return 'jenis'
-  if (m.includes('klien')) return 'clientId'
+  // Error soal KLIEN sengaja tidak dipetakan ke field mana pun: tidak ada field
+  // klien lagi, dan tidak ada yang bisa diperbaiki pengguna di form ini. Ia
+  // jatuh ke banner — memang kondisi tak terduga, bukan salah isi.
   if (m.includes('dokumen') || m.includes('pdf') || m.includes('25mb')) return 'dokumen'
   return null
 }
 
 export default function KontrakPage() {
   const { activeClient, isLoaded } = useRequireClient()
-  const { role, clients } = useClient()
+  const { role } = useClient()
   const { rupiah } = useRupiah()
   // Kebijakan tombol per role — SATU sumber (lib/contract-actions.ts, teruji),
   // bukan cek role yang ditulis ulang di tiap tempat tombolnya muncul.
   const aksi = contractActions(role)
   const bolehKelola = aksi.buat
+  // SATU-SATUNYA sumber "klien mana" di halaman ini: switcher sidebar.
   const clientId = activeClient?.id ?? null
+  // Tanpa klien aktif tidak ada yang bisa dikirim, jadi form tidak boleh dibuka
+  // sama sekali — bukan dibuka lalu gagal saat Simpan.
+  const bolehBuat = canCreateContract(role, clientId)
 
   // "Hari ini" dibaca SEKALI di sini lalu diteruskan ke setiap badge. Bukan
   // dibaca ulang per komponen: dua bagian halaman yang membaca jamnya sendiri
@@ -189,7 +200,6 @@ export default function KontrakPage() {
   const dataKey = clientId ? `${clientId}|${reloadKey}` : null
   const loading = dataKey !== null && loadedKey !== dataKey
   const [actionError, setActionError] = useState<string | null>(null)
-  const [actionInfo, setActionInfo] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [preview, setPreview] = useState<Contract | null>(null)
 
@@ -250,11 +260,13 @@ export default function KontrakPage() {
 
   // ── Buka form ──────────────────────────────────────────────────
   const openCreate = () => {
-    if (!clientId) return
+    // Pagar kedua di belakang tombol yang sudah disabled — form yang tidak bisa
+    // dikirim tidak boleh terbuka lewat jalur mana pun.
+    if (!bolehBuat) return
     setEditing(null)
     setFormErr({})
     setFormBanner(null)
-    setForm(emptyForm(clientId))
+    setForm(emptyForm())
   }
 
   /**
@@ -273,8 +285,11 @@ export default function KontrakPage() {
       if (!res.ok) throw new Error(await readError(res, 'Gagal memuat kontrak.'))
       const d: { contract: Contract } = await res.json()
       setEditing(d.contract)
+      // clientId TIDAK disalin ke form: kontrak tidak pernah bisa pindah klien
+      // (PATCH /api/contracts/[id] bahkan tidak membaca field itu), jadi
+      // menyimpannya di state form hanya menghidupkan kembali nilai kedua yang
+      // bisa menyimpang dari sidebar.
       setForm({
-        clientId: d.contract.clientId,
         noKontrak: d.contract.noKontrak,
         jenis: d.contract.jenis,
         tanggalMulai: d.contract.tanggalMulai,
@@ -306,6 +321,10 @@ export default function KontrakPage() {
   // ── Simpan ─────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!form) return
+    // Membuat kontrak TANPA klien aktif tidak mungkin — tidak ada id yang bisa
+    // dikirim. Menjaganya di sini, bukan cuma di tombol, supaya tidak ada jalur
+    // yang bisa mengirim clientId kosong ke server.
+    if (!editing && !clientId) return
     setFormErr({})
     setFormBanner(null)
 
@@ -319,7 +338,10 @@ export default function KontrakPage() {
     }
 
     const fd = new FormData()
-    fd.append('clientId', form.clientId)
+    // clientId datang dari klien AKTIF (sidebar), tidak pernah dari isi form —
+    // form tidak punya field itu. Hanya relevan saat MEMBUAT: PATCH tidak
+    // membaca clientId sama sekali, karena kontrak tidak bisa pindah klien.
+    if (!editing && clientId) fd.append('clientId', clientId)
     fd.append('noKontrak', form.noKontrak)
     fd.append('jenis', form.jenis)
     fd.append('tanggalMulai', form.tanggalMulai)
@@ -344,15 +366,12 @@ export default function KontrakPage() {
         else setFormBanner(msg)
         return
       }
-      const dibuatUntukKlienLain = form.clientId !== clientId
+      // Tidak ada lagi pesan "ganti klien di sidebar untuk melihatnya": kontrak
+      // selalu dibuat untuk klien yang SEDANG dilihat, jadi hasilnya pasti
+      // muncul di daftar yang barusan ditutup form-nya.
       setForm(null)
       setEditing(null)
       reload()
-      setActionInfo(
-        dibuatUntukKlienLain
-          ? `Kontrak tersimpan untuk ${clients.find(c => c.id === form.clientId)?.name ?? 'klien lain'}. Ganti klien aktif di sidebar untuk melihatnya.`
-          : null
-      )
     } catch {
       setFormBanner('Gagal menyimpan kontrak. Coba lagi.')
     } finally {
@@ -471,7 +490,7 @@ export default function KontrakPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setActionError(null); setActionInfo(null); reload() }}
+              onClick={() => { setActionError(null); reload() }}
               disabled={loading || busy !== null}
               aria-label="Muat ulang daftar kontrak"
               style={{ ...ghostBtn(loading || busy !== null), color: 'var(--color-text-muted)' }}
@@ -481,9 +500,12 @@ export default function KontrakPage() {
             {bolehKelola && (
               <button
                 onClick={openCreate}
-                disabled={busy !== null}
+                // Tanpa klien aktif tidak ada clientId yang bisa dikirim, jadi
+                // tombolnya mati — bukan membuka form yang pasti gagal.
+                disabled={!bolehBuat || busy !== null}
+                title={bolehBuat ? undefined : 'Pilih klien di sidebar dulu untuk membuat kontrak.'}
                 className="inline-flex items-center gap-2 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                style={{ padding: '8px 16px', fontSize: 12.5, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)', cursor: 'pointer' }}
+                style={{ padding: '8px 16px', fontSize: 12.5, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)', cursor: bolehBuat ? 'pointer' : 'default', opacity: bolehBuat ? 1 : 0.5 }}
               >
                 <Plus className="w-3.5 h-3.5" /> Kontrak Baru
               </button>
@@ -516,8 +538,10 @@ export default function KontrakPage() {
                 {bolehKelola && (
                   <button
                     onClick={openCreate}
-                    className="inline-flex items-center gap-2 rounded-full font-semibold"
-                    style={{ padding: '8px 16px', fontSize: 12.5, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)', cursor: 'pointer' }}
+                    disabled={!bolehBuat}
+                    title={bolehBuat ? undefined : 'Pilih klien di sidebar dulu untuk membuat kontrak.'}
+                    className="inline-flex items-center gap-2 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                    style={{ padding: '8px 16px', fontSize: 12.5, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)', cursor: bolehBuat ? 'pointer' : 'default', opacity: bolehBuat ? 1 : 0.5 }}
                   >
                     <Plus className="w-3.5 h-3.5" /> Kontrak Baru
                   </button>
@@ -534,11 +558,6 @@ export default function KontrakPage() {
               {actionError && (
                 <div style={{ background: '#fef2f2', border: '1px solid rgba(220,38,38,0.15)', borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: '#b91c1c' }}>
                   {actionError}
-                </div>
-              )}
-              {actionInfo && (
-                <div style={{ background: '#f0f9ff', border: '1px solid rgba(2,132,199,0.15)', borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: '#0369a1' }}>
-                  {actionInfo}
                 </div>
               )}
 
@@ -710,18 +729,16 @@ export default function KontrakPage() {
               </div>
             )}
 
-            {/* 1 — Klien */}
-            <div>
-              <label htmlFor="k-klien" style={label}>Klien</label>
-              <select
-                id="k-klien"
-                value={form.clientId}
-                onChange={e => setForm({ ...form, clientId: e.target.value })}
-                style={input(!!formErr.clientId)}
-              >
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              {errText(formErr.clientId)}
+            {/* 1 — Klien: TEKS, bukan dropdown yang di-disable.
+                Dropdown mati masih terbaca sebagai "pilihan yang sedang tidak
+                bisa diubah", yang mengundang pertanyaan kapan ia bisa. Ini
+                bukan pilihan sama sekali — kontrak selalu milik klien yang
+                sedang dibuka, dan pemilihnya ada di sidebar. */}
+            <div style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 10, padding: '10px 12px' }}>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Klien</span>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1f2430', marginTop: 2 }}>
+                {activeClient.name}
+              </div>
             </div>
 
             {/* 2 — No Kontrak */}

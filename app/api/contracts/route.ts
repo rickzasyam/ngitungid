@@ -100,9 +100,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Body harus multipart/form-data.' }, { status: 400 })
   }
 
+  // clientId tetap DIVALIDASI PENUH di server, justru sekarang lebih ketat.
+  // UI kini hanya bisa mengirim satu nilai (klien aktif di sidebar), tapi itu
+  // fakta tentang UI — bukan tentang siapa yang memanggil endpoint ini. Bentuk,
+  // keberadaan baris, DAN batas antar-klien tetap diperiksa di sini.
   const clientId = String(form.get('clientId') ?? '')
   if (!UUID_RE.test(clientId)) {
     return NextResponse.json({ error: 'clientId tidak valid.' }, { status: 400 })
+  }
+  // Ditambahkan 2026-08-10. Sebelumnya POST hanya memeriksa bentuk & keberadaan
+  // klien, dan lolos begitu saja karena requireCommercial cuma meloloskan owner
+  // + finance yang dua-duanya ada di ALL_CLIENT_ACCESS_ROLES — jadi cek ini
+  // no-op untuk role yang ada HARI INI. Itu persis bentuk gagal-terbuka yang
+  // sudah dua kali dibalik di repo ini: role komersial berikutnya yang TIDAK
+  // punya akses semua-klien akan bisa membuat kontrak untuk klien mana pun,
+  // tanpa satu baris pun diubah. Batas antar-klien harus dinyatakan, bukan
+  // diwarisi dari kebetulan daftar role.
+  if (!canAccessClientData(g.user.role, g.user.clientId, clientId)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const tp = form.get('tanggalPenagihan')

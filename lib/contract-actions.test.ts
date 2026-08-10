@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { contractActions } from './contract-actions'
+import { contractActions, canCreateContract } from './contract-actions'
 import type { Role } from './roles'
 
 // ══ KLIEN READ-ONLY ══════════════════════════════════════════════
@@ -79,5 +79,48 @@ describe('contractActions — aksi tulis selalu SUBSET dari lihat', () => {
         expect(a.lihat, String(r)).toBe(true)
       }
     }
+  })
+})
+
+// ══ KLIEN = KLIEN AKTIF SIDEBAR, TITIK ═══════════════════════════
+// Form kontrak sempat punya selector klien sendiri. Itu sumber kebenaran yang
+// BERSAING dengan switcher sidebar, dan sudah merusak sekali: Graphicook aktif
+// di sidebar sementara Rasyuka terpilih di form → kontrak tersimpan di bawah
+// klien yang daftarnya tidak sedang dilihat. Field-nya dihapus, bukan dikunci.
+describe('canCreateContract — butuh hak DAN klien aktif', () => {
+  const KLIEN = 'aaaaaaaa-0000-0000-0000-000000000001'
+
+  it('owner & finance dengan klien aktif: boleh', () => {
+    for (const r of ['owner', 'finance'] as const) {
+      expect(canCreateContract(r, KLIEN), r).toBe(true)
+    }
+  })
+
+  it('TANPA klien aktif: tidak boleh, walau role-nya berhak', () => {
+    // Tidak ada clientId yang bisa dikirim. Form yang terbuka lalu gagal saat
+    // Simpan memberi tahu "pilih klien dulu" setelah delapan field terisi.
+    for (const r of ['owner', 'finance'] as const) {
+      expect(canCreateContract(r, null), r).toBe(false)
+      expect(canCreateContract(r, undefined), r).toBe(false)
+      expect(canCreateContract(r, ''), r).toBe(false)
+    }
+  })
+
+  it('klien & akunting: tidak boleh, ada klien aktif atau tidak', () => {
+    for (const r of ['user', 'akunting'] as const) {
+      expect(canCreateContract(r, KLIEN), r).toBe(false)
+      expect(canCreateContract(r, null), r).toBe(false)
+    }
+  })
+
+  it('konsisten dengan contractActions().buat saat klien aktif ada', () => {
+    for (const r of ['owner', 'akunting', 'user', 'finance'] as const) {
+      expect(canCreateContract(r, KLIEN), r).toBe(contractActions(r).buat)
+    }
+  })
+
+  it('role tak dikenal & null tetap ditolak', () => {
+    expect(canCreateContract('marketing' as Role, KLIEN)).toBe(false)
+    expect(canCreateContract(null, KLIEN)).toBe(false)
   })
 })

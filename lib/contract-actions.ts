@@ -35,6 +35,26 @@ export interface ContractActions {
  * mendapat tombol di halaman yang tidak boleh ia buka — kombinasi yang tidak
  * akan pernah terlihat sampai role itu benar-benar dibuat.
  */
+/**
+ * Boleh membuka form "Kontrak Baru" SEKARANG?
+ *
+ * Dua syarat, dan yang kedua bukan soal role: kontrak selalu dibuat untuk klien
+ * AKTIF (switcher sidebar), jadi tanpa klien aktif tidak ada `clientId` yang
+ * bisa dikirim sama sekali. Form yang terbuka tapi pasti gagal saat Simpan
+ * adalah cara paling mahal untuk menyampaikan "pilih klien dulu" — pengguna
+ * baru tahu setelah mengisi delapan field.
+ *
+ * Halaman ini memang sudah memantulkan pengguna tanpa klien aktif lewat
+ * useRequireClient, jadi hari ini syarat kedua jarang tersentuh. Ia tetap
+ * ditulis: gerbangnya milik tombol, bukan milik kebetulan halaman lain.
+ */
+export function canCreateContract(
+  role: Role | null | undefined,
+  activeClientId: string | null | undefined
+): boolean {
+  return contractActions(role).buat && !!activeClientId
+}
+
 export function contractActions(role: Role | null | undefined): ContractActions {
   const lihat = canViewContracts(role)
   const kelola = lihat && canManageCommercial(role)

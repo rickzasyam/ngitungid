@@ -94,6 +94,23 @@ describe('matriks guard endpoint kontrak', () => {
     expect(handler(LIST, 'POST')).toContain('requireCommercial()')
   })
 
+  it('POST /api/contracts tetap menegakkan batas ANTAR-KLIEN di server', () => {
+    // UI kini cuma bisa mengirim satu nilai (klien aktif sidebar), tapi itu
+    // fakta tentang UI — bukan tentang siapa yang memanggil endpoint ini.
+    // requireCommercial saja TIDAK cukup sebagai penjaga: ia meloloskan owner +
+    // finance yang kebetulan dua-duanya punya akses semua-klien hari ini, jadi
+    // role komersial berikutnya akan mewarisi izin membuat kontrak untuk klien
+    // mana pun tanpa ada yang memutuskan begitu.
+    const h = handler(LIST, 'POST')
+    expect(h).toContain('canAccessClientData(')
+
+    // Diperiksa SEBELUM menulis apa pun ke DB.
+    const iCek = h.indexOf('canAccessClientData(')
+    const iTulis = h.indexOf('db.batch')
+    expect(iCek).toBeGreaterThan(-1)
+    expect(iTulis).toBeGreaterThan(iCek)
+  })
+
   it('PATCH /api/contracts/[id] → requireCommercial', () => {
     expect(handler(DETAIL, 'PATCH')).toContain('requireCommercial()')
   })
