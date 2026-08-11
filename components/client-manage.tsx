@@ -8,9 +8,9 @@ import type { ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { ROLE_LABEL, type Role } from '@/lib/roles'
+import { JenisUsahaSelect } from '@/components/jenis-usaha-select'
 
-const TYPE_SUGGESTIONS = ['E-commerce', 'Jasa Kreatif', 'Manufaktur', 'Retail', 'F&B', 'Jasa']
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml'
+const ACCEPT ='image/png,image/jpeg,image/webp,image/svg+xml'
 const MAX_LOGO_KB = 512
 
 const inputStyle: React.CSSProperties = {
@@ -212,9 +212,9 @@ export function EditClientModal({
           <input id="edit-name" type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)" style={inputStyle} />
         </div>
         <div>
-          <label htmlFor="edit-type" className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Jenis Usaha</label>
-          <input id="edit-type" type="text" required list="edit-type-suggest" value={type} onChange={e => setType(e.target.value)} className="w-full px-4 py-3 rounded-2xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)" style={inputStyle} />
-          <datalist id="edit-type-suggest">{TYPE_SUGGESTIONS.map(s => <option key={s} value={s} />)}</datalist>
+          {/* <span>, bukan <label htmlFor>: StyledSelect merender <button>. */}
+          <span className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Jenis Usaha</span>
+          <JenisUsahaSelect value={type} onChange={setType} />
         </div>
 
         {error && <ErrorBox msg={error} />}

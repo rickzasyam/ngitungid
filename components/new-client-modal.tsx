@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react'
 import { X, Building2, Loader2, AlertCircle } from 'lucide-react'
 import type { ClientInfo } from '@/lib/client-context'
-
-// Saran jenis klien — bebas diketik, ini cuma autocomplete.
-const TYPE_SUGGESTIONS = ['E-commerce', 'Jasa Kreatif', 'Manufaktur', 'Retail', 'F&B', 'Jasa']
+import { JenisUsahaSelect } from '@/components/jenis-usaha-select'
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--color-muted-bg)',
@@ -144,29 +142,16 @@ export function NewClientModal({
           </div>
 
           <div>
-            <label
-              htmlFor="new-client-type"
+            {/* <span>, bukan <label htmlFor>: StyledSelect merender <button>,
+                dan label yang menunjuk tombol tidak berperilaku seperti label.
+                Nama aksesibelnya datang dari ariaLabel milik komponennya. */}
+            <span
               className="block text-xs font-semibold mb-1.5 uppercase tracking-wide"
               style={{ color: 'var(--color-text-muted)' }}
             >
               Jenis Usaha
-            </label>
-            <input
-              id="new-client-type"
-              type="text"
-              required
-              list="new-client-type-suggestions"
-              value={type}
-              onChange={e => setType(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-              style={inputStyle}
-              placeholder="mis. E-commerce"
-            />
-            <datalist id="new-client-type-suggestions">
-              {TYPE_SUGGESTIONS.map(s => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
+            </span>
+            <JenisUsahaSelect value={type} onChange={setType} />
           </div>
 
           {error && (
