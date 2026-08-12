@@ -3,11 +3,13 @@ import {
   CONTRACT_JENIS,
   contractStatus,
   contractDisplayStatus,
-  countExpiringSoon,
-  expiringWindow,
+  countNeedsAttention,
+  needsAttention,
+  hasReplacement,
   tambahHari,
   EXPIRING_SOON_DAYS,
   DISPLAY_STATUS_LABEL,
+  type ContractBadgeRow,
   sisaHari,
   hariAntara,
   isValidYmd,
@@ -318,59 +320,143 @@ describe('tambahHari — ujung bulan & tahun tanpa objek Date', () => {
   })
 })
 
-describe('expiringWindow — jendela yang dikirim ke SQL', () => {
-  it('dari HARI INI sampai H+7, inklusif', () => {
-    expect(expiringWindow(HARI_INI)).toEqual({ from: '2026-08-09', to: '2026-08-16' })
+// ══ BADGE: H-7 + SUDAH BERAKHIR TANPA PENGGANTI ══════════════════
+// Dulu badge hanya menghitung H-7, sehingga kontrak yang terlanjur lewat
+// MENGHILANG dari hitungan — persis kasus yang paling butuh tindakan.
+const KLIEN_A = 'aaaaaaaa-0000-0000-0000-000000000001'
+const KLIEN_B = 'bbbbbbbb-0000-0000-0000-000000000002'
+const K = (mulai: string, akhir: string, clientId = KLIEN_A): ContractBadgeRow =>
+  ({ clientId, tanggalMulai: mulai, tanggalAkhir: akhir })
+
+describe('hasReplacement — pengganti = mulai PADA ATAU SESUDAH akhir', () => {
+  const kadaluwarsa = K('2026-01-01', '2026-08-08')
+
+  it('mulai TEPAT di tanggal berakhir = pengganti', () => {
+    expect(hasReplacement(kadaluwarsa, [K('2026-08-08', '2027-08-07')])).toBe(true)
   })
 
-  it('lebarnya persis EXPIRING_SOON_DAYS hari', () => {
-    const w = expiringWindow(HARI_INI)
-    expect(hariAntara(w.from, w.to)).toBe(EXPIRING_SOON_DAYS)
+  it('mulai SESUDAH tanggal berakhir = pengganti (ada jeda, tetap perpanjangan)', () => {
+    expect(hasReplacement(kadaluwarsa, [K('2026-09-01', '2027-08-31')])).toBe(true)
   })
 
-  it('setiap tanggal DI DALAM jendela memang akan_berakhir', () => {
-    // Ini yang mengikat jendela SQL ke keputusan reducer: kalau keduanya
-    // menyimpang, kontrak akan ikut terhitung SQL tapi ditolak reducer.
-    const w = expiringWindow(HARI_INI)
-    for (let d = 0; d <= EXPIRING_SOON_DAYS; d++) {
-      const akhir = tambahHari(w.from, d)
-      expect(contractDisplayStatus('2026-01-01', akhir, HARI_INI), akhir).toBe('akan_berakhir')
-    }
+  it('mulai SEBELUM tanggal berakhir BUKAN pengganti (tumpang tindih)', () => {
+    expect(hasReplacement(kadaluwarsa, [K('2026-08-07', '2027-01-01')])).toBe(false)
+  })
+
+  it('kontrak klien LAIN bukan pengganti, walau tanggalnya cocok', () => {
+    expect(hasReplacement(kadaluwarsa, [K('2026-08-08', '2027-08-07', KLIEN_B)])).toBe(false)
+  })
+
+  it('daftar kosong → tidak ada pengganti', () => {
+    expect(hasReplacement(kadaluwarsa, [])).toBe(false)
   })
 })
 
-describe('countExpiringSoon — angka badge sidebar', () => {
-  const rows = [
-    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-16' }, // H+7  → kuning
-    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-09' }, // hari ini → kuning
-    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-17' }, // H+8  → hijau
-    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-08-08' }, // kemarin → merah
-    { tanggalMulai: '2026-08-11', tanggalAkhir: '2026-08-14' }, // belum mulai
-    { tanggalMulai: '2026-01-01', tanggalAkhir: '2026-12-31' }, // jauh → hijau
-  ]
-
-  it('menghitung PERSIS yang akan_berakhir', () => {
-    expect(countExpiringSoon(rows, HARI_INI)).toBe(2)
+describe('countNeedsAttention — badge sidebar', () => {
+  it('sudah berakhir TANPA pengganti → DIHITUNG', () => {
+    expect(countNeedsAttention([K('2026-01-01', '2026-08-08')], HARI_INI)).toBe(1)
   })
 
-  it('cocok dengan menghitung badge satu per satu (sumber tunggal)', () => {
-    const manual = rows.filter(
-      r => contractDisplayStatus(r.tanggalMulai, r.tanggalAkhir, HARI_INI) === 'akan_berakhir'
-    ).length
-    expect(countExpiringSoon(rows, HARI_INI)).toBe(manual)
+  it('sudah berakhir DENGAN pengganti klien yang sama → TIDAK dihitung', () => {
+    // Yang lama diperpanjang; yang baru masih aktif. Tidak ada yang perlu
+    // dikerjakan, jadi badge harus diam.
+    const rows = [K('2026-01-01', '2026-08-08'), K('2026-08-08', '2027-08-07')]
+    expect(countNeedsAttention(rows, HARI_INI)).toBe(0)
   })
 
-  it('kontrak yang BELUM MULAI tidak pernah ikut terhitung', () => {
-    const belumMulai = [{ tanggalMulai: tambahHari(HARI_INI, 2), tanggalAkhir: tambahHari(HARI_INI, 5) }]
-    expect(countExpiringSoon(belumMulai, HARI_INI)).toBe(0)
+  it('sudah berakhir dengan kontrak lebih baru milik klien BERBEDA → tetap dihitung', () => {
+    const rows = [K('2026-01-01', '2026-08-08'), K('2026-08-08', '2027-08-07', KLIEN_B)]
+    expect(countNeedsAttention(rows, HARI_INI)).toBe(1)
+  })
+
+  it('akan berakhir H-7 → dihitung', () => {
+    expect(countNeedsAttention([K('2026-01-01', tambahHari(HARI_INI, 7))], HARI_INI)).toBe(1)
+  })
+
+  it('berakhir 8 hari lagi → TIDAK dihitung', () => {
+    expect(countNeedsAttention([K('2026-01-01', tambahHari(HARI_INI, 8))], HARI_INI)).toBe(0)
+  })
+
+  it('BATAS diuji eksplisit: H+7 dihitung, H+8 tidak', () => {
+    const tepat = [K('2026-01-01', tambahHari(HARI_INI, EXPIRING_SOON_DAYS))]
+    const lewat = [K('2026-01-01', tambahHari(HARI_INI, EXPIRING_SOON_DAYS + 1))]
+    expect(countNeedsAttention(tepat, HARI_INI)).toBe(1)
+    expect(countNeedsAttention(lewat, HARI_INI)).toBe(0)
+  })
+
+  it('berakhir HARI INI → dihitung (masih akan_berakhir, belum selesai)', () => {
+    expect(countNeedsAttention([K('2026-01-01', HARI_INI)], HARI_INI)).toBe(1)
+  })
+
+  it('akan datang → TIDAK dihitung, belum ada yang bisa dikerjakan', () => {
+    const rows = [K(tambahHari(HARI_INI, 2), tambahHari(HARI_INI, 5))]
+    expect(countNeedsAttention(rows, HARI_INI)).toBe(0)
+  })
+
+  it('aktif & masih lama → TIDAK dihitung', () => {
+    expect(countNeedsAttention([K('2026-01-01', '2026-12-31')], HARI_INI)).toBe(0)
+  })
+
+  it('kontrak kedaluwarsa TIDAK boleh jadi pengganti dirinya sendiri', () => {
+    // Kontrak sehari: tanggalMulai == tanggalAkhir. Kalau pengecualian diri
+    // lupa dipasang, `mulai >= akhir` terpenuhi oleh dirinya sendiri dan
+    // kontrak ini menghilang dari badge selamanya.
+    expect(countNeedsAttention([K('2026-08-08', '2026-08-08')], HARI_INI)).toBe(1)
+  })
+
+  it('dua kontrak bertanggal IDENTIK dihitung keduanya', () => {
+    // Pengecualian diri berbasis indeks, bukan nilai — kalau berbasis nilai,
+    // keduanya akan saling menghapus.
+    const rows = [K('2026-01-01', '2026-08-08'), K('2026-01-01', '2026-08-08')]
+    expect(countNeedsAttention(rows, HARI_INI)).toBe(2)
+  })
+
+  it('kedaluwarsa TETAP dihitung sampai penggantinya ada', () => {
+    const kadaluwarsa = [K('2026-01-01', '2026-08-08')]
+    expect(countNeedsAttention(kadaluwarsa, HARI_INI)).toBe(1)
+    // Hari-hari berikutnya: tetap 1, tidak menghilang seiring waktu.
+    expect(countNeedsAttention(kadaluwarsa, tambahHari(HARI_INI, 30))).toBe(1)
+    expect(countNeedsAttention(kadaluwarsa, tambahHari(HARI_INI, 365))).toBe(1)
+    // Begitu penggantinya dibuat, badge diam.
+    expect(countNeedsAttention([...kadaluwarsa, K('2026-08-08', '2027-08-07')], HARI_INI)).toBe(0)
+  })
+
+  it('kontrak AKAN DATANG sah menjadi pengganti', () => {
+    // Justru bentuk perpanjangan yang paling normal: yang baru diteken lebih
+    // dulu dan baru berlaku setelah yang lama habis. Kontrak akan datang tidak
+    // dihitung untuk dirinya sendiri, tapi ia MENDIAMKAN yang kedaluwarsa.
+    const kadaluwarsa = K('2026-01-01', '2026-08-08')
+    expect(countNeedsAttention([kadaluwarsa], HARI_INI)).toBe(1)
+    const denganPengganti = [kadaluwarsa, K(tambahHari(HARI_INI, 2), tambahHari(HARI_INI, 9))]
+    expect(countNeedsAttention(denganPengganti, HARI_INI)).toBe(0)
+  })
+
+  it('campuran realistis dihitung benar', () => {
+    const rows = [
+      K('2025-01-01', '2025-12-31'), // lewat, TAPI diganti kontrak 2026 → tidak
+      K('2026-01-01', '2026-08-08'), // lewat, tanpa pengganti          → DIHITUNG
+      K('2026-01-01', '2026-08-16'), // H+7                             → DIHITUNG
+      K('2026-01-01', '2026-12-31'), // aktif                           → tidak
+    ]
+    expect(countNeedsAttention(rows, HARI_INI)).toBe(2)
   })
 
   it('daftar kosong → 0 (badge tidak muncul)', () => {
-    expect(countExpiringSoon([], HARI_INI)).toBe(0)
+    expect(countNeedsAttention([], HARI_INI)).toBe(0)
   })
 
-  it('bergeser sehari mengubah hitungan sebagaimana mestinya', () => {
-    // Besok, kontrak H+8 masuk jendela dan yang berakhir hari ini keluar.
-    expect(countExpiringSoon(rows, tambahHari(HARI_INI, 1))).toBe(2)
+  it('needsAttention konsisten dengan countNeedsAttention', () => {
+    const rows = [K('2026-01-01', '2026-08-08'), K('2026-01-01', '2026-08-16')]
+    const manual = rows.filter((r, i) =>
+      needsAttention(r, rows.filter((_, j) => j !== i), HARI_INI)
+    ).length
+    expect(countNeedsAttention(rows, HARI_INI)).toBe(manual)
+  })
+
+  it('tidak memutasi input', () => {
+    const rows = [K('2026-01-01', '2026-08-08'), K('2026-08-08', '2027-08-07')]
+    const salinan = JSON.parse(JSON.stringify(rows))
+    countNeedsAttention(rows, HARI_INI)
+    expect(rows).toEqual(salinan)
   })
 })

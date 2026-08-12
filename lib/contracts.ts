@@ -155,35 +155,83 @@ export interface ContractDates {
   tanggalAkhir: string
 }
 
-/**
- * Jendela tanggal untuk menyaring kandidat "akan berakhir" DI SQL.
- *
- * Dikembalikan sebagai dua string supaya query cukup memakainya sebagai
- * PARAMETER — tidak ada aritmetika tanggal maupun angka 7 di dalam SQL.
- */
-export function expiringWindow(hariIni: string): { from: string; to: string } {
-  return { from: hariIni, to: tambahHari(hariIni, EXPIRING_SOON_DAYS) }
+// ══ BADGE SIDEBAR: "butuh perhatian" ═══════════════════════════════════════
+// Baris badge, dengan clientId. Aturan pengganti TIDAK BOLEH melintasi klien,
+// dan menyertakan clientId membuat itu ditegakkan oleh fungsinya sendiri —
+// bukan diwariskan dari kebetulan bahwa endpoint-nya kebetulan per-klien.
+export interface ContractBadgeRow extends ContractDates {
+  clientId: string
 }
 
 /**
- * Reducer badge sidebar: berapa kontrak yang berstatus 'akan_berakhir'.
+ * Kontrak yang sudah berakhir ini SUDAH ADA penggantinya?
  *
- * ⚠️ KEMBARAN: filter di GET /api/contracts/expiring adalah padanan SQL dari
- * fungsi ini — sudah mulai (`tanggal_mulai <= hariIni`), belum berakhir, dan
- * berakhir dalam jendela expiringWindow(). Kalau aturan di sini berubah, SQL di
- * sana WAJIB ikut. Pola & bahayanya sama persis dengan needsMapping() vs kolom
- * unmappedCount di /api/reports/list.
+ * Pengganti = kontrak LAIN milik KLIEN YANG SAMA yang mulai pada atau sesudah
+ * tanggal berakhirnya kontrak ini. Kontrak yang belum mulai pun sah sebagai
+ * pengganti — justru itu kasus paling normal: yang baru diteken lebih dulu,
+ * mulai berlaku setelah yang lama habis.
  *
- * Karena itu fungsi ini tetap dijalankan atas baris yang SUDAH disaring SQL:
- * SQL yang mempersempit, modul ini yang memutuskan.
+ * `lainnya` HARUS sudah tidak memuat kontrak itu sendiri. Pengecualian diri
+ * dilakukan pemanggil (lihat countNeedsAttention) memakai INDEKS, bukan id:
+ * kontrak sehari (tanggalMulai == tanggalAkhir) akan lolos sebagai penggantinya
+ * sendiri kalau tidak dikecualikan.
+ *
+ * Perbandingan tanggal murni STRING — 'YYYY-MM-DD' urut leksikografis.
  */
-export function countExpiringSoon(
-  rows: readonly ContractDates[],
+export function hasReplacement(
+  kontrak: ContractBadgeRow,
+  lainnya: readonly ContractBadgeRow[]
+): boolean {
+  return lainnya.some(
+    l => l.clientId === kontrak.clientId && l.tanggalMulai >= kontrak.tanggalAkhir
+  )
+}
+
+/**
+ * Kontrak ini perlu ditindaklanjuti?
+ *
+ *   akan_berakhir (H-7)        → YA
+ *   selesai TANPA pengganti    → YA — dan inilah yang dulu justru hilang dari
+ *                                hitungan begitu tanggalnya lewat, padahal ia
+ *                                kasus yang PALING butuh tindakan
+ *   selesai DENGAN pengganti   → tidak, sudah diperpanjang
+ *   aktif                      → tidak
+ *   akan_datang                → tidak, belum ada yang bisa dikerjakan
+ */
+export function needsAttention(
+  kontrak: ContractBadgeRow,
+  lainnya: readonly ContractBadgeRow[],
+  hariIni: string
+): boolean {
+  const status = contractDisplayStatus(kontrak.tanggalMulai, kontrak.tanggalAkhir, hariIni)
+  if (status === 'akan_berakhir') return true
+  if (status === 'selesai') return !hasReplacement(kontrak, lainnya)
+  return false
+}
+
+/**
+ * Reducer badge sidebar.
+ *
+ * Menerima SELURUH kontrak klien, bukan yang sudah disaring jendela H-7 seperti
+ * dulu. Itu perubahan yang dipaksa oleh aturannya sendiri: pengganti bisa
+ * berakhir kapan saja di masa depan, jadi SQL tidak bisa mempersempit dengan
+ * jendela tanggal apa pun tanpa membuang baris yang justru menentukan apakah
+ * sebuah kontrak kedaluwarsa sudah diperpanjang. Volume-nya tidak jadi soal:
+ * kontrak 1-2 per klien per tahun (lihat keputusan bytea 2026-08-06).
+ *
+ * Konsekuensi bagusnya: TIDAK ADA lagi kembaran aturan di SQL. Seluruh
+ * keputusan ada di sini; query-nya cuma "ambil kontrak klien ini".
+ */
+export function countNeedsAttention(
+  semua: readonly ContractBadgeRow[],
   hariIni: string
 ): number {
   let n = 0
-  for (const r of rows) {
-    if (contractDisplayStatus(r.tanggalMulai, r.tanggalAkhir, hariIni) === 'akan_berakhir') n++
+  for (let i = 0; i < semua.length; i++) {
+    // Pengecualian diri berbasis INDEKS — dua kontrak boleh punya tanggal yang
+    // persis sama, jadi menyaring "yang bukan aku" berdasarkan nilai salah.
+    const lainnya = semua.filter((_, j) => j !== i)
+    if (needsAttention(semua[i], lainnya, hariIni)) n++
   }
   return n
 }

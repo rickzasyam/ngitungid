@@ -28,7 +28,7 @@ import { useClient, ClientInfo } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
 import { ROLE_LABEL, canViewContracts } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
-import { countExpiringSoon } from '@/lib/contracts'
+import { countNeedsAttention, type ContractBadgeRow } from '@/lib/contracts'
 import { todayYmd } from '@/lib/ymd'
 import { navItemsForRole, navKey, type NavItemId } from '@/lib/nav-items'
 import { computeReportProgress, formatMonth, monthsBehind } from '@/lib/clients/report-progress'
@@ -132,21 +132,23 @@ export function Sidebar() {
   // fetch saat klien/rute berubah, setState hanya di callback promise, flag
   // `alive` membatalkan respons yang datang setelah klien berganti.
   //
-  // Pembagian kerjanya juga sama: SQL mempersempit ke kandidat dalam jendela
-  // (GET /api/contracts/expiring), `countExpiringSoon()` di lib/contracts.ts
-  // yang memutuskan — jadi angka di sini dan badge di baris /kontrak berasal
-  // dari SATU definisi. `hariIni` ikut dikirim karena server berjalan UTC
-  // sementara penggunanya WIB.
+  // Yang dihitung: kontrak yang akan berakhir (H-7) DITAMBAH yang sudah
+  // berakhir TANPA pengganti. Dulu hanya H-7, sehingga kontrak yang terlanjur
+  // lewat justru MENGHILANG dari hitungan — padahal itu kasus yang paling
+  // butuh tindakan. Seluruh aturannya ada di countNeedsAttention()
+  // (lib/contracts.ts); endpoint-nya cuma mengirim tanggal seluruh kontrak
+  // klien ini, karena pengganti bisa mulai kapan saja dan tidak ada jendela
+  // tanggal yang bisa menyaringnya tanpa membuang jawabannya.
   //
-  // Role 'user' IKUT melihat badge ini: itu kontraknya sendiri yang akan
-  // berakhir. Akunting tidak — ia tidak punya item menu Kontrak sama sekali.
+  // Role 'user' IKUT melihat badge ini: itu kontraknya sendiri. Akunting tidak —
+  // ia tidak punya item menu Kontrak sama sekali.
   useEffect(() => {
     if (!activeClient || !canViewContracts(role)) return
     let alive = true
-    fetch(`/api/contracts/expiring?clientId=${activeClient.id}&hariIni=${hariIni}`)
+    fetch(`/api/contracts/badge?clientId=${activeClient.id}`)
       .then(r => (r.ok ? r.json() : { contracts: [] }))
-      .then((d: { contracts?: { tanggalMulai: string; tanggalAkhir: string }[] }) => {
-        if (alive) setExpiringRaw(countExpiringSoon(d.contracts ?? [], hariIni))
+      .then((d: { contracts?: ContractBadgeRow[] }) => {
+        if (alive) setExpiringRaw(countNeedsAttention(d.contracts ?? [], hariIni))
       })
       .catch(() => { if (alive) setExpiringRaw(0) })
     return () => { alive = false }
