@@ -16,7 +16,7 @@
 
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import {
-  FileSignature, Loader2, Trash2, Pencil, Eye, Inbox, RotateCw, Plus, X, Check,
+  Loader2, Trash2, Pencil, Eye, Inbox, RotateCw, Plus, X, Check,
   AlertTriangle,
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
@@ -563,16 +563,29 @@ export default function KontrakPage() {
 
               <div className="ng-card-lift" style={{ background: 'white', borderRadius: 18, border: '1px solid #ececec', boxShadow: '0 2px 8px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
+                  {/* minWidth 860, turun dari 980. Di 1280 dengan sidebar
+                      terbuka, lebar wadah tabel ini ±970px (1280 − 240 sidebar
+                      − 24 padding halaman − 44 padding konten − 2 border), jadi
+                      980 meleset TIPIS dan itulah scrollbar-nya. 860 memberi
+                      kelonggaran, dan kolom No Kontrak yang kini bisa menyusut
+                      menyerap sisanya. Wadah overflow-x TETAP ada sebagai jaring
+                      pengaman (sama seperti /laporan) — bukan sebagai solusi. */}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
                     <thead>
                       <tr style={{ background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
-                        <th style={{ ...th, minWidth: 170 }}>No Kontrak</th>
-                        <th style={{ ...th, minWidth: 150 }}>Klien</th>
+                        {/* Kolom KLIEN dihapus: daftar ini di-scope ke klien
+                            aktif, jadi tiap baris menampilkan nilai yang sama —
+                            dan klien-nya sudah disebut di subjudul halaman.
+                            150px yang dikembalikannya adalah selisih antara muat
+                            dan tidak muat di 1280. */}
+                        <th style={{ ...th, minWidth: 150 }}>No Kontrak</th>
                         <th style={th}>Jenis</th>
-                        <th style={{ ...th, minWidth: 190 }}>Periode</th>
-                        <th style={{ ...th, minWidth: 130 }}>Status</th>
-                        <th style={{ ...th, textAlign: 'right', minWidth: 130 }}>Nominal</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Tgl Penagihan</th>
+                        <th style={{ ...th, minWidth: 180 }}>Periode</th>
+                        <th style={{ ...th, minWidth: 120 }}>Status</th>
+                        <th style={{ ...th, textAlign: 'right', minWidth: 120 }}>Nominal</th>
+                        {/* "Penagihan", bukan "Tgl Penagihan" — headernya yang
+                            menentukan lebar kolom ini, bukan isinya ("Tgl 25"). */}
+                        <th style={{ ...th, textAlign: 'right' }}>Penagihan</th>
                         <th style={{ ...th, textAlign: 'right' }}>Aksi</th>
                       </tr>
                     </thead>
@@ -583,15 +596,16 @@ export default function KontrakPage() {
                         return (
                           <Fragment key={c.id}>
                             <tr style={{ borderBottom: '1px solid #f5f5f6' }}>
-                              <td style={td}>
-                                <div className="flex items-center" style={{ gap: 9 }}>
-                                  <div className="flex items-center justify-center flex-shrink-0" style={{ width: 30, height: 30, borderRadius: 8, background: JENIS_ACCENT[c.jenis] + '22' }}>
-                                    <FileSignature className="w-4 h-4" style={{ color: '#1f2430' }} />
-                                  </div>
-                                  <span style={{ fontWeight: 600 }}>{c.noKontrak}</span>
-                                </div>
+                              {/* Pola /laporan untuk teks panjang: truncate +
+                                  nilai penuh di `title`. Nomor kontrak nyata
+                                  ("045/SPK-NGT/VIII/2026") dulu membungkus jadi
+                                  dua baris karena selnya tidak bisa menyusut.
+                                  Chip ikon dilepas: ia dekoratif, dan warnanya
+                                  cuma mengulang kolom Jenis di sebelahnya —
+                                  39px yang lebih berguna untuk nomornya. */}
+                              <td style={{ ...td, fontWeight: 600, maxWidth: 260 }}>
+                                <span className="block truncate" title={c.noKontrak}>{c.noKontrak}</span>
                               </td>
-                              <td style={{ ...td, color: 'var(--color-text-muted)' }}>{activeClient.name}</td>
                               <td style={td}>{JENIS_LABEL[c.jenis]}</td>
                               <td style={{ ...td, color: '#374151', whiteSpace: 'nowrap' }}>
                                 {fmtTanggal(c.tanggalMulai)} – {fmtTanggal(c.tanggalAkhir)}
@@ -651,7 +665,7 @@ export default function KontrakPage() {
                             {/* Konfirmasi hapus — MENYEBUT nomor kontraknya, bukan "kontrak ini". */}
                             {confirming && (
                               <tr style={{ borderBottom: '1px solid #f5f5f6' }}>
-                                <td colSpan={8} style={{ padding: '10px 14px', background: '#fef2f2' }}>
+                                <td colSpan={7} style={{ padding: '10px 14px', background: '#fef2f2' }}>
                                   <div className="flex items-center justify-between flex-wrap gap-3">
                                     <span style={{ fontSize: 12.5, color: '#b91c1c' }}>
                                       Hapus kontrak <strong>{c.noKontrak}</strong> ({JENIS_LABEL[c.jenis]}, {fmtTanggal(c.tanggalMulai)} – {fmtTanggal(c.tanggalAkhir)})? Dokumen PDF-nya ikut terhapus dan tidak bisa dikembalikan.
