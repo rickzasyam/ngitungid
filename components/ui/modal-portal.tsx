@@ -47,6 +47,7 @@ export function ModalShell({
   labelledBy,
   label,
   className = 'max-w-lg',
+  surface = 'light',
 }: {
   children: React.ReactNode
   /** null = tidak bisa ditutup lewat klik backdrop / Esc (mis. sedang menyimpan). */
@@ -58,7 +59,25 @@ export function ModalShell({
   label?: string
   /** kelas lebar untuk kotak dialog, mis. 'max-w-2xl'. */
   className?: string
+  /**
+   * Permukaan dialog. 'dark' memakai kanvas sidebar (#222124).
+   *
+   * INI BUKAN DARK MODE. Dark mode tidak didukung di app ini — blok
+   * `prefers-color-scheme` sengaja dihapus dari globals.css dan tidak boleh
+   * kembali (lihat catatan "App ini SENGAJA LIGHT-ONLY" di sana). Ini satu
+   * komponen yang memilih palet sidebar karena memang bagian dari sidebar,
+   * bukan tema yang mengikuti sistem operasi.
+   *
+   * Latar diset di sini karena inline style tidak bisa ditimpa className —
+   * pemanggil tidak punya cara lain selain prop ini.
+   *
+   * ⚠️ Di permukaan gelap, SETIAP warna teks di dalamnya harus diset
+   * EKSPLISIT. Warna yang diwarisi dari permukaan terang akan hilang sama
+   * sekali di sini, bukan sekadar kurang kontras.
+   */
+  surface?: 'light' | 'dark'
 }) {
+  const isDark = surface === 'dark'
   // Esc ditangani DI SINI, bukan di tiap dialog. Sebelumnya tiap pemanggil
   // memasang listener sendiri (dan yang lupa, tidak dapat Esc sama sekali).
   // `onDismiss === null` berarti sedang sibuk menyimpan → Esc ikut nonaktif,
@@ -99,7 +118,18 @@ export function ModalShell({
             aria-labelledby={labelledBy}
             aria-label={labelledBy ? undefined : label}
             className={`w-full ${className} max-h-[85vh] flex flex-col rounded-3xl overflow-hidden`}
-            style={{ background: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)' }}
+            style={
+              isDark
+                ? {
+                    background: 'var(--color-bg-sidebar)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                  }
+                : {
+                    background: 'white',
+                    boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)',
+                  }
+            }
           >
             {children}
           </div>

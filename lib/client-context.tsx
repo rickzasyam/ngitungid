@@ -6,6 +6,7 @@ import {
   isOwner as roleIsOwner, isInternal as roleIsInternal, canDoAccounting as roleCanDoAccounting,
   type Role,
 } from '@/lib/roles'
+import { pushRecent } from '@/lib/client-switcher'
 
 export interface ClientInfo {
   id: string
@@ -27,6 +28,16 @@ interface ClientContextValue {
   activeClient: ClientInfo | null
   setActiveClient: (client: ClientInfo | null) => void
   refreshClients: () => Promise<ClientInfo[]>
+  /**
+   * Id klien yang terakhir dibuka, terbaru di depan — bahan pintasan di modal
+   * pemilih klien.
+   *
+   * HANYA SEUMUR SESI HALAMAN: state React biasa, hilang saat reload penuh.
+   * Tidak disimpan ke mana pun atas permintaan eksplisit Ricko (2026-08-12),
+   * dan belum ada tempat server-side untuknya. Kalau kelak ingin bertahan
+   * lintas reload, tempatnya kolom di `users` — bukan storage browser.
+   */
+  recentClientIds: string[]
   isLoaded: boolean
   role: Role
   /** Orang dalam NgitungID — boleh pindah klien, lihat kartu workspace. */
@@ -43,6 +54,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
   const [clients, setClients] = useState<ClientInfo[]>([])
   const [activeClient, setActiveClientState] = useState<ClientInfo | null>(null)
+  const [recentClientIds, setRecentClientIds] = useState<string[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
 
   // Default 'user' (paling sempit) kalau sesi belum ke-resolve — jangan pernah
@@ -90,9 +102,14 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     }
   }, [status, role, userClientId, fetchClients])
 
+  // Riwayat "terakhir dibuka" dicatat DI SINI, bukan di sidebar, karena SETIAP
+  // perpindahan klien lewat setActiveClient — termasuk dari kartu Admin
+  // Overview. Kalau dicatat di komponen switcher-nya saja, klien yang dipilih
+  // dari Admin Overview tidak akan pernah muncul di pintasan.
   const setActiveClient = useCallback(
     (client: ClientInfo | null) => {
       setActiveClientState(client)
+      if (client) setRecentClientIds(prev => pushRecent(prev, client.id))
       if (isInternal) {
         if (client) localStorage.setItem(STORAGE_KEY, client.id)
         else localStorage.removeItem(STORAGE_KEY)
@@ -112,7 +129,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ClientContext.Provider
-      value={{ clients, activeClient, setActiveClient, refreshClients, isLoaded, role, isInternal, canDoAccounting, isOwner }}
+      value={{ clients, activeClient, setActiveClient, refreshClients, recentClientIds, isLoaded, role, isInternal, canDoAccounting, isOwner }}
     >
       {children}
     </ClientContext.Provider>

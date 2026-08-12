@@ -14,8 +14,6 @@ import {
   ChevronRight,
   ChevronDown,
   Building2,
-  LayoutGrid,
-  Check,
   Menu,
   X,
   LogOut,
@@ -24,8 +22,9 @@ import {
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
-import { useClient, ClientInfo } from '@/lib/client-context'
+import { useClient } from '@/lib/client-context'
 import { ClientAvatar } from '@/components/client-avatar'
+import { ClientSwitcherModal } from '@/components/client-switcher-modal'
 import { ROLE_LABEL, canViewContracts } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
 import { countNeedsAttention, type ContractBadgeRow } from '@/lib/contracts'
@@ -60,7 +59,7 @@ const NAV_ICONS: Record<NavItemId, typeof LayoutDashboard> = {
 export function Sidebar() {
   const pathname = usePathname()
   const activeItem = ROUTE_ACTIVE_MAP[pathname] ?? pathname.replace(/^\//, '')
-  const { activeClient, setActiveClient, isInternal, canDoAccounting, clients, role } = useClient()
+  const { activeClient, isInternal, canDoAccounting, role } = useClient()
   // Sesi login (SessionProvider sudah dipasang di AppShell) — untuk menampilkan
   // siapa yang sedang login & tombol keluar. Beda dari kartu workspace di atas:
   // itu KLIEN yang sedang dikelola, ini AKUN yang sedang dipakai.
@@ -68,7 +67,7 @@ export function Sidebar() {
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
-  const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
   // Jumlah AKUN yang belum dipetakan di seluruh laporan klien aktif (semua
   // periode) → badge di item "COA Mapping". Re-fetch saat klien/route berubah
@@ -88,7 +87,6 @@ export function Sidebar() {
   // yang dipakai halaman /kontrak, supaya badge sidebar & badge per baris tidak
   // pernah memakai "hari ini" yang berbeda.
   const [hariIni] = useState(todayYmd)
-  const workspaceRef = useRef<HTMLDivElement>(null)
 
   const capsuleRef = useRef<HTMLDivElement>(null)
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -103,15 +101,8 @@ export function Sidebar() {
     setIsMobileOpen(false)
   }, [activeItem])
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (workspaceRef.current && !workspaceRef.current.contains(e.target as Node)) {
-        setIsWorkspaceDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  // Listener klik-di-luar untuk panel switcher DIHAPUS bersama panelnya —
+  // ModalShell menangani backdrop & Escape sendiri.
 
   useEffect(() => {
     // Badge pendingMapping cuma relevan bagi yang boleh mapping (item "COA Mapping" hanya
@@ -268,11 +259,6 @@ export function Sidebar() {
   })()
   // Owner & akunting sama-sama boleh pindah klien (semua staf lihat semua klien).
   const canSwitch = isInternal
-
-  const handleSelectClient = (client: ClientInfo | null) => {
-    setActiveClient(client)
-    setIsWorkspaceDropdownOpen(false)
-  }
 
   // signOut() next-auth memanggil endpoint signout → cookie sesi DIHAPUS di
   // server, bukan sekadar pindah halaman. redirect:true supaya user mendarat di
@@ -493,13 +479,13 @@ export function Sidebar() {
         </nav>
 
         {/* Bottom workspace card — clickable client switcher for admin */}
-        <div className="px-4 py-5" ref={workspaceRef}>
+        <div className="px-4 py-5">
           <div className="relative">
             <button
               type="button"
-              onClick={() => canSwitch && setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
-              aria-haspopup={canSwitch ? 'listbox' : undefined}
-              aria-expanded={canSwitch ? isWorkspaceDropdownOpen : undefined}
+              onClick={() => canSwitch && setIsSwitcherOpen(true)}
+              aria-haspopup={canSwitch ? 'dialog' : undefined}
+              aria-expanded={canSwitch ? isSwitcherOpen : undefined}
               aria-label={
                 activeClient ? `Ganti klien — sekarang ${activeClient.name}` : 'Pilih klien untuk mulai mengelola'
               }
@@ -585,76 +571,11 @@ export function Sidebar() {
               )}
             </button>
 
-            {/* Client switcher dropdown */}
-            {isWorkspaceDropdownOpen && canSwitch && (
-              <div
-                className="absolute rounded-2xl overflow-hidden z-50"
-                style={{
-                  background: 'var(--color-bg-sidebar)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-                  bottom: isCollapsed ? '0' : 'calc(100% + 8px)',
-                  left: isCollapsed ? 'calc(100% + 8px)' : '0',
-                  right: isCollapsed ? 'auto' : '0',
-                  width: isCollapsed ? '220px' : 'auto',
-                }}
-              >
-                {/* Admin Overview option */}
-                <button
-                  type="button"
-                  onClick={() => handleSelectClient(null)}
-                  data-selected={!activeClient}
-                  className="ng-switch-row w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-                >
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: 'rgba(255,255,255,0.08)' }}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.7)' }} />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium" style={{ color: 'white' }}>Admin Overview</p>
-                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Lihat semua klien</p>
-                  </div>
-                  {!activeClient && <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-accent-primary)' }} />}
-                </button>
-
-                {/* Client list */}
-                <div className="py-1">
-                  {clients.map(client => (
-                    <button
-                      key={client.id}
-                      type="button"
-                      onClick={() => handleSelectClient(client)}
-                      data-selected={activeClient?.id === client.id}
-                      className="ng-switch-row w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
-                    >
-                      {client.hasLogo ? (
-                        <ClientAvatar client={client} size={28} rounded={8} />
-                      ) : (
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                          style={{
-                            background: activeClient?.id === client.id ? 'var(--color-accent-primary)' : 'rgba(255,255,255,0.08)',
-                            color: activeClient?.id === client.id ? 'var(--color-bg-sidebar)' : 'white',
-                          }}
-                        >
-                          {client.name.charAt(0)}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate" style={{ color: 'white' }}>{client.name}</p>
-                        <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{client.type}</p>
-                      </div>
-                      {activeClient?.id === client.id && (
-                        <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-accent-primary)' }} />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Daftar klien SUDAH TIDAK di sini. Panel yang berjangkar ke kartu
+                ini tumbuh ke atas sampai menutupi seluruh nav (Dashboard s/d
+                Settings) begitu kliennya belasan — dan karena tingginya dibatasi
+                sidebar, membatasi max-height cuma mengurangi masalahnya. Kini
+                ClientSwitcherModal, dirender di bawah. */}
           </div>
         </div>
 
@@ -740,6 +661,13 @@ export function Sidebar() {
         )}
 
       </aside>
+
+      {/* Di-portal ke <body> oleh ModalShell, jadi ia TIDAK terkurung <aside>
+          dan tidak pernah bisa menutupi nav — inti perpindahan dari panel
+          berjangkar ke modal. */}
+      {isSwitcherOpen && canSwitch && (
+        <ClientSwitcherModal onClose={() => setIsSwitcherOpen(false)} />
+      )}
     </>
   )
 }
