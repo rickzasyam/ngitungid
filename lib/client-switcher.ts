@@ -43,6 +43,45 @@ export function pushRecent(
 }
 
 /**
+ * Baca daftar id dari localStorage. TIDAK PERNAH MELEMPAR.
+ *
+ * Isi localStorage adalah input tak terpercaya: bisa ditulis versi app yang
+ * lebih lama, disunting tangan lewat devtools, atau terpotong. Satu
+ * `JSON.parse` telanjang di jalur ini akan melempar saat render provider dan
+ * mematikan seluruh app — jauh lebih mahal daripada kehilangan daftar pintasan.
+ * Setiap bentuk yang tidak dikenali diperlakukan sama: daftar kosong.
+ *
+ * Entri non-string ikut dibuang (mis. `[1,2]` dari versi lama), duplikat
+ * digabung, dan hasilnya dipotong `limit` supaya storage yang membengkak tidak
+ * bisa membanjiri modal.
+ */
+export function parseRecent(raw: string | null, limit: number = RECENT_LIMIT): string[] {
+  if (!raw) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  const bersih = parsed.filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+  return [...new Set(bersih)].slice(0, limit)
+}
+
+/**
+ * Buang id yang kliennya sudah tidak ada — DIPANGGIL SAAT MEMBACA, bukan saat
+ * merender. Klien yang dihapus tidak boleh menyisakan baris mati di modal, dan
+ * membuangnya lebih awal juga mencegahnya memakan slot pintasan selamanya.
+ */
+export function pruneRecent(
+  ids: readonly string[],
+  clients: readonly { id: string }[]
+): string[] {
+  const known = new Set(clients.map(c => c.id))
+  return ids.filter(id => known.has(id))
+}
+
+/**
  * Ubah id "terakhir dibuka" jadi klien yang benar-benar masih ada.
  *
  * `excludeId` membuang klien yang SEDANG aktif: ia selalu yang paling baru

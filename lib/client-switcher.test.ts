@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   filterClients, pushRecent, recentClients, shouldShowRecents,
+  parseRecent, pruneRecent,
   RECENT_LIMIT, RECENT_MIN_CLIENTS,
 } from './client-switcher'
 import type { ClientInfo } from './client-context'
@@ -158,5 +159,76 @@ describe('skala 60 klien', () => {
 
   it('seksi pintasan memang tampil di skala ini', () => {
     expect(shouldShowRecents(60, RECENT_LIMIT, '')).toBe(true)
+  })
+})
+
+// ══ PERSISTENSI: localStorage ════════════════════════════════════
+// Isi localStorage adalah input TAK TERPERCAYA — bisa ditulis versi app lebih
+// lama, disunting lewat devtools, atau terpotong. Satu JSON.parse telanjang di
+// jalur ini melempar saat render ClientProvider dan mematikan seluruh app.
+describe('parseRecent — tidak pernah melempar', () => {
+  it('membaca kembali apa yang ditulis (bertahan melewati reload)', () => {
+    const tersimpan = JSON.stringify(pushRecent(pushRecent([], 'c1'), 'c2'))
+    expect(parseRecent(tersimpan)).toEqual(['c2', 'c1'])
+  })
+
+  it('urutan terbaru-di-depan ikut bertahan', () => {
+    let ids: string[] = []
+    for (const id of ['a', 'b', 'c']) ids = pushRecent(ids, id)
+    expect(parseRecent(JSON.stringify(ids))).toEqual(['c', 'b', 'a'])
+  })
+
+  it('JSON rusak → daftar kosong, BUKAN exception', () => {
+    for (const rusak of ['{', 'bukan json', '[1,2', '{"a":', '[[[']) {
+      expect(() => parseRecent(rusak), rusak).not.toThrow()
+      expect(parseRecent(rusak), rusak).toEqual([])
+    }
+  })
+
+  it('null / string kosong → daftar kosong', () => {
+    expect(parseRecent(null)).toEqual([])
+    expect(parseRecent('')).toEqual([])
+  })
+
+  it('JSON sah tapi BUKAN array → daftar kosong', () => {
+    for (const salah of ['{"a":1}', '"c1"', '42', 'true', 'null']) {
+      expect(parseRecent(salah), salah).toEqual([])
+    }
+  })
+
+  it('entri non-string dibuang, string yang sah dipertahankan', () => {
+    expect(parseRecent('["c1",1,null,{"id":"c2"},"c3",""]')).toEqual(['c1', 'c3'])
+  })
+
+  it('duplikat digabung', () => {
+    expect(parseRecent('["c1","c1","c2"]')).toEqual(['c1', 'c2'])
+  })
+
+  it(`dipotong di ${RECENT_LIMIT} walau storage membengkak`, () => {
+    const banyak = JSON.stringify(Array.from({ length: 50 }, (_, i) => `id-${i}`))
+    expect(parseRecent(banyak)).toHaveLength(RECENT_LIMIT)
+  })
+})
+
+describe('pruneRecent — klien terhapus dibuang SAAT MEMBACA', () => {
+  it('id yang kliennya tidak ada lagi dibuang', () => {
+    expect(pruneRecent(['c1', 'sudah-dihapus', 'c2'], SEMUA)).toEqual(['c1', 'c2'])
+  })
+
+  it('urutan yang tersisa dipertahankan', () => {
+    expect(pruneRecent(['c3', 'hantu', 'c1'], SEMUA)).toEqual(['c3', 'c1'])
+  })
+
+  it('semua id asing → kosong', () => {
+    expect(pruneRecent(['x', 'y'], SEMUA)).toEqual([])
+  })
+
+  it('daftar klien kosong → kosong (belum ter-fetch)', () => {
+    expect(pruneRecent(['c1'], [])).toEqual([])
+  })
+
+  it('rantai baca penuh: parse → prune, dari storage yang kotor', () => {
+    const kotor = '["c2","klien-yang-sudah-dihapus",7,"c1"]'
+    expect(pruneRecent(parseRecent(kotor), SEMUA)).toEqual(['c2', 'c1'])
   })
 })
