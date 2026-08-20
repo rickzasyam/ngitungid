@@ -206,7 +206,11 @@ function LoginForm() {
                   autoComplete="current-password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full text-sm focus-visible:outline-none"
+                  // rounded-2xl disamakan dengan input email: normalnya tak
+                  // terlihat (latar input transparan), tapi bidang inset
+                  // box-shadow autofill mengikuti radius ELEMEN — tanpa ini
+                  // sudut fill autofill-nya siku di dalam wrapper yang membulat.
+                  className="w-full text-sm rounded-2xl focus-visible:outline-none"
                   style={{ ...fieldInput, padding: '13px 6px 13px 10px' }}
                   placeholder="••••••••"
                 />

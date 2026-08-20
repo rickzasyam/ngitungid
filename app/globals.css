@@ -766,3 +766,44 @@ textarea::placeholder {
   color: rgba(255, 255, 255, 0.5);
   opacity: 1;
 }
+
+/* === Autofill Chrome pada field login =====================================
+   Chrome memaksa latar & warna teksnya SENDIRI pada field yang di-autofill
+   (-webkit-autofill), dan `background-color` biasa DIABAIKAN sepenuhnya —
+   itulah kenapa input email berubah putih setelah kredensial tersimpan diisi
+   otomatis. Satu-satunya cara yang bekerja: inset box-shadow setebal field
+   (menimpa latar paksaan itu) + -webkit-text-fill-color untuk teksnya.
+
+   Warnanya OPAQUE #2f2e31, bukan rgba(255,255,255,0.06). Itu hasil komposit
+   PERSIS dari keadaan normal (0.06 putih di atas kanvas #222124), jadi field
+   ter-autofill tidak bisa dibedakan dari yang diketik manual. Memakai nilai
+   rgba yang sama di sini justru salah: shadow-nya menumpuk DI ATAS latar
+   wrapper dan hasilnya lebih terang.
+
+   Border & radius hidup di .ng-login-field (wrapper), jadi autofill tidak bisa
+   menyentuhnya. border-radius di sini hanya supaya bidang inset shadow ikut
+   membulat dan tidak menyisakan sudut siku di dalam wrapper. */
+.ng-login-field input:-webkit-autofill,
+.ng-login-field input:-webkit-autofill:hover,
+.ng-login-field input:-webkit-autofill:focus,
+.ng-login-field input:-webkit-autofill:active {
+  -webkit-box-shadow: inset 0 0 0 1000px #2f2e31 !important;
+  box-shadow: inset 0 0 0 1000px #2f2e31 !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff;
+  border-radius: 16px;
+  /* Chrome menganimasikan latar autofill-nya; ditunda sangat lama supaya tidak
+     pernah sempat terlihat berkedip putih sebelum shadow menutupinya. */
+  transition: background-color 100000s ease-in-out 0s;
+}
+
+/* Bentuk STANDAR (tanpa prefiks) untuk browser non-Chromium. Sengaja aturan
+   TERPISAH: satu selektor yang tidak dikenali akan membatalkan seluruh daftar
+   selektor, jadi menggabungkannya dengan :-webkit-autofill akan mematikan
+   dua-duanya di browser yang cuma mengenal salah satu. */
+.ng-login-field input:autofill {
+  box-shadow: inset 0 0 0 1000px #2f2e31 !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff;
+  border-radius: 16px;
+}
