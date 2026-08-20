@@ -692,3 +692,77 @@ textarea::placeholder {
 .delay-150 { animation-delay: 150ms; }
 .delay-225 { animation-delay: 225ms; }
 .delay-300 { animation-delay: 300ms; }
+/* ══ HALAMAN LOGIN ═══════════════════════════════════════════════════════
+   SATU halaman yang memilih palet kanvas (#222124 + lime). Ini BUKAN dark
+   mode: blok prefers-color-scheme tetap tidak ada dan tidak boleh kembali.
+   Semua kelas di bawah berada di TOP LEVEL, bukan di dalam @layer utilities —
+   Tailwind v4 membuang @keyframes yang dideklarasikan di dalam @layer, dan itu
+   dulu membuat elemen ber-opacity:0 tidak pernah muncul kembali.
+
+   Latar titik-titik sengaja STATIS dan murni CSS. Desain aslinya
+   (docs/login-design/) memakai mesin partikel WebGL Three.js — lihat catatan
+   di app/login/page.tsx. */
+.ng-login-dots {
+  background-color: var(--color-bg-main);
+  background-image:
+    radial-gradient(circle at 22% 28%, rgba(218, 241, 99, 0.10), transparent 55%),
+    radial-gradient(rgba(218, 241, 99, 0.16) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+  background-position: 0 0, 0 0;
+}
+
+/* Tombol utama. Hover lewat KELAS, bukan onMouseEnter inline — pengguna
+   keyboard tidak pernah memicu handler mouse. */
+.ng-login-submit {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.ng-login-submit:hover:not(:disabled),
+.ng-login-submit:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(218, 241, 99, 0.28);
+}
+
+.ng-login-submit:disabled {
+  cursor: not-allowed;
+}
+
+/* Bungkus input: garis tepi menyala saat field di dalamnya menerima fokus. */
+.ng-login-field {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ng-login-field:focus-within {
+  border-color: rgba(218, 241, 99, 0.55);
+  box-shadow: 0 0 0 3px rgba(218, 241, 99, 0.12);
+}
+
+/* Tombol ikon (lihat/sembunyikan password). */
+.ng-login-icon-btn {
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.ng-login-icon-btn:hover,
+.ng-login-icon-btn:focus-visible {
+  color: var(--color-accent-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ng-login-submit,
+  .ng-login-field,
+  .ng-login-icon-btn {
+    transition: none;
+  }
+  .ng-login-submit:hover:not(:disabled),
+  .ng-login-submit:focus-visible:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Placeholder di input login. Aturan global input::placeholder dipatok #616b7a
+   untuk latar TERANG; di atas kanvas #222124 nilainya cuma 2,93:1. */
+.ng-login-field input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+  opacity: 1;
+}
