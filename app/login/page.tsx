@@ -101,7 +101,7 @@ function LoginForm() {
              seluruh layar di ponsel. Isinya teks merek saja — tidak ada kontrol
              di dalamnya, jadi tidak ada yang hilang saat ia disembunyikan. ── */}
       <section
-        className="hidden lg:flex lg:w-[60%] items-center justify-center relative overflow-hidden px-16 py-12 ng-login-dots"
+        className="hidden lg:flex lg:w-[60%] items-start justify-center relative overflow-hidden px-16 pt-32 pb-12 ng-login-dots"
         style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}
       >
         {/* Terrain partikel Three.js. Dimuat lewat next/dynamic(ssr:false)
@@ -110,12 +110,15 @@ function LoginForm() {
             gagal dimuat, komponen ini merender null dan kisi titik CSS di
             `ng-login-dots` tetap jadi latarnya. */}
         <LoginTerrain />
-        {/* Isi dibatasi 672px (max-w-2xl prototipe) lalu DIPUSATKAN di dalam
-            kolomnya — bukan ditempel ke tepi kiri. Versi sebelumnya memakai
-            padding kiri tetap 72px sehingga di 1920 teksnya berhenti di x≈632
-            sementara form baru mulai di x≈1297: ±665px ruang mati di tengah.
-            Memusatkan kedua kolom menutup sebagian besar jarak itu tanpa
-            melebarkan teks jadi baris yang kepanjangan untuk dibaca. */}
+        {/* Isi dibatasi 672px (max-w-2xl prototipe) dan dipusatkan HORIZONTAL
+            di dalam kolomnya — bukan ditempel ke tepi kiri. Versi sebelumnya
+            memakai padding kiri tetap 72px sehingga di 1920 teksnya berhenti di
+            x≈632 sementara form baru mulai di x≈1297: ±665px ruang mati.
+
+            Secara VERTIKAL sengaja top-aligned (items-start + pt-32), mengikuti
+            prototipe. Dipusatkan vertikal, blok teks ini mendarat tepat di
+            punggung gunung dan menutupi bagian terrain yang paling padat —
+            justru bagian yang paling ingin dilihat. */}
         <div className="relative z-10 w-full animate-slide-up" style={{ maxWidth: 672 }}>
           <div className="flex items-center gap-4" style={{ marginBottom: 40 }}>
             {/* Wordmark "N" yang sama dengan sidebar — BUKAN ikon terminal dari
