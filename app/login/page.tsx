@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { LoginTerrain } from '@/components/login-terrain'
 
 // Halaman Login — PENGGANTIAN VISUAL. Logika autentikasinya tidak ditulis
 // ulang: markup baru membungkus perilaku yang sudah ada.
@@ -33,11 +34,18 @@ import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 // prefers-color-scheme tetap tidak ada di globals.css dan tidak boleh kembali.
 // Setiap warna teks di bawah diset EKSPLISIT.
 //
-// ══ LATAR TITIK-TITIK ══════════════════════════════════════════════════════
-// Desain di docs/login-design/ memakai MESIN PARTIKEL WebGL Three.js (21 modul,
-// import map ke three@0.180.0 + tweakpane dari CDN). Itu dependensi baru, jadi
-// TIDAK dipakai. Penggantinya: kisi titik statis murni CSS (.ng-login-dots di
-// globals.css) — nol JavaScript, nol byte tambahan, nol frame per detik.
+// ══ LATAR ══════════════════════════════════════════════════════════════════
+// Mesin partikel Three.js dari docs/login-design/ DIPORTING apa adanya ke
+// components/login-terrain/engine/ — geometri, noise, kepadatan, kamera, dan
+// timing tidak disentuh; hanya paletnya yang dipetakan ke token kita.
+// three DIBUNDEL (pnpm, pin 0.180.0). Tidak ada CDN, tidak ada import map,
+// tidak ada jsDelivr. DevPanel + tweakpane dibuang.
+//
+// Ia dimuat lewat next/dynamic({ ssr: false }) sehingga berada di chunk
+// TERPISAH: form dirender dan bisa diketik dari bundel yang sudah ada, kanvas
+// menyusul. Kalau WebGL tidak tersedia, konteksnya hilang, atau chunk-nya gagal
+// dimuat, komponennya merender null dan kisi titik CSS (.ng-login-dots) tetap
+// jadi latar panel kiri — tidak pernah kosong, tidak pernah melempar.
 
 function LoginForm() {
   const router = useRouter()
@@ -93,16 +101,22 @@ function LoginForm() {
              seluruh layar di ponsel. Isinya teks merek saja — tidak ada kontrol
              di dalamnya, jadi tidak ada yang hilang saat ia disembunyikan. ── */}
       <section
-        className="hidden lg:flex lg:w-[60%] items-center justify-center relative px-16 py-12 ng-login-dots"
+        className="hidden lg:flex lg:w-[60%] items-center justify-center relative overflow-hidden px-16 py-12 ng-login-dots"
         style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}
       >
+        {/* Terrain partikel Three.js. Dimuat lewat next/dynamic(ssr:false)
+            sehingga three ada di chunk TERPISAH dan form tidak pernah
+            menunggunya. Kalau WebGL tidak ada / konteksnya hilang / chunk-nya
+            gagal dimuat, komponen ini merender null dan kisi titik CSS di
+            `ng-login-dots` tetap jadi latarnya. */}
+        <LoginTerrain />
         {/* Isi dibatasi 672px (max-w-2xl prototipe) lalu DIPUSATKAN di dalam
             kolomnya — bukan ditempel ke tepi kiri. Versi sebelumnya memakai
             padding kiri tetap 72px sehingga di 1920 teksnya berhenti di x≈632
             sementara form baru mulai di x≈1297: ±665px ruang mati di tengah.
             Memusatkan kedua kolom menutup sebagian besar jarak itu tanpa
             melebarkan teks jadi baris yang kepanjangan untuk dibaca. */}
-        <div className="w-full animate-slide-up" style={{ maxWidth: 672 }}>
+        <div className="relative z-10 w-full animate-slide-up" style={{ maxWidth: 672 }}>
           <div className="flex items-center gap-4" style={{ marginBottom: 40 }}>
             {/* Wordmark "N" yang sama dengan sidebar — BUKAN ikon terminal dari
                 template: pengguna app ini akuntan, bukan developer. */}
