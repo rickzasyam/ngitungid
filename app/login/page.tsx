@@ -93,11 +93,17 @@ function LoginForm() {
              seluruh layar di ponsel. Isinya teks merek saja — tidak ada kontrol
              di dalamnya, jadi tidak ada yang hilang saat ia disembunyikan. ── */}
       <section
-        className="hidden lg:flex lg:w-[56%] relative flex-col justify-center ng-login-dots"
-        style={{ padding: '0 72px', borderRight: '1px solid rgba(255,255,255,0.06)' }}
+        className="hidden lg:flex lg:w-[60%] items-center justify-center relative px-16 py-12 ng-login-dots"
+        style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}
       >
-        <div className="animate-slide-up" style={{ maxWidth: 560 }}>
-          <div className="flex items-center gap-4" style={{ marginBottom: 44 }}>
+        {/* Isi dibatasi 672px (max-w-2xl prototipe) lalu DIPUSATKAN di dalam
+            kolomnya — bukan ditempel ke tepi kiri. Versi sebelumnya memakai
+            padding kiri tetap 72px sehingga di 1920 teksnya berhenti di x≈632
+            sementara form baru mulai di x≈1297: ±665px ruang mati di tengah.
+            Memusatkan kedua kolom menutup sebagian besar jarak itu tanpa
+            melebarkan teks jadi baris yang kepanjangan untuk dibaca. */}
+        <div className="w-full animate-slide-up" style={{ maxWidth: 672 }}>
+          <div className="flex items-center gap-4" style={{ marginBottom: 40 }}>
             {/* Wordmark "N" yang sama dengan sidebar — BUKAN ikon terminal dari
                 template: pengguna app ini akuntan, bukan developer. */}
             <div
@@ -122,26 +128,28 @@ function LoginForm() {
             </div>
           </div>
 
+          {/* Irama spasi mengikuti prototipe: headline 48/56, jarak blok logo
+              40px, jarak headline 32px, paragraf dibatasi 448px (max-w-md). */}
           <h1
             className="font-bold"
-            style={{ fontSize: 46, lineHeight: 1.1, letterSpacing: '-0.02em', color: '#ffffff', marginBottom: 22 }}
+            style={{ fontSize: 48, lineHeight: 1.167, letterSpacing: '-0.02em', color: '#ffffff', marginBottom: 32 }}
           >
             Laporan Keuangan,{' '}
             <span style={{ color: 'var(--color-accent-primary)' }}>Terbaca Sekejap</span>
           </h1>
 
-          <p style={{ fontSize: 16, lineHeight: 1.65, color: 'rgba(255,255,255,0.7)', maxWidth: 440 }}>
+          <p style={{ fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.7)', maxWidth: 448 }}>
             Dari PDF ke dashboard dan analisis rasio. Satu tempat untuk semua laporan klien Anda.
           </p>
         </div>
       </section>
 
       {/* ── KANAN: form ────────────────────────────────────────────────── */}
-      <section
-        className="w-full lg:w-[44%] flex flex-col justify-center relative"
-        style={{ padding: '48px 24px' }}
-      >
-        <div className="w-full mx-auto animate-slide-up" style={{ maxWidth: 400 }}>
+      {/* Kolom form: 40%, isinya dibatasi 400px dan dipusatkan secara
+          horizontal DAN vertikal. `items-center justify-center` menggantikan
+          `flex-col justify-center`, yang hanya memusatkan sumbu vertikal. */}
+      <section className="w-full lg:w-[40%] flex items-center justify-center relative px-6 py-12 lg:px-16">
+        <div className="w-full animate-slide-up" style={{ maxWidth: 400 }}>
 
           {/* Wordmark versi ponsel — panel kiri tidak dirender di lebar ini. */}
           <div className="flex lg:hidden items-center gap-3" style={{ marginBottom: 36 }}>
