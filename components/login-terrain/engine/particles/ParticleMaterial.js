@@ -50,7 +50,7 @@ const VERTEX_SHADER = /* glsl */ `
   // Impulse ripple pool: (originX, originZ, startTime, amplitude) per slot.
   // Inactive slots carry amplitude 0. Fixed pool size — a uniform array, not
   // a per-frame allocation.
-  #define RIPPLE_COUNT 4
+  #define RIPPLE_COUNT 8
   uniform vec4  uRipples[RIPPLE_COUNT];
   uniform vec3  uRippleShape;       // x: speed, y: ring width, z: decay rate
   uniform vec3  uColorLow;
@@ -170,8 +170,20 @@ export function createParticleMaterial() {
       uInfluenceRadius: { value: 1 },
       uLiftAmount: { value: 0 },
       // Slots start inactive: amplitude 0, startTime far in the past.
+      //
+      // Pool DIPERBESAR 4 -> 8 (deviasi sadar dari prototipe). Dengan 4 slot
+      // dan laju spawn maksimum 6,67/detik (minInterval 0,15s), sebuah slot
+      // dipakai ulang tiap 0,60s — saat ripple lamanya MASIH 36% amplitudo
+      // (decay 1,7/s). Penimpaan itu memotong gelombang dalam satu frame,
+      // ~6,7 kali per detik: persis rasa "patah-patah" yang dilaporkan.
+      // Dengan 8 slot siklusnya jadi 1,20s → tersisa ~13% saat ditimpa.
+      // Panjang array ini HARUS sama dengan RIPPLE_COUNT di shader.
       uRipples: {
         value: [
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
           new Vector4(0, 0, -1e3, 0),
           new Vector4(0, 0, -1e3, 0),
           new Vector4(0, 0, -1e3, 0),
