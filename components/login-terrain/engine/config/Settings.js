@@ -266,15 +266,25 @@ export const Settings = {
       width: 0.55, // gaussian ring width, world units
       decay: 1.7, // amplitude decay rate, 1/s — the "settling"
       amplitude: 0.32, // world-unit height of a fresh wavefront
-      // Jejak dirapatkan (deviasi sadar dari prototipe): 0.9 unit ~ 65px
-      // gerakan kursor terasa sebagai letupan terpisah, bukan sapuan menerus.
-      // 0.45 unit ~ 32px. minInterval ikut turun supaya jarak itu benar-benar
-      // jadi pembatasnya, bukan laju.
-      // ⚠️ minInterval 0,08s = 12,5 spawn/detik. Pool ripple di
-      // ParticleMaterial.js (RIPPLE_COUNT 16) DIHITUNG dari angka ini — kalau
-      // salah satunya diubah, hitung ulang yang lain.
-      spawnDistance: 0.45, // pointer travel required to launch a new ripple
+      // spawnDistance sempat diturunkan ke 0.45 (~32px) untuk merapatkan jejak,
+      // lalu DIKEMBALIKAN ke 0.9 (~65px). Merapatkannya tidak membuat jejak
+      // terasa menerus — ia cuma menggandakan frekuensi ANIMASI MULAI ULANG:
+      // di 120 px/detik ripple baru meletup tiap 0,27s, bukan 0,54s, dan di
+      // gerakan pelan tiap letupan itu terlihat satu per satu.
+      // ⚠️ minInterval 0,08s = 12,5 spawn/detik pada flick cepat. Pool ripple
+      // di ParticleMaterial.js (RIPPLE_COUNT 16) DIHITUNG dari angka ini —
+      // kalau salah satunya diubah, hitung ulang yang lain.
+      spawnDistance: 0.9, // pointer travel required to launch a new ripple
       minInterval: 0.08, // s — spawn rate limit
+
+      // Amplitudo mengikuti KECEPATAN gerak (deviasi sadar dari prototipe).
+      // Di prototipe besar ripple hanya dikali `strength` — yaitu ADA/TIDAKNYA
+      // kursor, bukan seberapa cepat ia digerakkan. Akibatnya geser pelan 1 mm
+      // menghasilkan gelombang sebesar flick cepat, cuma diulang-ulang: itulah
+      // yang terbaca sebagai animasi looping, bukan jejak yang mengalir.
+      // Kurvanya kuadratik supaya pemisahan pelan-vs-cepat tegas.
+      speedReference: 3.0, // unit/detik (~216 px) — kecepatan saat amplitudo penuh
+      minSpeedScale: 0.15, // lantai: gerakan pelan tetap beriak, sekadar tidak menonjol
     },
   },
 

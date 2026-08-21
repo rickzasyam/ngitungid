@@ -52,6 +52,10 @@ export class RippleEngine {
       this.tracking = true;
       this.lastX = cursorX;
       this.lastZ = cursorZ;
+      // Jam spawn ikut di-anchor: tanpa ini ripple PERTAMA sesudah kursor
+      // masuk dihitung kecepatannya dari lastSpawnTime lama (bisa -Infinity),
+      // sehingga keluar sebagai riak paling lemah justru saat orang baru mulai.
+      this.lastSpawnTime = elapsed;
       return;
     }
 
@@ -64,7 +68,15 @@ export class RippleEngine {
       travelledSq >= r.spawnDistance * r.spawnDistance &&
       elapsed - this.lastSpawnTime >= r.minInterval
     ) {
-      this.spawn(cursorX, cursorZ, r.amplitude * strength, elapsed);
+      // Besar ripple mengikuti KECEPATAN gerak, bukan sekadar kehadiran kursor.
+      // Jarak dan waktu sejak spawn terakhir sudah ada di sini, jadi kecepatan
+      // rata-ratanya didapat tanpa state per-frame tambahan.
+      const dt = elapsed - this.lastSpawnTime;
+      const speed = dt > 0 ? Math.sqrt(travelledSq) / dt : 0;
+      const t = Math.min(speed / r.speedReference, 1);
+      const speedScale = Math.max(t * t, r.minSpeedScale);
+
+      this.spawn(cursorX, cursorZ, r.amplitude * strength * speedScale, elapsed);
       this.lastX = cursorX;
       this.lastZ = cursorZ;
       this.lastSpawnTime = elapsed;
