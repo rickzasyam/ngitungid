@@ -60,7 +60,7 @@ const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
  * Tidak ada geometri, noise, kepadatan, kamera, atau timing yang disentuh.
  *
  * @param {HTMLElement} container
- * @param {{ onContextLost?: () => void }} [hooks]
+ * @param {{ onContextLost?: () => void, onFps?: (fps: number) => void }} [hooks]
  * @returns {() => void} dispose
  */
 export function createTerrain(container, hooks = {}) {
@@ -89,6 +89,9 @@ export function createTerrain(container, hooks = {}) {
   );
 
   const stats = { fps: 0 };
+  // Akumulator pelaporan fps. Hanya dipakai kalau pemanggil mengirim
+  // hooks.onFps — tanpa itu tidak ada satu pun pekerjaan tambahan per frame.
+  let fpsReportAccum = 0;
 
   /**
    * Render a single resting frame: base camera pose, no cursor influence.
@@ -104,6 +107,15 @@ export function createTerrain(container, hooks = {}) {
   // --- Per-frame pipeline ---------------------------------------------------
   const loop = new AnimationLoop((elapsed, deltaTime) => {
     stats.fps = damp(stats.fps, 1 / Math.max(deltaTime, 1e-4), FPS_SMOOTHING, deltaTime);
+    // Pembacaan fps untuk diagnosis. Dilaporkan 2x/detik, bukan tiap frame:
+    // menulis ke DOM 60x/detik justru ikut membebani yang sedang diukur.
+    if (hooks.onFps) {
+      fpsReportAccum += deltaTime;
+      if (fpsReportAccum >= 0.5) {
+        fpsReportAccum = 0;
+        hooks.onFps(stats.fps);
+      }
+    }
     // Watchdog: drop render resolution on sustained slowdown (never raise it).
     if (quality.watch(stats.fps, deltaTime)) rendererManager.applySize();
 
