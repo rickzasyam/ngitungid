@@ -266,8 +266,15 @@ export const Settings = {
       width: 0.55, // gaussian ring width, world units
       decay: 1.7, // amplitude decay rate, 1/s — the "settling"
       amplitude: 0.32, // world-unit height of a fresh wavefront
-      spawnDistance: 0.9, // pointer travel required to launch a new ripple
-      minInterval: 0.15, // s — spawn rate limit
+      // Jejak dirapatkan (deviasi sadar dari prototipe): 0.9 unit ~ 65px
+      // gerakan kursor terasa sebagai letupan terpisah, bukan sapuan menerus.
+      // 0.45 unit ~ 32px. minInterval ikut turun supaya jarak itu benar-benar
+      // jadi pembatasnya, bukan laju.
+      // ⚠️ minInterval 0,08s = 12,5 spawn/detik. Pool ripple di
+      // ParticleMaterial.js (RIPPLE_COUNT 16) DIHITUNG dari angka ini — kalau
+      // salah satunya diubah, hitung ulang yang lain.
+      spawnDistance: 0.45, // pointer travel required to launch a new ripple
+      minInterval: 0.08, // s — spawn rate limit
     },
   },
 

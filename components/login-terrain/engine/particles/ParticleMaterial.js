@@ -50,7 +50,7 @@ const VERTEX_SHADER = /* glsl */ `
   // Impulse ripple pool: (originX, originZ, startTime, amplitude) per slot.
   // Inactive slots carry amplitude 0. Fixed pool size — a uniform array, not
   // a per-frame allocation.
-  #define RIPPLE_COUNT 8
+  #define RIPPLE_COUNT 16
   uniform vec4  uRipples[RIPPLE_COUNT];
   uniform vec3  uRippleShape;       // x: speed, y: ring width, z: decay rate
   uniform vec3  uColorLow;
@@ -171,15 +171,32 @@ export function createParticleMaterial() {
       uLiftAmount: { value: 0 },
       // Slots start inactive: amplitude 0, startTime far in the past.
       //
-      // Pool DIPERBESAR 4 -> 8 (deviasi sadar dari prototipe). Dengan 4 slot
-      // dan laju spawn maksimum 6,67/detik (minInterval 0,15s), sebuah slot
-      // dipakai ulang tiap 0,60s — saat ripple lamanya MASIH 36% amplitudo
-      // (decay 1,7/s). Penimpaan itu memotong gelombang dalam satu frame,
-      // ~6,7 kali per detik: persis rasa "patah-patah" yang dilaporkan.
-      // Dengan 8 slot siklusnya jadi 1,20s → tersisa ~13% saat ditimpa.
+      // Pool DIPERBESAR 4 -> 16 (deviasi sadar dari prototipe).
+      //
+      // Shader tidak pernah meng-expire ripple, ia hanya meluruh — jadi setiap
+      // penimpaan slot memotong gelombang dalam SATU frame. Makin terang yang
+      // ditimpa, makin terasa patah.
+      //
+      //   pool  4, minInterval 0,15s -> siklus 0,60s -> ditimpa saat 36,1%
+      //   pool  8, minInterval 0,15s -> siklus 1,20s -> ditimpa saat 13,0%
+      //   pool 16, minInterval 0,08s -> siklus 1,28s -> ditimpa saat 11,3%
+      //
+      // Angka 16 TERIKAT pada minInterval 0,08s di Settings.interaction.ripples:
+      // laju spawn naik jadi 12,5/detik demi jejak yang rapat, dan pool harus
+      // ikut naik atau siklusnya jatuh ke 0,64s (33,7% — lebih parah dari
+      // sebelum diperbaiki). Kalau salah satunya diubah, hitung ulang yang lain.
+      //
       // Panjang array ini HARUS sama dengan RIPPLE_COUNT di shader.
       uRipples: {
         value: [
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
+          new Vector4(0, 0, -1e3, 0),
           new Vector4(0, 0, -1e3, 0),
           new Vector4(0, 0, -1e3, 0),
           new Vector4(0, 0, -1e3, 0),
