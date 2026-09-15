@@ -1,0 +1,666 @@
+'use client'
+
+// Halaman Jurnal Umum — daftar jurnal klien aktif per periode, plus buat, ubah,
+// dan hapus draf. Tata letaknya mengikuti /kontrak dan /laporan (tabel di dalam
+// shell tiga lapis), bukan gaya baru: ketiganya "kelola dokumen milik satu
+// klien" dan tidak ada alasan terlihat berbeda.
+//
+// Akses: owner + akunting saja (D3 — /jurnal ada di ACCOUNTING_ONLY_PREFIXES,
+// ditegakkan proxy). Halaman ini tetap MENGGERBANGI tombol tulisnya sendiri
+// lewat canDoAccounting, dan API-nya requireAkunting — tiga lapis yang sama,
+// karena gerbang halaman saja tidak pernah cukup.
+//
+// Aturan pembukuan TIDAK hidup di sini. Selisih D/K dihitung modul yang sama
+// dengan server (lib/journal.ts), dan status "boleh diubah" dijawab
+// canEditJournal, bukan perbandingan status lokal.
+
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Inbox,
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCw,
+  Trash2,
+} from 'lucide-react'
+import { useRequireClient } from '@/lib/use-require-client'
+import { useClient } from '@/lib/client-context'
+import { useRupiah } from '@/lib/preferences-context'
+import { ModalShell } from '@/components/ui/modal-portal'
+import { DateRangePicker } from '@/components/date-range-picker'
+import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
+import { canEditJournal, JOURNAL_STATUS_LABEL, type JournalStatus } from '@/lib/journal'
+import {
+  JournalFormModal,
+  blankJournalForm,
+  type CoaOption,
+  type JournalFormValue,
+} from '@/components/jurnal/journal-form-modal'
+import {
+  JournalDetail,
+  fmtTanggal,
+  type JournalDetailData,
+} from '@/components/jurnal/journal-detail'
+
+interface JournalRow {
+  id: string
+  tanggal: string
+  noBukti: string
+  keterangan: string
+  sumber: string
+  status: JournalStatus
+  createdAt: string
+  createdByName: string
+  totalDebit: string
+  lineCount: number
+}
+
+/** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
+function bulanBerjalan(): { start: string; end: string } {
+  const [y, m] = todayYmd().split('-').map(Number)
+  const akhir = new Date(y, m, 0).getDate() // hari 0 bulan berikutnya = akhir bulan ini
+  const mm = String(m).padStart(2, '0')
+  return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
+}
+
+export default function JurnalPage() {
+  const { activeClient, isLoaded } = useRequireClient()
+  const { canDoAccounting } = useClient()
+  const { rupiah } = useRupiah()
+
+  const awal = useMemo(() => bulanBerjalan(), [])
+  const [periode, setPeriode] = useState<{ start: string; end: string }>(awal)
+  const [rows, setRows] = useState<JournalRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [detail, setDetail] = useState<JournalDetailData | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const [accounts, setAccounts] = useState<CoaOption[]>([])
+  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null)
+  const [formInitial, setFormInitial] = useState<JournalFormValue | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [formErrors, setFormErrors] = useState<string[]>([])
+
+  const [hapusTarget, setHapusTarget] = useState<JournalRow | null>(null)
+  const [hapusBusy, setHapusBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const clientId = activeClient?.id ?? null
+
+  // TIDAK menyentuh state sebelum await pertama, dan efek di bawah memanggilnya
+  // dari dalam fungsi async — dua-duanya supaya tidak ada setState yang berjalan
+  // sinkron di badan efek (aturan react-hooks/set-state-in-effect: render
+  // berantai). Penanda `loading` sudah bernilai true sejak awal, dan yang
+  // menyalakannya lagi saat muat ulang atau ganti periode adalah penangan
+  // tombol — di sana setState memang boleh sinkron.
+  const muat = useCallback(async () => {
+    if (!clientId) return
+    try {
+      const qs = new URLSearchParams({
+        clientId,
+        periodStart: periode.start,
+        periodEnd: periode.end,
+      })
+      const res = await fetch(`/api/journals?${qs}`)
+      const payload = (await res.json().catch(() => null)) as
+        | { journals?: JournalRow[]; error?: string }
+        | null
+      if (!res.ok) {
+        setLoadError(payload?.error ?? 'Gagal memuat jurnal.')
+        setRows([])
+        return
+      }
+      setLoadError(null)
+      setRows(payload?.journals ?? [])
+    } catch {
+      setLoadError('Gagal menghubungi server.')
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }, [clientId, periode.start, periode.end])
+
+  useEffect(() => {
+    void (async () => {
+      await muat()
+    })()
+  }, [muat])
+
+  // Master COA dimuat sekali per klien — dipakai pemilih akun di form.
+  useEffect(() => {
+    if (!clientId) return
+    let batal = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/clients/${clientId}/coa`)
+        const payload = (await res.json().catch(() => null)) as { accounts?: CoaOption[] } | null
+        if (!batal) setAccounts(payload?.accounts ?? [])
+      } catch {
+        if (!batal) setAccounts([])
+      }
+    })()
+    return () => {
+      batal = true
+    }
+  }, [clientId])
+
+  async function toggleRow(row: JournalRow) {
+    if (expanded === row.id) {
+      setExpanded(null)
+      return
+    }
+    setExpanded(row.id)
+    setDetail(null)
+    setDetailLoading(true)
+    try {
+      const res = await fetch(`/api/journals/${row.id}`)
+      const payload = (await res.json().catch(() => null)) as JournalDetailData | null
+      setDetail(res.ok ? payload : null)
+    } catch {
+      setDetail(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  function bukaBuat() {
+    setActionError(null)
+    setFormErrors([])
+    setEditingId(null)
+    setFormInitial(blankJournalForm(todayYmd()))
+    setFormMode('create')
+  }
+
+  async function bukaUbah(row: JournalRow) {
+    setActionError(null)
+    setFormErrors([])
+    setEditingId(row.id)
+    setFormMode('edit')
+    setFormInitial(null)
+    try {
+      const res = await fetch(`/api/journals/${row.id}`)
+      const d = (await res.json().catch(() => null)) as JournalDetailData | null
+      if (!res.ok || !d) {
+        setActionError('Gagal memuat jurnal untuk diubah.')
+        setFormMode(null)
+        return
+      }
+      setFormInitial({
+        tanggal: d.tanggal,
+        noBukti: d.noBukti,
+        keterangan: d.keterangan,
+        lines: d.lines.map(l => ({
+          key: l.id,
+          masterCoaId: l.masterCoaId,
+          debit: Number(l.debit) > 0 ? l.debit : '',
+          kredit: Number(l.kredit) > 0 ? l.kredit : '',
+          keterangan: l.keterangan ?? '',
+        })),
+      })
+    } catch {
+      setActionError('Gagal menghubungi server.')
+      setFormMode(null)
+    }
+  }
+
+  async function simpan(value: JournalFormValue) {
+    if (!clientId) return
+    setSubmitting(true)
+    setFormErrors([])
+    const body = {
+      clientId,
+      tanggal: value.tanggal,
+      noBukti: value.noBukti,
+      keterangan: value.keterangan,
+      lines: value.lines.map(l => ({
+        masterCoaId: l.masterCoaId,
+        debit: l.debit,
+        kredit: l.kredit,
+        keterangan: l.keterangan,
+      })),
+    }
+    try {
+      const url = formMode === 'edit' && editingId ? `/api/journals/${editingId}` : '/api/journals'
+      const res = await fetch(url, {
+        method: formMode === 'edit' ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const payload = (await res.json().catch(() => null)) as
+        | { error?: string; details?: string[] }
+        | null
+      if (!res.ok) {
+        setFormErrors(payload?.details?.length ? payload.details : [payload?.error ?? 'Gagal menyimpan jurnal.'])
+        return
+      }
+      setFormMode(null)
+      setFormInitial(null)
+      setEditingId(null)
+      setExpanded(null)
+      await muat()
+    } catch {
+      setFormErrors(['Gagal menghubungi server.'])
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function hapus() {
+    if (!hapusTarget) return
+    setHapusBusy(true)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/journals/${hapusTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        setActionError(payload?.error ?? 'Gagal menghapus jurnal.')
+        return
+      }
+      setHapusTarget(null)
+      setExpanded(null)
+      await muat()
+    } catch {
+      setActionError('Gagal menghubungi server.')
+    } finally {
+      setHapusBusy(false)
+    }
+  }
+
+  if (!isLoaded || !activeClient) {
+    return (
+      <div className="flex-1 p-3 min-w-0 overflow-hidden">
+        <div
+          className="h-full rounded-3xl flex items-center justify-center gap-2"
+          style={{ background: 'white', color: 'var(--color-text-muted)' }}
+        >
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Memuat…</span>
+        </div>
+      </div>
+    )
+  }
+
+  const bolehTulis = canDoAccounting
+
+  return (
+    <div className="flex-1 p-3 min-w-0 overflow-hidden">
+      <div
+        className="h-full rounded-3xl overflow-hidden flex flex-col"
+        style={{ background: 'white', boxShadow: '0 8px 40px rgb(0,0,0,0.4)' }}
+      >
+        {/* Header */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between gap-4 flex-wrap"
+          style={{ padding: '16px 24px', borderBottom: '1px solid #f0f0f0' }}
+        >
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f2430', margin: 0 }}>Jurnal Umum</h1>
+            <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+              {activeClient.name} · {rows.length} jurnal pada periode ini
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div style={{ width: 260 }}>
+              <DateRangePicker
+                value={{ from: ymdToLocalDate(periode.start), to: ymdToLocalDate(periode.end) }}
+                onChange={r => {
+                  if (!r?.from) return
+                  setLoading(true)
+                  setPeriode({
+                    start: localDateToYmd(r.from),
+                    end: localDateToYmd(r.to ?? r.from),
+                  })
+                }}
+                placeholder="Filter periode"
+              />
+            </div>
+            <button
+              onClick={() => { setLoading(true); void muat() }}
+              disabled={loading}
+              aria-label="Muat ulang daftar jurnal"
+              className="inline-flex items-center gap-2 rounded-full font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{
+                padding: '8px 14px',
+                fontSize: 12.5,
+                minHeight: 34,
+                border: '1px solid #e5e7eb',
+                background: 'white',
+                color: 'var(--color-text-muted)',
+              }}
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Muat ulang
+            </button>
+            {bolehTulis && (
+              <button
+                onClick={bukaBuat}
+                disabled={accounts.length === 0}
+                title={
+                  accounts.length === 0
+                    ? 'Master COA klien ini masih kosong — impor dulu di Settings.'
+                    : undefined
+                }
+                className="inline-flex items-center gap-2 rounded-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{
+                  padding: '8px 16px',
+                  fontSize: 12.5,
+                  minHeight: 34,
+                  border: 'none',
+                  background: 'var(--color-accent-primary)',
+                  color: 'var(--color-accent-primary-fg)',
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" /> Jurnal Baru
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
+          {actionError && (
+            <div
+              role="alert"
+              className="mx-4 mt-4 px-3.5 py-2.5 rounded-2xl flex items-start gap-2"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)',
+                border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)',
+              }}
+            >
+              <AlertTriangle
+                className="w-4 h-4 flex-shrink-0 mt-0.5"
+                style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+              />
+              <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>{actionError}</p>
+            </div>
+          )}
+
+          {loading ? (
+            <div
+              className="flex items-center justify-center gap-2 h-full"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Memuat jurnal…</span>
+            </div>
+          ) : loadError ? (
+            <p className="px-6 py-8 text-sm" style={{ color: '#b91c1c' }}>{loadError}</p>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
+              <Inbox className="w-10 h-10" style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+              <div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  Belum ada jurnal pada periode ini
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                  {bolehTulis
+                    ? 'Buat jurnal pertama, atau ganti periodenya di filter di atas.'
+                    : 'Coba ganti periodenya di filter di atas.'}
+                </p>
+              </div>
+              {bolehTulis && (
+                <button
+                  onClick={bukaBuat}
+                  disabled={accounts.length === 0}
+                  className="inline-flex items-center gap-2 rounded-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: 12.5,
+                    minHeight: 34,
+                    border: 'none',
+                    background: 'var(--color-accent-primary)',
+                    color: 'var(--color-accent-primary-fg)',
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Jurnal Baru
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="px-4 py-4">
+              <div
+                className="rounded-2xl overflow-hidden"
+                style={{ background: 'white', border: '1px solid #f0f0f0' }}
+              >
+                <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                  <caption className="sr-only">
+                    Daftar jurnal {activeClient.name} periode {fmtTanggal(periode.start)} sampai{' '}
+                    {fmtTanggal(periode.end)}
+                  </caption>
+                  <thead>
+                    <tr style={{ background: '#fafafa' }}>
+                      <th scope="col" style={{ ...th, width: 34 }} />
+                      <th scope="col" style={th}>Tanggal</th>
+                      <th scope="col" style={th}>No. Bukti</th>
+                      <th scope="col" style={th}>Keterangan</th>
+                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Total</th>
+                      <th scope="col" style={th}>Status</th>
+                      <th scope="col" style={th}>Dibuat oleh</th>
+                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(r => {
+                      const open = expanded === r.id
+                      const bisaUbah = bolehTulis && canEditJournal(r.status)
+                      return (
+                        <Fragment key={r.id}>
+                          <tr style={{ borderTop: '1px solid #f5f5f5' }}>
+                            <td style={{ ...td, paddingRight: 0 }}>
+                              <button
+                                type="button"
+                                onClick={() => void toggleRow(r)}
+                                aria-expanded={open}
+                                aria-label={`${open ? 'Tutup' : 'Buka'} rincian jurnal ${r.noBukti}`}
+                                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: 'var(--color-text-muted)',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {open ? (
+                                  <ChevronDown className="w-4 h-4" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4" />
+                                )}
+                              </button>
+                            </td>
+                            <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtTanggal(r.tanggal)}</td>
+                            <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 600 }}>{r.noBukti}</td>
+                            <td
+                              style={{
+                                ...td,
+                                maxWidth: 280,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={r.keterangan}
+                            >
+                              {r.keterangan}
+                            </td>
+                            <td
+                              style={{
+                                ...td,
+                                textAlign: 'right',
+                                fontVariantNumeric: 'tabular-nums',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {rupiah(Number(r.totalDebit))}
+                            </td>
+                            <td style={td}>
+                              <span
+                                className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                style={
+                                  r.status === 'draft'
+                                    ? { background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)' }
+                                    : {
+                                        background:
+                                          'color-mix(in srgb, var(--color-accent-primary) 30%, white)',
+                                        color: 'var(--color-accent-primary-fg)',
+                                      }
+                                }
+                              >
+                                {JOURNAL_STATUS_LABEL[r.status] ?? r.status}
+                              </span>
+                            </td>
+                            <td style={{ ...td, whiteSpace: 'nowrap' }}>{r.createdByName}</td>
+                            <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              {bisaUbah ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => void bukaUbah(r)}
+                                    aria-label={`Ubah jurnal ${r.noBukti}`}
+                                    className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                    style={iconBtn}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setHapusTarget(r)}
+                                    aria-label={`Hapus jurnal ${r.noBukti}`}
+                                    className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                    style={iconBtn}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                                  —
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                          {open && (
+                            <tr>
+                              <td colSpan={8} style={{ background: '#fbfbfb', padding: 0 }}>
+                                <JournalDetail detail={detail} loading={detailLoading} />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {formMode && formInitial && activeClient && (
+        <JournalFormModal
+          mode={formMode}
+          clientId={activeClient.id}
+          clientName={activeClient.name}
+          accounts={accounts}
+          initial={formInitial}
+          submitting={submitting}
+          serverErrors={formErrors}
+          onSubmit={simpan}
+          onCancel={() => {
+            setFormMode(null)
+            setFormInitial(null)
+            setEditingId(null)
+            setFormErrors([])
+          }}
+        />
+      )}
+
+      {hapusTarget && (
+        <ModalShell
+          labelledBy="jurnal-hapus-title"
+          className="max-w-md"
+          onDismiss={hapusBusy ? null : () => setHapusTarget(null)}
+        >
+          <div className="px-5 sm:px-6 py-5">
+            <h2
+              id="jurnal-hapus-title"
+              className="text-base font-bold"
+              style={{ color: 'var(--color-text-primary)' }}
+            >
+              Hapus jurnal ini?
+            </h2>
+            <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+              <strong style={{ color: 'var(--color-text-primary)' }}>{hapusTarget.noBukti}</strong>{' '}
+              · {fmtTanggal(hapusTarget.tanggal)} · {hapusTarget.lineCount} baris. Jurnal draf
+              beserta barisnya dihapus permanen.
+            </p>
+          </div>
+          <div
+            className="flex items-center justify-end gap-2 px-5 sm:px-6 py-3.5 border-t"
+            style={{ borderColor: '#f0f0f0', background: 'white' }}
+          >
+            <button
+              type="button"
+              onClick={() => setHapusTarget(null)}
+              disabled={hapusBusy}
+              className="px-4 py-2 rounded-full text-xs font-medium disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)', minHeight: 34 }}
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={() => void hapus()}
+              disabled={hapusBusy}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-white disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)',
+                minHeight: 34,
+              }}
+            >
+              {hapusBusy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menghapus…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" /> Hapus
+                </>
+              )}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+    </div>
+  )
+}
+
+const th: React.CSSProperties = {
+  textAlign: 'left',
+  padding: '10px 12px',
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--color-text-muted)',
+}
+
+const td: React.CSSProperties = {
+  padding: '10px 12px',
+  fontSize: 12.5,
+  color: 'var(--color-text-primary)',
+}
+
+const iconBtn: React.CSSProperties = {
+  width: 32,
+  height: 32,
+  border: '1px solid #e5e7eb',
+  background: 'white',
+  color: 'var(--color-text-muted)',
+  cursor: 'pointer',
+}
