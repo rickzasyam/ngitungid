@@ -31,9 +31,15 @@
 -- transaksi yang sama, jadi posting harus dipecah dua migrasi tanpa alasan.
 --
 -- ══ CHECK journal_lines_satu_sisi_check ═══════════════════════════════════
--- Satu baris jurnal adalah debit ATAU kredit. Aturan penuhnya (≥2 baris,
--- Σ debit = Σ kredit dalam sen bulat, larangan negatif) ada di lib/journal.ts;
--- CHECK ini jaring terakhir untuk jalur tulis yang kelak lupa memanggilnya.
+-- Satu baris jurnal adalah debit ATAU kredit, dan tidak pernah bertanda minus.
+-- Aturan penuhnya (≥2 baris, Σ debit = Σ kredit dalam sen bulat) ada di
+-- lib/journal.ts; CHECK ini jaring terakhir untuk jalur tulis yang kelak lupa
+-- memanggilnya.
+--
+-- Syarat ">= 0" ditambahkan setelah matriks uji menunjukkan bentuk pertama
+-- (hanya "sisi mana yang nol") MELOLOSKAN debit -100 / kredit 0: ekspresinya tidak
+-- pernah melihat tanda. Dua baris negatif pun masih bisa saling menyeimbangkan,
+-- jadi tidak ada pemeriksaan hilir yang akan menangkapnya.
 CREATE TYPE "public"."journal_source" AS ENUM('manual');--> statement-breakpoint
 CREATE TYPE "public"."journal_status" AS ENUM('draft', 'posted');--> statement-breakpoint
 CREATE TABLE "journal_entries" (
@@ -58,7 +64,7 @@ CREATE TABLE "journal_lines" (
 	"kredit" numeric(18, 2) DEFAULT '0' NOT NULL,
 	"keterangan" text,
 	"line_order" integer NOT NULL,
-	CONSTRAINT "journal_lines_satu_sisi_check" CHECK (("journal_lines"."debit" = 0) <> ("journal_lines"."kredit" = 0))
+	CONSTRAINT "journal_lines_satu_sisi_check" CHECK ("journal_lines"."debit" >= 0 AND "journal_lines"."kredit" >= 0 AND (("journal_lines"."debit" = 0) <> ("journal_lines"."kredit" = 0)))
 );
 --> statement-breakpoint
 ALTER TABLE "journal_entries" ADD CONSTRAINT "journal_entries_client_id_clients_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."clients"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

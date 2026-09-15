@@ -962,7 +962,7 @@
       "checkConstraints": {
         "journal_lines_satu_sisi_check": {
           "name": "journal_lines_satu_sisi_check",
-          "value": "(\"journal_lines\".\"debit\" = 0) <> (\"journal_lines\".\"kredit\" = 0)"
+          "value": "\"journal_lines\".\"debit\" >= 0 AND \"journal_lines\".\"kredit\" >= 0 AND ((\"journal_lines\".\"debit\" = 0) <> (\"journal_lines\".\"kredit\" = 0))"
         }
       },
       "isRLSEnabled": false

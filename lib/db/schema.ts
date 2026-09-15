@@ -499,11 +499,15 @@ export const journalEntries = pgTable(
 // Number() beruntun, karena 0.1 + 0.2 yang meleset di sebuah neraca berarti
 // selisih hantu yang tidak bisa dijelaskan ke klien.
 //
-// ══ CHECK tepat satu sisi terisi ══════════════════════════════════════════
+// ══ CHECK tepat satu sisi terisi, dan tidak pernah negatif ═══════════════
 // Satu baris jurnal adalah debit ATAU kredit — tidak pernah dua-duanya, tidak
-// pernah kosong. Aturan lengkapnya (termasuk larangan nilai negatif) ada di
-// validateJournalInput; CHECK ini jaring terakhir untuk jalur tulis mana pun
-// yang kelak lupa memanggilnya.
+// pernah kosong, dan tidak pernah bertanda minus. Jaring terakhir untuk jalur
+// tulis mana pun yang kelak lupa memanggil validateJournalInput.
+//
+// Syarat ">= 0" BUKAN hiasan. Tanpa itu, ekspresinya hanya menanyakan sisi mana
+// yang nol dan tidak pernah melihat tandanya, sehingga baris debit -100 / kredit 0
+// lolos begitu saja — dan sepasang baris bernilai negatif masih bisa "seimbang"
+// sehingga tidak ada satu pun pemeriksaan hilir yang akan menangkapnya.
 export const journalLines = pgTable(
   'journal_lines',
   {
@@ -522,7 +526,10 @@ export const journalLines = pgTable(
   (table) => [
     index('journal_lines_journal_id_idx').on(table.journalId),
     index('journal_lines_master_coa_id_idx').on(table.masterCoaId),
-    check('journal_lines_satu_sisi_check', sql`(${table.debit} = 0) <> (${table.kredit} = 0)`),
+    check(
+      'journal_lines_satu_sisi_check',
+      sql`${table.debit} >= 0 AND ${table.kredit} >= 0 AND ((${table.debit} = 0) <> (${table.kredit} = 0))`
+    ),
   ]
 )
 
