@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
-**Last Updated:** 2026-08-14
-**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja)
+**Last Updated:** 2026-09-15
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja) · **Phase 5 Mesin Akuntansi & Jurnal Manual: DISETUJUI 2026-09-15, belum ada kode — agen pelaksana MULAI dari bagian "Phase 5" di bawah**
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -216,6 +216,121 @@
 
 ---
 
+## Phase 5 — Mesin Akuntansi & Jurnal Manual
+
+**Status:** DISETUJUI Ricko 2026-09-15 (keputusan D0–D10, Fase 1). Belum ada satu baris kode pun. Keputusan Fase 2–4 (D11–D26) **menunggu** — wajib dijawab Ricko sebelum fase terkait dimulai.
+**Plan teknis — WAJIB dibaca seluruhnya sebelum menyentuh apa pun:** `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md` (selanjutnya "MP").
+**Sumber:** PRD di server NgodingPakeAI — workspace `a3bbf493-5431-4bef-8065-e48c37e9a752`, plan `e2cbb3a7-5976-43dd-937a-5bec14f6c35c`, 214 task. **Katalog lengkap + pemetaan tiap task ke langkah MP: `docs/plans/ngodingpakeai-tasks-214.md`** — 124 kerja baru (F01–F08 + F15) dan **90 task (F09–F14) yang mendeskripsikan fitur yang SUDAH ADA: verifikasi lalu `task complete`, jangan bangun ulang**. Task dikerjakan **satu per satu** lewat `npx --yes ngodingpakeai task next --plan e2cbb3a7-5976-43dd-937a-5bec14f6c35c --json` (izin `Bash(npx --yes ngodingpakeai:*)` sudah ada di `.claude/settings.local.json`).
+
+### 5.0 Mulai di sini — protokol agen pelaksana
+1. Baca `CLAUDE.md` → bagian ini → MP §0–§3 seluruhnya → baru MP §4.
+2. `npx --yes ngodingpakeai login --token <token dari Ricko>` bila belum; `plan get` sekali untuk PRD.
+3. Urutan eksekusi (MP §1): **§4.A → §4.B → §5.A → §5.B → §5.C → §7.B → §6.A → §6.B → §6.C → §7.A → §7.C.** Nomor fase vendor di `task next` ≠ nomor fase PRD — petakan lewat **nama fitur** (MP §9).
+4. Tiap langkah: modul murni + test → route → UI (bukan frontend-dulu-mock — D0). Task "(mock)" dipenuhi oleh UI di atas data nyata.
+5. **Berhenti** di setiap ⏸ checkpoint (MP §10, 15 buah) dan di checkpoint vendor (ganti `layer` / naik `phase.current`). Lapor, tunggu "lanjut".
+6. Setelah tiap langkah: baris log di tabel Decisions & Notes (faktual, tanpa "approved") + `graphify update .`. Setelah Ricko commit: `sync --if-changed --plan` (metadata, aman) → tulis ringkasan berkas di `pending.json` ke `summaries.json`. **Jangan `sync` final (unggah ringkasan) di tengah siklus** — aturan keras vendor: hanya saat semua task plan selesai atau Ricko meminta.
+7. Batasan: eslint **24 warning** tetap; tsc/vitest hijau; **pnpm**; cek `.env.local` (dev vs main) sebelum `db:*`; migrasi ke main **hanya Ricko**; `lib/auth.ts`/`proxy.ts`/`app/login/page.tsx`/`login-rate-limit*`/`account/password` **tidak disentuh**; hanya Ricko yang menyetujui; jangan commit tanpa diminta.
+8. Task yang tidak cocok ke langkah MP mana pun → **berhenti dan tanya**, jangan mengarang.
+9. **F09–F14 (90 task) = fitur yang sudah ada — semuanya di fase 4 vendor** (terkunci sampai fase 1–3 selesai). Saat `task next` menyajikannya: cocokkan ke bukti di katalog → `task complete` dengan menyebut berkasnya. Task bertanda ⚠️ dipenuhi **dengan cara berbeda yang disengaja** (keputusan di tabel Decisions & Notes) — **jangan** "melengkapi" ke arah judul task. Paling efisien: Ricko menandai keenam fitur itu selesai sekaligus di web UI (dari CLI tidak bisa selama masih terkunci).
+10. Revisi plan dari spesifikasi ekspor (MP §3.3, R1–R11) **mengalahkan** §4–§8 bila bertentangan.
+
+### 5.1 Fase 1 — Jurnal Umum (MP §4.A) — DISETUJUI
+- ⏳ A1 Skema `journal_entries` + `journal_lines` + enum, migrasi 0010 (dev)
+- ⏳ A2 `lib/journal.ts` murni + test (Σ D = Σ K dalam sen bulat; satu sisi per baris; ≥2 baris; `canEditJournal`) — ⏸ CP-1
+- ⏳ A3 `buildReplacePlan` + route COA sadar `journal_lines` (relink by kode; **409** bila kode hilang/ambigu; supplier default disambung/di-null-kan) — ⏸ CP-2
+- ⏳ A4 `GET/POST /api/journals`, `GET/PATCH/DELETE /api/journals/[id]` (+ test baca-sumber)
+- ⏳ A5 Saran akun AI: `lib/gemini/suggest-journal-account.ts` + `POST /api/journals/suggest-account`
+- ⏳ A6 Nav `jurnal` (setelah `upload`, staf), `/jurnal` di `ACCOUNTING_ONLY_PREFIXES`, ikon — perbarui test urutan
+- ⏳ A7 Halaman `/jurnal`: daftar per periode, detail baris, form D/K dengan validasi hidup & selisih, saran AI (tombol eksplisit), jejak pembuat, hapus draf — ⏸ CP-3
+- ⏳ A8 Fixture `seed-dev` (opsional, dev saja)
+- ⏳ A9 ROADMAP + sync
+
+### 5.2 Fase 1 (vendor) — Master Data Supplier tanpa rekonsiliasi (MP §4.B) — DISETUJUI
+- ⏳ B1 Skema `master_supplier`, migrasi 0011
+- ⏳ B2 `lib/supplier.ts`, `supplier-import.ts`, `supplier-export.ts` + test round-trip
+- ⏳ B3 `GET/POST /api/clients/[id]/suppliers`, `[supplierId]` PATCH/DELETE, `import` (upsert by nama, dryRun), `export` — baca `requireInternal`, tulis `requireAkunting` (R4)
+- ⏳ B4 Tab Settings "Supplier" (owner/akunting kelola; **finance lihat saja** — R4; klien tidak) + pemilih akun hutang tersaring — ⏸ CP-4
+- ⏳ B5 `task fail` rekonsiliasi (D5) → dikerjakan di 5.5
+- ⏳ B6 ROADMAP + sync
+
+### 5.3 Fase 2 — Buku Besar & Posting (MP §5.A) — menunggu D11–D13
+- 🔒 C1 `canPost`/`canReverse`/`buildReversalLines`, `lib/ledger.ts` saldo berjalan — ⏸ CP-5
+- 🔒 C2 `POST /api/journals/[id]/post`, `/reverse`, `journal_events`, `GET /api/ledger`
+- 🔒 C3 Nav `buku-besar`
+- 🔒 C4 UI posting/balik/riwayat + halaman `/buku-besar` — ⏸ CP-6
+- 🔒 C5 ROADMAP + sync
+
+### 5.4 Fase 2 — Master COA Bertipe (MP §5.B) — menunggu D14
+- 🔒 E1 Migrasi 0013: `master_coa.tipe_akun` (enum, nullable) + `is_kas` — **`posisi` dan `class_cf` yang ada = normal balance & klasifikasi arus kas, tidak diduplikasi**
+- 🔒 E2 `lib/coa/account-type.ts`: eksplisit `??` turunan (`classifyBs`/`classifyPnl`)
+- 🔒 E3 Alias impor/ekspor + `POST /api/clients/[id]/coa/types` (update by kode, dryRun)
+- 🔒 E4 UI form COA + "Isi tipe dari berkas" + dampak — ⏸ CP-7
+- 🔒 E5 ROADMAP + sync
+
+### 5.5 Fase 2 — Rekonsiliasi Hutang Supplier (MP §5.C) — menunggu D15
+- 🔒 F1 `journal_lines.supplier_id` (migrasi 0012); DELETE supplier menolak bila dirujuk
+- 🔒 F2 `lib/supplier-reconciliation.ts`
+- 🔒 F3 `GET /api/clients/[id]/suppliers/reconciliation`
+- 🔒 F4 UI di tab Supplier + pemilih supplier di form jurnal — ⏸ CP-8
+- 🔒 F5 ROADMAP + sync
+
+### 5.6 Fase 4 (dimajukan, D26) — Kunci Periode (MP §7.B) — menunggu D17, D26
+- 🔒 K1 `lib/period-lock.ts` (`isDateLocked`)
+- 🔒 K2 Semua route penulis jurnal menolak 409 bila terkunci; `canPost` memakai kunci nyata
+- 🔒 K3 `GET/POST /api/period-locks`, `DELETE` (owner + alasan → events)
+- 🔒 K4 Tab Settings "Pembukuan" — kunci/buka + peringatan — ⏸ CP-13
+- 🔒 K5 ROADMAP + sync
+
+### 5.7 Fase 3 — Impor Bank (MP §6.A) · Marketplace (§6.B) · Kas Kecil (§6.C) — menunggu D20–D23
+- 🔒 G1–G5 Impor mutasi bank: parser alias + pemetaan kolom manual, fingerprint duplikat, aturan `contains`/`startsWith`, jadikan draf jurnal — ⏸ CP-9
+- 🔒 H1–H5 Marketplace: settlement bruto/fee/pajak/net, pratinjau jurnal, akun dipilih pengguna (pajak = keputusan akuntansi) — ⏸ CP-10
+- 🔒 I1–I5 Kas kecil imprest: dana tetap, pengeluaran, isi kembali → jurnal, rekap — ⏸ CP-11
+
+### 5.8 Fase 4 — Saldo Awal (MP §7.A) · Laporan dari Jurnal (§7.C) — menunggu D16, D18, D19
+- 🔒 J1–J3 Saldo awal = jurnal `opening_balance`, tab "Pembukuan" — ⏸ CP-12
+- 🔒 L1 `lib/reports/from-journal.ts` — **aturan tanda per kategori (MP §7.C) + golden test vs fixture ekstraksi** — ⏸ CP-14 review akuntansi
+- 🔒 L2 `resolveReportSource` (jurnal terposting menang, else PDF)
+- 🔒 L3 Route dashboard/ratios/neraca-detail memilih sumber; jalur PDF tak disentuh
+- 🔒 L4 Lencana "Dari jurnal/PDF" — ⏸ CP-15
+- 🔒 L5 ROADMAP + sync
+
+### 5.9 Keputusan (rincian & alasan di MP §3)
+| D | Ringkas | Status |
+|---|---|---|
+| D0 | Urutan skema → murni+test → route → UI | ✅ disetujui 2026-09-15 |
+| D1 | Tipe akun Fase 1 diturunkan dari `posisi`/`classifyBs`/`classifyPnl` | ✅ |
+| D2 | Skema jurnal; `no_bukti` unik per klien; enum status `draft`,`posted` sejak awal | ✅ |
+| D3 | `/jurnal` staf saja; tulis = `canDoAccounting` | ✅ |
+| D4 | COA replace/delete sadar `journal_lines`; 409 bila kode hilang | ✅ |
+| D5 | Rekonsiliasi supplier ditunda ke Fase 2 | ✅ |
+| D6 | `created_by` via lookup email; `lib/auth.ts` tak disentuh | ✅ |
+| D7 | Supplier = tab Settings; kelola = owner/akunting; klien tidak melihat. **Direvisi R4 (Ricko 2026-09-15): finance boleh LIHAT (read-only)** | ✅ |
+| D8 | Impor supplier upsert by nama | ✅ |
+| D9 | Hapus supplier Fase 1 hard delete | ✅ |
+| D10 | Saran AI = pasangan D/K, tombol eksplisit | ✅ |
+| D11 | Buku besar diturunkan, tanpa tabel saldo | ⏳ menunggu |
+| D12 | `journal_events` append-only, `event` text | ⏳ |
+| D13 | Jurnal balik = entri baru `reversal_of_id`; asli tetap `posted` | ⏳ |
+| D14 | COA Bertipe = `tipe_akun` + `is_kas` saja | ⏳ |
+| D15 | `journal_lines.supplier_id` nullable, restrict | ⏳ |
+| D16 | Saldo awal = jurnal `opening_balance` | ⏳ |
+| D17 | `period_locks`; kunci = akunting, buka = owner + alasan | ⏳ |
+| D18 | Sumber laporan diputuskan server; lencana di UI | ⏳ |
+| D19 | Arus kas dari jurnal metode langsung via `is_kas` + `class_cf` lawan — **review akuntansi** | ⏳ |
+| D20 | Perlakuan pajak/fee marketplace = keputusan akuntansi Ricko | ⏳ |
+| D21 | Kas kecil = imprest | ⏳ |
+| D22 | Impor bank: alias + pemetaan manual; tanpa regex; fingerprint dedupe | ⏳ |
+| D23 | `journal_source` bertambah via ADD VALUE tulis tangan per fase | ⏳ |
+| D24 | Timestamp tabel baru `withTimezone` | ⏳ |
+| D25 | Halaman/tab baru & aksesnya (semua staf) | ⏳ |
+| D26 | Kunci periode dimajukan sebelum Fase 3 | ⏳ |
+| R1–R11 | Revisi dari spesifikasi ekspor 214 task (MP §3.3): R1 saran AI ≤3 pasangan sebagai daftar; R2 `journal_events` → **`audit_events`** generik (jurnal, COA, kunci periode); R3 kas kecil **jurnal-per-transaksi**, tabel `petty_cash_expenses` dihapus; **R4 dijawab Ricko 2026-09-15: finance boleh LIHAT saja** (baca `requireInternal`, tulis tetap `requireAkunting`; tab masuk `FINANCE_VISIBLE_TABS`, read-only); R5 halaman **`/laporan-keuangan`** + endpoint statements; R6–R11 penyelarasan detail | R4 ✅ · R1–R3, R5–R11 ⏳ menunggu |
+
+### 5.10 Skema baru (ringkas — rincian MP §8)
+`journal_entries`, `journal_lines`, `master_supplier` (F1) · `journal_events`, kolom posting/reversal/`supplier_id`, `master_coa.tipe_akun`+`is_kas` (F2) · `bank_imports`, `bank_import_rows`, `bank_mapping_rules`, `marketplace_settlements`, `petty_cash_funds`, `petty_cash_expenses` (F3) · `period_locks` (F4). Enum: `journal_status`, `journal_source` (+nilai per fase), `account_type`. **Setiap tabel baru yang merujuk `master_coa` wajib ditambahkan ke `buildReplacePlan`** (MP §8.15).
+
+---
+
 ## Decisions & Notes
 
 | Date | Decision | Rationale |
@@ -362,6 +477,9 @@
 
 | 2026-08-03 | **Indikator "% storage used" di kartu sidebar diganti PROGRES LAPORAN.** Angka lama datang dari `pseudoStorage(clientId)` — hash UUID klien (`25 + h % 65`), jadi **tidak pernah menyentuh data**: Rasyuka tetap 82% walau laporannya 6→9 baris dan Master COA 106→114 akun. Selain palsu, kata "storage" menyiratkan kuota penyimpanan yang tidak dijual produk ini. Diganti rasio bulan: **"3 dari 7 bulan"** + baris kedua **"Terakhir: Mar 2026"**. `pseudoStorage` & `storageMap` dihapus | Denominator = **bulan yang SEHARUSNYA sudah masuk**, bukan tahun penuh: di bulan Maret, "3 dari 12" membuat klien yang justru up-to-date terlihat tertinggal, sementara "3 dari 3" langsung menjawab pertanyaan yang berguna bagi akuntan — klien mana yang tertinggal |
 | 2026-08-03 | **Tiga keputusan yang mengunci perhitungan progres** (`lib/clients/report-progress.ts`, murni & teruji). (1) **Bulan berjalan TIDAK dihitung** — laporan bulan M baru disusun awal M+1, jadi memasukkannya membuat setiap klien selalu tampak tertinggal satu bulan sepanjang bulan; sinyal palsu yang melatih orang mengabaikan indikator. (2) **Jangkar = periode laporan paling awal klien, BUKAN `clients.created_at`** — kolom itu berisi tanggal pembuatan record dan pada data nyata justru LEBIH BARU dari periode laporan paling awal (semua klien `2026-07-05`, sementara laporannya Jan–Mar 2026), jadi memakainya menghasilkan jendela nol/negatif; memakai bulan pertama juga otomatis adil bagi klien yang masuk tengah tahun. (3) **Sebulan selesai hanya kalau KETIGA jenis ada** — satu periode = 3 baris (`laba_rugi`/`neraca`/`arus_kas`), dan Analytics butuh ketiganya. Kasus batas: tanpa laporan → "Belum ada laporan" (bukan 0%, yang menyiratkan tertinggal padahal belum mulai); laporan pertama di bulan berjalan → "Terkini"; bulan belum lengkap tidak dihitung selesai tapi disebut di baris kedua supaya kerja yang sudah masuk tidak terlihat hilang | Kasus (3) ditemukan dari data, bukan dari brief: **PT Nusantara Group hanya punya `laba_rugi` untuk Jan 2026** — 1 dari 3 jenis. Tanpa aturan ini periode itu akan dihitung selesai padahal Analytics belum bisa memakainya |
+| 2026-09-15 | **Ekspor lengkap 214 task NgodingPakeAI diterima dan dipetakan** (`docs/plans/ngodingpakeai-tasks-214.md`). Temuan utama: **90 dari 214 task (F09–F14: autentikasi, klien, PDF, pemetaan COA, dashboard, master data) mendeskripsikan fitur yang SUDAH ADA** — server memecah fitur hasil reverse-engineering menjadi task `todo`, padahal skill vendor menyatakan fitur seperti itu tidak bertask. Tracker vendor karena itu **menyesatkan** sampai 90 task itu ditandai selesai (paling efisien lewat web UI). 124 sisanya (F01–F08 + F15) dipetakan 1:1 ke langkah master plan. Spesifikasi "Selesai bila" per fitur memaksa **11 revisi** (MP §3.3): yang mengubah desain = R2 (`journal_events` → `audit_events` generik), R3 (kas kecil jurnal-per-transaksi, `petty_cash_expenses` dihapus), R5 (halaman `/laporan-keuangan` + satu endpoint statements — sebelumnya hanya lencana); **R4 mengubah D7 yang sudah disetujui** (finance boleh mengelola supplier, sesuai spesifikasi) → menunggu Ricko | Katalog memberi status per task untuk fitur lama: ✅ ada (dengan berkas), ⚠️ dipenuhi dengan cara berbeda **yang disengaja** (durasi lockout tidak ditampilkan — anti-enumeration; tidak ada halaman "akses ditolak" — redirect; penugasan tidak menyaring akses; unggah ulang mengganti), ❌ celah kecil di luar cakupan (PDF tidak menggulir ke baris terpilih). Tanpa penanda ⚠️, agen pelaksana akan "melengkapi" fitur ke arah judul task dan membatalkan keputusan keamanan/produk yang tercatat di sini. Izin CLI `Bash(npx --yes ngodingpakeai:*)` ditambahkan ke `settings.local.json` atas instruksi eksplisit Ricko. Tracker lalu diverifikasi lewat `task list --all --json`: **214/214 `todo`**; fase vendor sejajar fase PRD (27/28/40/119); ke-90 task fitur-lama **semuanya di fase 4 vendor** — terkunci (423) sampai fase 1–3 selesai, jadi tidak bisa ditandai dari CLI sekarang, hanya lewat web UI. Sync basis kode **sengaja tidak dijalankan**: dokumen plan masih uncommitted (`sync --if-changed` mengunci ke HEAD), dan aturan keras skill vendor melarang `sync` final di tengah siklus plan aktif — dijalankan setelah Ricko commit |
+| 2026-09-15 | **Master plan eksekusi Mesin Akuntansi & Jurnal Manual — SEMUA FASE — DISUSUN; D0–D10 (Fase 1) DISETUJUI Ricko 2026-09-15.** Berkas: `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md` (menggantikan draf fase-1 hari yang sama; berkas lama kini hanya penunjuk). Pintu masuk agen pelaksana: bagian **Phase 5** di ROADMAP ini. Sumber: PRD server NgodingPakeAI (plan `e2cbb3a7-…`) + 13 task fase 1 (7 Jurnal Umum, 6 Supplier; semua layer frontend) dibaca terhadap basis kode. Plan **mengurutkan ulang** task vendor: skema → modul murni + test → route → UI di atas data nyata, bukan "frontend dulu di atas tiruan" — repo ini tidak punya satu pun jalur mock dan pola yang terbukti adalah `lib/contracts.ts` → route → halaman. Tiga temuan yang mengubah pekerjaan: (1) ganti-massal/hapus-baris Master COA **harus sadar `journal_lines`** — kalau tidak, jurnal pertama yang ada akan memutus FK atau kehilangan akun; rekomendasi: sambung ulang by kode lewat `buildReplacePlan`, **tolak 409** bila ada baris jurnal yang kodenya hilang. (2) Task "rekonsiliasi hutang supplier" **tidak punya sumber saldo** di fase 1 (butuh posting fase 2 + tautan supplier di baris jurnal yang belum ada di skema) — direkomendasikan `task fail`. (3) Sesi NextAuth **tidak membawa `user.id`** → `created_by` diisi lewat lookup email (preseden route ganti kata sandi), tanpa menyentuh `lib/auth.ts`. D0–D10 (Fase 1) **disetujui Ricko 2026-09-15**; D11–D26 (Fase 2–4; master plan §3.2) **menunggu** dan wajib dijawab sebelum fase terkait dimulai; 15 checkpoint di §10 | Plan ditulis untuk sesi agen terpisah (Opus 5) sehingga harus berdiri sendiri: batasan tetap (eslint 24 warning, tsc/vitest hijau, pnpm, dev vs main, berkas auth tak disentuh) diulang di §0; tabel "pakai ulang" di §4.0 mencegah kembaran (`classifyBs` untuk tipe akun alih-alih kolom baru, `normalizeNominal`, `StyledSelect`, `ModalShell`, `buildReplacePlan`, pola round-trip impor/ekspor COA). Yang **sengaja tidak** dikerjakan dicatat di §12 supaya tidak ditambahkan diam-diam |
+| 2026-09-08 | **Basis kode di-sync ke NgodingPakeAI (workspace `a3bbf493-5431-4bef-8065-e48c37e9a752`, repo `rickzasyam/ngitungid`, commit `53972cd`).** 247 ringkasan berkas ditulis agen dalam Bahasa Indonesia ke `.ngodingpakeai/summaries.json` (70 di antaranya ber-section per simbol) lalu diunggah CLI; **kode sumber mentah tidak pernah diunggah** — hanya metadata + ringkasan. Diaudit sebelum ditulis: `.env*` tidak pernah masuk daftar pending (CLI memblokirnya keras); `ROADMAP.md` diringkas **struktural** tanpa nama host DB; `docs/deferred/0006_timestamptz.sql` diringkas sebagai DDL saja. Validasi lokal: JSON sah, 247/247 kunci = daftar pending, semua ringkasan 10–2000 karakter. Server lalu membangun PRD "Mesin Akuntansi & Jurnal Manual" dari ringkasan itu | Untuk 15 berkas `docs/login-design/src/*` yang identik dengan salinan engine, identitas dipastikan dari **ukuran berkas persis sama + catatan ROADMAP**, bukan diff byte (Bash diblokir classifier sepanjang sesi itu; CLI dijalankan Ricko sendiri). **Belum diputuskan:** `.ngodingpakeai/`, `.ngodingpakeaiignore`, `.cursor/`, `AGENTS.md` yang dipasang `init` masih **untracked** — commit atau ignore adalah keputusan Ricko. Dua token (bootstrap & task) sempat lewat transkrip sesi; disarankan di-rotate |
 | 2026-08-14 | **Terrain partikel Three.js DIPORTING ke halaman login — dibundel, bukan CDN.** `three@0.180.0` di-pin exact lewat pnpm; import map jsDelivr prototipe dibuang seluruhnya (CDN pihak ketiga di halaman login = ketergantungan uptime orang lain + permukaan kebocoran data). 20 modul disalin APA ADANYA ke `components/login-terrain/engine/` — geometri, noise, kepadatan, kamera, dan timing tidak disentuh. `DevPanel.js` dibuang dan **tweakpane tidak pernah dipasang**: ia cuma di-`import()` dinamis di balik gerbang `?dev`, jadi menghapusnya menghapus dependensinya. QualityManager + modul interaksi (parallax kursor, ripple) DIPERTAHANKAN — keduanya bagian dari bagaimana prototipe terasa. **Ukuran TERUKUR: +500,0 KB minified / 125,7 KB gzip** (total chunk app 1,64 MB → 2,13 MB), praktis sama dengan perkiraan ~500 KB; `WebGLRenderer` memang menarik hampir seluruh pustaka meski semua import sudah bernama | **WARNA satu-satunya yang berubah.** Lime `#d8ff75`→`#daf163`; latar halaman `#0c0e10`→`#222124` (fogColor + baseColor). Tiga nilai lain adalah STOP GRADIEN, bukan warna merek — dipetakan dengan mempertahankan delta-nya terhadap latar (colorLow `#191d1f`→`#2f3033`, glowColor `#29261f`→`#3f3933`, edgeColor `#07090a`→`#1d1c1e`); memaksa ketiganya jadi `#222124` akan meratakan terrain jadi kotak hitam. Tint atmosferik netral (`#ffffff`, `#cfe0e8`, `#c2d6e2`, `coolTint #c2d4de`) DIBIARKAN — bukan warna palet, cuma pengali near-white. Tidak ada `#c0ff33`/`#1a1a1a`/`#a78bfa` di mana pun, termasuk shader. **Tiga hal yang prototipe tidak punya, ditambahkan**: (1) probe WebGL SEBELUM konstruksi + `webglcontextlost` → render `null`, kisi titik CSS jadi latarnya; tidak pernah kosong, tidak pernah melempar (`new WebGLRenderer()` MELEMPAR di sesi RDP / driver blocklist). (2) Pembongkaran React — `dispose()` sudah ada di lima modul, main.js-nya saja yang tak pernah memanggilnya; ditambah flag `cancelled` supaya StrictMode double-mount tidak menyisakan rAF kedua. (3) `next/dynamic({ssr:false})` — **diverifikasi dari HTML prerender `/login`: chunk three TIDAK direferensikan**, JS awal rute tetap 914,4 KB, jadi form hidup sebelum kanvas dimuat. Jalur `prefers-reduced-motion` (satu frame statis) dipertahankan utuh |
 | 2026-08-13 | **⚠️ DISKREPANSI TOKEN DIKETAHUI (dicatat, SENGAJA tidak diperbaiki): `--color-accent-primary-fg` bernilai `#1a1a1a`, yang ada di daftar warna DEPRECATED.** Token ini dipakai app-wide sebagai warna teks di atas lime (tombol primer di hampir setiap halaman), sementara aturan warna menyatakan near-black harus `#222124`. Keduanya tidak bisa benar sekaligus. Halaman login memakai `var(--color-bg-sidebar)` (#222124) untuk teks di atas lime — mengikuti wordmark sidebar yang memang sudah begitu — sehingga halaman itu patuh tanpa menyentuh token | **Menyeragamkannya adalah commit tersendiri, bukan sisipan.** Mengubah nilai token akan menggeser warna teks pada SETIAP tombol lime di app sekaligus; itu perubahan visual luas yang perlu dilihat langsung, bukan efek samping dari pekerjaan halaman login. Keputusan Ricko 2026-08-13: biarkan token apa adanya, catat di sini supaya sesi berikutnya tidak menemukannya sebagai kejutan dan tidak "merapikannya" diam-diam di tengah pekerjaan lain |
 | 2026-08-13 | **Login: keseimbangan dua kolom diperbaiki; latar gambar DITAHAN.** Isi tiap kolom kini dibatasi lebar lalu DIPUSATKAN di dalam paruhnya (kiri 672px di kolom 60%, kanan 400px di kolom 40%), keduanya dipusatkan vertikal. Sebelumnya teks kiri ditempel ke padding tepi (72px) sementara form dipusatkan di paruh kanan, sehingga di 1920 ada ±665px ruang mati di tengah. Irama spasi mengikuti `docs/login-design/index.html`: headline 48/56, blok logo mb-40, headline mb-32, paragraf maks 448px. Warna TIDAK diubah — pemetaan token dari commit sebelumnya tetap | **`public/login-bg.webp` TIDAK ADA saat pekerjaan ini dikerjakan** (bahkan direktori `public/` belum ada), jadi latar gambar statis tidak dipasang dan tidak ada gambar lain yang disubstitusi — sesuai instruksi eksplisit. Referensi `url(/login-bg.webp)` juga SENGAJA tidak ditulis lebih dulu: file yang belum ada akan menghasilkan 404 di setiap pemuatan halaman yang paling sering dibuka di app ini. `.ng-login-dots` tetap jadi latar tunggal dan memang sudah berbentuk lapisan `background-image`, jadi gambar bisa ditumpuk di atasnya sebagai lapisan pertama dengan titik-titik sebagai fallback saat file-nya tersedia. **Rasio kontras di atas GAMBAR belum bisa dilaporkan** — teks di atas gambar justru tempat kontras diam-diam rusak, jadi angkanya wajib diukur ulang setelah file masuk, bukan diperkirakan |
@@ -421,7 +539,7 @@
 ---
 
 ## Current Status
-**Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6) · Phase 3.1 ✅**
+**Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6) · Phase 3.1 ✅ · Phase 5 Mesin Akuntansi DISETUJUI 2026-09-15 (belum ada kode — lihat bagian Phase 5 di atas)**
 
 > **🔎 TERBUKA (2026-08-05) — verifikasi browser Part F.** Tiga commit terakhir
 > (`89f7173` visibilitas metrik, `9dea367` preferensi per-user, `e1eeda3`
@@ -478,7 +596,12 @@ Loop inti sudah lepas dari mock end-to-end: **upload → Gemini extract → revi
 ### Phase 4 — Operational Module
 - ⏳ Belum dimulai (sengaja) — menunggu loop inti tervalidasi manual dengan data nyata
 
+### Phase 5 — Mesin Akuntansi & Jurnal Manual
+- ⏳ **DISETUJUI 2026-09-15, belum dimulai.** Fase 1 (Jurnal Umum + Supplier) siap dieksekusi — D0–D10 + R4 mengikat; Fase 2–4 menunggu D11–D26 dan R1–R3/R5–R11. Pintu masuk: bagian **Phase 5** di atas; plan teknis `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md`; **prompt awal untuk agen pelaksana: `docs/plans/2026-09-15-prompt-mulai-opus5.md`**. 214 task NgodingPakeAI dikerjakan satu per satu lewat katalog `docs/plans/ngodingpakeai-tasks-214.md`.
+
 ### Next Sprint
+**Sprint berikutnya (2026-09-15): Phase 5 Fase 1 — mulai dari A1 (MP §4.A). Phase 4 Operational tetap ditunda.**
+
 Loop inti (upload → OCR → review → mapping → dashboard → analytics) **sudah lepas dari mock sepenuhnya**. Dua item "Next Sprint" lama (1. persist review actions, 2. Financial Data API) **dua-duanya sudah selesai**. Fokus berikutnya bukan fitur baru, tapi **validasi manual end-to-end dengan data nyata** sebelum lanjut.
 
 **Loop inti tervalidasi manual oleh Ricko 2026-07-15** (upload PDF → nominal terbaca benar di Dashboard & Analytics — "cukup puas"). Gate "tunggu validasi manual" resmi terbuka; item yang tadinya ditunda kini boleh dikerjakan.
