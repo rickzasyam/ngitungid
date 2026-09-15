@@ -136,9 +136,13 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
    `globals.css`, outside any `@layer` block. This previously caused entire card grids to
    render invisible because `opacity: 0` never animated back to 1. Verify after build:
    ```bash
-   npm run build
-   grep -c "slideUp" .next/static/css/*.css   # must be > 0
+   pnpm build
+   grep -l "slideUp" .next/static/chunks/*.css || { echo "GAGAL: @keyframes hilang dari CSS hasil build"; exit 1; }
    ```
+   Next 16 menaruh CSS hasil build di `.next/static/chunks/`, bukan `.next/static/css/`.
+   Perintah lama menunjuk path yang sudah tidak ada, jadi ia cuma mengembalikan "No such
+   file or directory" — lulus atau tidak, tampilannya sama. Bentuk di atas gagal keras di
+   kedua mode kegagalan: glob tidak cocok, maupun berkas ada tapi `slideUp` tidak di dalamnya.
 
 2. Use `animation-fill-mode: both`, not just `forwards`, so content doesn't disappear in
    hidden tabs or headless rendering.
@@ -166,6 +170,25 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
    There is no process or module boundary preventing this; the only guard is the DPO
    invariance test in `lib/analytics/metric-visibility.test.ts`. Visibility is applied
    **only** at the point where a card is rendered.
+
+8. **Snapshot drizzle untuk migrasi 0006–0009 TIDAK ADA — hasil `db:generate` tidak boleh
+   dipercaya begitu saja.** `lib/db/migrations/meta/` hanya berisi snapshot 0000–0005 dan
+   0010+, sementara `_journal.json` mendaftarkan 0006–0009 (ditulis tangan, tanpa snapshot).
+   Karena drizzle-kit membandingkan `schema.ts` dengan snapshot TERAKHIR yang ada, sesi
+   2026-09-15 menerima migrasi 0010 yang membuat ulang `contracts`, `contract_layanan`,
+   `layanan`, enum `jenis_kontrak`/`user_language`, kolom preferensi user, bahkan
+   `ALTER TYPE user_role ADD VALUE 'finance'` — statement pertamanya pasti gagal di
+   database mana pun yang sudah jalan.
+
+   **`0010_journals.sql` sudah DIPANGKAS TANGAN** jadi objek jurnal saja; jangan pernah
+   men-generate ulang 0010. `meta/0010_snapshot.json` sengaja dipertahankan karena snapshot
+   drizzle berisi keadaan PENUH, bukan delta — kehadirannya memulihkan rantai, dan
+   `db:generate` sesudahnya sudah bersih (terbukti: balasan "No schema changes").
+
+   **Sebelum migrasi ke main:** pastikan main sudah berada di 0000–0009, lalu terima 0010
+   yang dipangkas ini apa adanya. Setiap kali `schema.ts` berubah, jalankan `pnpm db:generate`
+   lalu BACA SQL-nya sebelum `db:migrate` — kalau ia menyebut tabel atau enum yang kamu tahu
+   sudah ada, berhenti: snapshotnya melenceng lagi.
 
 ## Working Conventions
 
