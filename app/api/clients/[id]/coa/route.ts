@@ -3,7 +3,15 @@ import { randomUUID } from 'node:crypto'
 import { asc, eq, inArray, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
-import { clients, coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
+import {
+  clients,
+  coaMappingHistory,
+  financialReports,
+  journalEntries,
+  journalLines,
+  masterCoa,
+  reportLineItems,
+} from '@/lib/db/schema'
 import { requireAkunting, requireUser } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { parseCoaWorkbook } from '@/lib/coa-import'
@@ -168,16 +176,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .where(eq(financialReports.clientId, id)),
   ])
 
-  const { plan, relinks } = buildReplacePlan({
+  // Baris jurnal klien ini, beserta nomor bukti header-nya. Dibaca SEBELUM
+  // apa pun ditulis, sama seperti baris laporan & riwayat di atas.
+  // Supplier belum ikut: tabel master_supplier baru lahir di migrasi 0011 —
+  // langkah B3 yang menyambungkannya ke sini.
+  const journalRows =
+    oldIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: journalLines.id,
+            journalId: journalLines.journalId,
+            noBukti: journalEntries.noBukti,
+            masterCoaId: journalLines.masterCoaId,
+          })
+          .from(journalLines)
+          .innerJoin(journalEntries, eq(journalLines.journalId, journalEntries.id))
+          .where(eq(journalEntries.clientId, id))
+
+  const { plan, relinks, journalRelinks } = buildReplacePlan({
     oldAccounts,
     newKodeToId,
     ambiguousKode: ambiguousKode ?? [],
     lines,
     history,
     reports: reportRows,
+    journalLines: journalRows,
   })
 
   if (dryRun) {
+    // TETAP 200 walau ada yang memblokir: layar konfirmasi butuh `impact` untuk
+    // menampilkan daftar merahnya dan menonaktifkan tombol simpan. Yang menolak
+    // adalah eksekusi di bawah.
     return NextResponse.json({
       dryRun: true,
       newCount: values.length,
@@ -185,6 +215,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       warnings: warnings ?? [],
       impact: plan,
     })
+  }
+
+  // ── Blokir: jurnal menahan akun yang kodenya hilang ─────────────────
+  //
+  // Baris laporan yang kehilangan akun boleh diputus — ia kembali ke antrean
+  // /coa-mapping dan angkanya utuh. Baris JURNAL tidak punya keadaan "belum
+  // dipetakan": ia pencatatan yang sudah terjadi, kolomnya NOT NULL, dan
+  // memindahkannya ke akun lain berarti menulis ulang pembukuan diam-diam.
+  // Ditolak di sini, sebelum satu statement pun dikirim, dengan menyebut nomor
+  // buktinya — kalau dibiarkan sampai DB, yang keluar hanya galat FK tanpa
+  // petunjuk jurnal mana yang harus diperbaiki.
+  if (plan.journalBlocked.length > 0) {
+    return NextResponse.json(
+      {
+        error: 'Master COA tidak bisa diganti: ada akun terpakai jurnal yang hilang di file baru.',
+        details: plan.journalBlocked.map(
+          b => `Jurnal ${b.noBukti} memakai akun ${b.kode}, yang tidak ada di file baru.`
+        ),
+        impact: plan,
+      },
+      { status: 409 }
+    )
   }
 
   // ── Tulis: satu batch, urutan wajib dijaga ──────────────────────────
@@ -209,9 +261,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // 2) Ganti isi Master COA. History ikut terhapus (FK CASCADE) — sengaja
-  //    dibiarkan, lalu yang kode-nya selamat di-insert ulang di langkah 4.
-  statements.push(db.delete(masterCoa).where(eq(masterCoa.clientId, id)))
-  if (values.length > 0) statements.push(db.insert(masterCoa).values(values))
+  //    dibiarkan, lalu yang kode-nya selamat di-insert ulang di langkah 5.
+  if (journalRows.length === 0) {
+    // Jalur lama, tidak berubah sedikit pun: hapus dulu, lalu sisipkan.
+    statements.push(db.delete(masterCoa).where(eq(masterCoa.clientId, id)))
+    if (values.length > 0) statements.push(db.insert(masterCoa).values(values))
+  } else {
+    // ── Jalur "ada jurnal": urutannya HARUS dibalik ──────────────────
+    //
+    // Masalahnya melingkar. journal_lines.master_coa_id itu NOT NULL dengan FK
+    // restrict, jadi ia tidak bisa dilepas dulu seperti report_line_items —
+    // artinya DELETE master_coa akan ditolak selama baris jurnal masih
+    // menunjuk ke sana. Tapi menyisipkan baris baru lebih dulu juga ditolak,
+    // kali ini oleh unique(client_id, kode), karena kode yang sama masih
+    // dipegang baris lama.
+    //
+    // Jalan keluarnya: lepaskan dulu kode lama dari batasan unique dengan
+    // menamainya sementara, sisipkan yang baru, pindahkan baris jurnal ke id
+    // baru, baru hapus yang lama. Nama sementaranya memakai id baris itu
+    // sendiri sehingga dijamin tidak bentrok satu sama lain maupun dengan kode
+    // asli mana pun. Semuanya di dalam batch yang sama — satu transaksi, jadi
+    // keadaan antara ini tidak pernah terlihat siapa pun, dan kalau ada satu
+    // statement gagal seluruhnya ikut dibatalkan.
+    //
+    // Blokir di atas sudah menjamin setiap baris jurnal punya sasaran baru,
+    // jadi langkah 2c di bawah tidak mungkin menyisakan baris yatim.
+    statements.push(
+      db
+        .update(masterCoa)
+        .set({ kode: sql`'~' || ${masterCoa.id}::text` })
+        .where(inArray(masterCoa.id, oldIds))
+    )
+
+    if (values.length > 0) statements.push(db.insert(masterCoa).values(values))
+
+    if (journalRelinks.length > 0) {
+      const jTuples = sql.join(
+        journalRelinks.map(r => sql`(${r.journalLineId}::uuid, ${r.newMasterCoaId}::uuid)`),
+        sql`, `
+      )
+      statements.push(
+        db.execute(sql`
+          update ${journalLines} as jl
+          set master_coa_id = v.master_coa_id
+          from (values ${jTuples}) as v(id, master_coa_id)
+          where jl.id = v.id
+        `)
+      )
+    }
+
+    // Dibatasi ke id LAMA, bukan ke clientId: baris baru sudah ada di tabel
+    // yang sama pada titik ini dan tidak boleh ikut terhapus.
+    statements.push(db.delete(masterCoa).where(inArray(masterCoa.id, oldIds)))
+  }
 
   // 3) Sambungkan kembali baris yang kode-nya masih ada. Satu UPDATE ... FROM
   //    (VALUES …) untuk semua baris sekaligus — bukan satu statement per baris,

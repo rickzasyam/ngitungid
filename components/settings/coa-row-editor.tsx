@@ -391,6 +391,11 @@ export function CoaDeleteDialog({
   }, [onCancel, submitting])
 
   const affected = impact.reports.filter(r => r.brokenCount > 0)
+  // Akun yang dipakai jurnal TIDAK BISA dihapus — server menolak 409. Tombolnya
+  // dimatikan, dan pesan "belum dipakai laporan mana pun" di bawah tidak boleh
+  // ikut tampil: ia benar soal laporan tapi menyesatkan soal bisa-tidaknya.
+  const blocked = impact.journalBlocked ?? []
+  const terhalang = blocked.length > 0
 
   return (
     <ModalShell
@@ -408,7 +413,54 @@ export function CoaDeleteDialog({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4" style={{ background: '#f8f8f8' }}>
-          {impact.brokenLineCount === 0 ? (
+          {terhalang && (
+            <div
+              role="alert"
+              className="mb-4 px-3.5 py-3 rounded-2xl"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)',
+                border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)',
+              }}
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  className="w-4 h-4 flex-shrink-0 mt-0.5"
+                  style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+                />
+                <div className="min-w-0">
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+                  >
+                    Akun ini tidak bisa dihapus
+                  </p>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                    Dipakai di {blocked.length} jurnal. Baris jurnal tidak bisa dilepas dari akunnya —
+                    isinya pencatatan yang sudah terjadi. Ubah jurnalnya dulu kalau akun ini memang
+                    harus hilang.
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {blocked.slice(0, 8).map(b => (
+                      <li
+                        key={`${b.journalId}-${b.kode}`}
+                        className="text-xs font-medium"
+                        style={{ color: 'var(--color-text-primary)' }}
+                      >
+                        {b.noBukti}
+                      </li>
+                    ))}
+                  </ul>
+                  {blocked.length > 8 && (
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                      +{blocked.length - 8} jurnal lain
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {terhalang ? null : impact.brokenLineCount === 0 ? (
             <p className="text-sm" style={{ color: '#15803d' }}>
               Akun ini belum dipakai laporan mana pun — menghapusnya tidak berdampak ke data laporan.
             </p>
@@ -477,7 +529,8 @@ export function CoaDeleteDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={submitting}
+            disabled={submitting || terhalang}
+            title={terhalang ? 'Akun ini dipakai di jurnal.' : undefined}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-white transition-all duration-200 enabled:hover:-translate-y-px disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-critical) focus-visible:ring-offset-2"
             style={{ background: '#dc2626' }}
           >

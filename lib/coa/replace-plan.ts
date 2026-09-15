@@ -40,6 +40,54 @@ export interface ReportMeta {
   status: string
 }
 
+// ── Perujuk master_coa selain report_line_items ──────────────
+//
+// KEBIJAKANNYA DITENTUKAN OLEH NULLABILITY KOLOMNYA, bukan selera:
+//   NOT NULL  (journal_lines.master_coa_id) → TIDAK BISA diputus. Satu-satunya
+//             jawaban yang jujur adalah MENOLAK penggantian (409) dan menyebut
+//             jurnal mana yang menghalangi. Memutusnya mustahil (FK restrict),
+//             dan "memindahkannya ke akun lain" berarti diam-diam mengubah
+//             pembukuan yang sudah dicatat.
+//   NULL-able (master_supplier.akun_hutang_default_id) → boleh diputus jadi
+//             null dan dihitung di laporan dampak. Kehilangan akun default
+//             cuma membuat form supplier kosong, tidak mengubah angka apa pun.
+//
+// Setiap tabel BARU yang merujuk master_coa wajib ditambahkan di sini beserta
+// keputusan nullability-nya — kalau tidak, jalur ganti-massal diam-diam rusak.
+
+export interface AffectedJournalLine {
+  id: string
+  journalId: string
+  /** Nomor bukti header-nya — supaya pesan blokir bisa ditindak manusia. */
+  noBukti: string
+  /** NOT NULL di DB, jadi tidak pernah null di sini. */
+  masterCoaId: string
+}
+
+export interface AffectedSupplier {
+  id: string
+  nama: string
+  akunHutangDefaultId: string | null
+}
+
+/** Jurnal yang menghalangi penggantian: akunnya hilang/ambigu di berkas baru. */
+export interface BlockedJournal {
+  journalId: string
+  noBukti: string
+  kode: string
+}
+
+export interface JournalRelink {
+  journalLineId: string
+  newMasterCoaId: string
+}
+
+export interface SupplierRelink {
+  supplierId: string
+  /** null = akun default diputus (kodenya hilang/ambigu). */
+  newAkunHutangDefaultId: string | null
+}
+
 /** Satu baris yang mapping-nya putus — bahan laporan dampak per laporan. */
 export interface BrokenLine {
   lineItemId: string
@@ -81,6 +129,17 @@ export interface ReplacePlan {
   reports: ReportImpact[]
   /** Laporan yang turun 'mapped' → 'review' akibat replace ini. */
   demotedReportIds: string[]
+  /** Baris jurnal yang akunnya bisa disambung ke id baru. */
+  journalRelinkedCount: number
+  /**
+   * Jurnal yang MENGHALANGI penggantian. Tidak kosong = route wajib menolak
+   * 409 SEBELUM menulis apa pun. Sudah didedup per (jurnal, kode): satu jurnal
+   * dengan lima baris yang kodenya sama muncul sekali, bukan lima kali.
+   */
+  journalBlocked: BlockedJournal[]
+  supplierRelinkedCount: number
+  /** Supplier yang akun hutang default-nya diputus jadi null. */
+  supplierUnlinkedCount: number
 }
 
 /** Baris ini akan disambung ke id baru, atau diputus (null). */
@@ -110,6 +169,13 @@ export interface PlanInput {
   lines: AffectedLine[]
   history: HistoryRow[]
   reports: ReportMeta[]
+  /**
+   * OPSIONAL, dan itu disengaja. Dihilangkan = berperilaku persis seperti
+   * sebelum jurnal ada (hitungan nol, tidak ada blokir), sehingga pemanggil
+   * lama dan test lama tidak perlu diubah sama sekali.
+   */
+  journalLines?: AffectedJournalLine[]
+  suppliers?: AffectedSupplier[]
 }
 
 /**
@@ -118,7 +184,12 @@ export interface PlanInput {
  * dan sekali untuk eksekusi — satu sumber kebenaran, jadi angka yang dilihat
  * admin di layar konfirmasi mustahil berbeda dari yang benar-benar terjadi.
  */
-export function buildReplacePlan(input: PlanInput): { plan: ReplacePlan; relinks: LineRelink[] } {
+export function buildReplacePlan(input: PlanInput): {
+  plan: ReplacePlan
+  relinks: LineRelink[]
+  journalRelinks: JournalRelink[]
+  supplierRelinks: SupplierRelink[]
+} {
   const { oldAccounts, newKodeToId, ambiguousKode, lines, history, reports } = input
 
   const ambiguous = new Set(ambiguousKode)
@@ -251,6 +322,64 @@ export function buildReplacePlan(input: PlanInput): { plan: ReplacePlan; relinks
       : a.periodStart.localeCompare(b.periodStart)
   )
 
+  // ── journal_lines: NOT NULL, jadi hilang = BLOKIR, bukan putus ──
+  //
+  // Bedanya dengan report_line_items mendasar. Baris laporan yang kehilangan
+  // akun kembali ke antrean pemetaan — merepotkan, tapi datanya utuh dan bisa
+  // dipetakan ulang. Baris JURNAL tidak punya keadaan "belum dipetakan": ia
+  // adalah pencatatan yang sudah terjadi. Memutusnya mustahil (kolomnya NOT
+  // NULL dengan FK restrict), dan memindahkannya ke akun lain berarti diam-diam
+  // menulis ulang pembukuan. Maka satu-satunya jawaban yang jujur: tolak
+  // penggantiannya, sebutkan nomor buktinya, biar manusia yang memutuskan.
+  const journalRelinks: JournalRelink[] = []
+  const journalBlocked: BlockedJournal[] = []
+  const blockedSeen = new Set<string>()
+  let journalRelinkedCount = 0
+
+  for (const jl of input.journalLines ?? []) {
+    const target = resolve(jl.masterCoaId)
+    if (target) {
+      journalRelinkedCount++
+      // Instruksi HANYA untuk baris yang benar-benar berpindah id — persis
+      // aturan yang dipakai `relinks` di atas. Jalur hapus-satu-baris memanggil
+      // planner ini dengan peta kode→id yang SEKARANG, jadi tanpa penyaringan
+      // ini setiap baris jurnal klien akan ditulis ulang tanpa berubah.
+      if (target !== jl.masterCoaId) {
+        journalRelinks.push({ journalLineId: jl.id, newMasterCoaId: target })
+      }
+      continue
+    }
+    // Didedup per (jurnal, kode): satu jurnal dengan lima baris berkode sama
+    // adalah SATU masalah untuk dibaca manusia, bukan lima.
+    const kode = oldIdToKode.get(jl.masterCoaId) ?? '(tidak diketahui)'
+    const key = `${jl.journalId} ${kode}`
+    if (blockedSeen.has(key)) continue
+    blockedSeen.add(key)
+    journalBlocked.push({ journalId: jl.journalId, noBukti: jl.noBukti, kode })
+  }
+
+  journalBlocked.sort((a, b) =>
+    a.noBukti === b.noBukti ? a.kode.localeCompare(b.kode) : a.noBukti.localeCompare(b.noBukti)
+  )
+
+  // ── master_supplier.akun_hutang_default_id: NULL-able, jadi boleh diputus ──
+  // Kehilangan akun default hanya membuat form supplier kembali kosong; tidak
+  // ada angka yang berubah, tidak ada pencatatan yang hilang.
+  const supplierRelinks: SupplierRelink[] = []
+  let supplierRelinkedCount = 0
+  let supplierUnlinkedCount = 0
+
+  for (const s of input.suppliers ?? []) {
+    if (!s.akunHutangDefaultId) continue
+    const target = resolve(s.akunHutangDefaultId)
+    if (target) supplierRelinkedCount++
+    else supplierUnlinkedCount++
+    // Sama seperti jurnal: hanya yang berpindah (atau diputus) yang ditulis.
+    if (target !== s.akunHutangDefaultId) {
+      supplierRelinks.push({ supplierId: s.id, newAkunHutangDefaultId: target })
+    }
+  }
+
   return {
     plan: {
       matchedKode,
@@ -265,8 +394,14 @@ export function buildReplacePlan(input: PlanInput): { plan: ReplacePlan; relinks
       historyLost,
       reports: impacts,
       demotedReportIds,
+      journalRelinkedCount,
+      journalBlocked,
+      supplierRelinkedCount,
+      supplierUnlinkedCount,
     },
     relinks,
+    journalRelinks,
+    supplierRelinks,
   }
 }
 

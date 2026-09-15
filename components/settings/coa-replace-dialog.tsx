@@ -35,6 +35,13 @@ export interface CoaImpact {
   historyLost: number
   reports: CoaImpactReport[]
   demotedReportIds: string[]
+  /**
+   * Jurnal yang MENGHALANGI penggantian — akunnya hilang/ambigu di file baru.
+   * Tidak kosong = server akan menolak (409), jadi tombol Lanjutkan dimatikan.
+   * Opsional supaya respons lama (sebelum jurnal ada) tetap terbaca.
+   */
+  journalBlocked?: { journalId: string; noBukti: string; kode: string }[]
+  journalRelinkedCount?: number
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -110,6 +117,11 @@ export function CoaReplaceDialog({
 
   const affected = impact.reports.filter(r => r.brokenCount > 0 || r.relinkedCount > 0)
   const demoted = impact.demotedReportIds.length
+  // Bukan peringatan, melainkan PENGHALANG: server menolak 409 selama daftar
+  // ini tidak kosong. Tombol Lanjutkan ikut dimatikan supaya tidak ada yang
+  // menekannya lalu menerima galat yang seolah-olah kegagalan tak terduga.
+  const blocked = impact.journalBlocked ?? []
+  const terhalang = blocked.length > 0
 
   return (
     <ModalShell
@@ -129,6 +141,61 @@ export function CoaReplaceDialog({
 
         {/* Isi */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4" style={{ background: '#f8f8f8' }}>
+          {/* Penghalang diletakkan PALING ATAS: ia menentukan apakah seluruh
+              layar ini masih bisa ditindaklanjuti, jadi tidak boleh terkubur di
+              bawah statistik yang jadi tidak relevan. */}
+          {terhalang && (
+            <div
+              role="alert"
+              className="mb-4 px-3.5 py-3 rounded-2xl"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)',
+                border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)',
+              }}
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  className="w-4 h-4 flex-shrink-0 mt-0.5"
+                  style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+                />
+                <div className="min-w-0">
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+                  >
+                    Master COA tidak bisa diganti dengan file ini
+                  </p>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                    {blocked.length} jurnal memakai akun yang tidak ada di file baru. Baris jurnal tidak
+                    bisa dilepas dari akunnya seperti baris laporan — isinya pencatatan yang sudah
+                    terjadi. Tambahkan kembali kode akun di bawah ke file, lalu ulangi.
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {blocked.slice(0, 8).map(b => (
+                      <li key={`${b.journalId}-${b.kode}`} className="text-xs flex items-center gap-1.5">
+                        <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                          {b.noBukti}
+                        </span>
+                        <ArrowRight className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+                        <span
+                          className="font-mono px-1.5 py-0.5 rounded-full"
+                          style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
+                        >
+                          {b.kode}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {blocked.length > 8 && (
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                      +{blocked.length - 8} jurnal lain
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             <Stat value={impact.relinkedLineCount} label="Mapping tersambung otomatis" tone="ok" />
             <Stat value={impact.brokenLineCount} label="Mapping putus, perlu dipetakan ulang" tone={impact.brokenLineCount > 0 ? 'warn' : 'neutral'} />
@@ -249,7 +316,8 @@ export function CoaReplaceDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={submitting}
+            disabled={submitting || terhalang}
+            title={terhalang ? 'Ada jurnal yang memakai akun yang hilang di file baru.' : undefined}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200 enabled:hover:-translate-y-px enabled:hover:shadow-[0_4px_14px_rgba(218,241,99,0.4)] disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
             style={{ background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
           >

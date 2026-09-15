@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
-import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
+import {
+  coaMappingHistory,
+  financialReports,
+  journalEntries,
+  journalLines,
+  masterCoa,
+  reportLineItems,
+} from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { parseCoaRowInput } from '@/lib/coa/row-input'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
@@ -125,6 +132,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       .where(eq(financialReports.clientId, g.clientId)),
   ])
 
+  // Baris JURNAL yang menunjuk akun ini. Cukup yang menunjuk akun INI: baris
+  // jurnal lain menunjuk akun yang bertahan dengan id yang sama, jadi tidak
+  // bisa terdampak dan tidak perlu ikut dibaca.
+  const affectedJournalLines = await db
+    .select({
+      id: journalLines.id,
+      journalId: journalLines.journalId,
+      noBukti: journalEntries.noBukti,
+      masterCoaId: journalLines.masterCoaId,
+    })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.journalId, journalEntries.id))
+    .where(and(eq(journalEntries.clientId, g.clientId), eq(journalLines.masterCoaId, g.coaId)))
+
   // Semua akun BERTAHAN dengan id-nya sendiri, kecuali yang dihapus.
   const survivors = new Map(accounts.filter(a => a.id !== g.coaId).map(a => [a.kode, a.id]))
 
@@ -135,14 +156,35 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     lines,
     history,
     reports: reportRows,
+    journalLines: affectedJournalLines,
   })
 
   if (dryRun) {
+    // dryRun TETAP 200 walau terblokir: layar konfirmasi butuh isi `impact`
+    // untuk menampilkan jurnal mana yang menghalangi dan menonaktifkan
+    // tombolnya. Yang menolak adalah commit di bawah.
     return NextResponse.json({
       dryRun: true,
       account: { kode: g.row.kode, nama: g.row.nama },
       impact: plan,
     })
+  }
+
+  // Akun yang dipakai jurnal TIDAK BISA dihapus. Ditolak SEBELUM batch: kalau
+  // diteruskan, FK restrict journal_lines.master_coa_id akan menolaknya di DB
+  // dengan galat yang tidak menyebut satu pun nomor bukti — tidak bisa
+  // ditindaklanjuti siapa pun. Di sini jurnalnya disebut namanya.
+  if (plan.journalBlocked.length > 0) {
+    return NextResponse.json(
+      {
+        error: `Akun "${g.row.kode}" dipakai di jurnal, jadi tidak bisa dihapus.`,
+        details: plan.journalBlocked.map(
+          b => `Jurnal ${b.noBukti} memakai akun ${b.kode}.`
+        ),
+        impact: plan,
+      },
+      { status: 409 }
+    )
   }
 
   const now = new Date()
