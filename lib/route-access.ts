@@ -16,6 +16,7 @@ import { canDoAccounting, canViewContracts, isInternal, type Role } from '@/lib/
 // requireAkunting/Owner di API).
 export const ACCOUNTING_ONLY_PREFIXES = [
   '/upload',
+  '/jurnal',
   '/coa-mapping',
   '/extraction-review',
 ] as const

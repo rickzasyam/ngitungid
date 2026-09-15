@@ -14,7 +14,7 @@ const ids = (role: Role | null | undefined, sessionLoading = false): NavItemId[]
 describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
   it('owner: semuanya', () => {
     expect(ids('owner')).toEqual([
-      'dashboard', 'analytics', 'upload', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -23,7 +23,7 @@ describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
     // Akunting membukukan pekerjaan klien; katalog & kontrak komersial bukan
     // urusannya. Ini satu-satunya item yang staf kehilangan tapi klien punya.
     expect(ids('akunting')).toEqual([
-      'dashboard', 'analytics', 'upload', 'laporan',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'laporan',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -76,7 +76,7 @@ describe('sessionLoading — semua item tampil, apa pun role-nya', () => {
 
   it('daftar penuhnya persis NAV_ITEMS, urutan apa adanya', () => {
     expect(ids(null, true)).toEqual([
-      'dashboard', 'analytics', 'upload', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -93,9 +93,12 @@ describe('daftar berubah setelah sesi resolve — kapsul wajib mengukur ulang', 
   })
 
   it('finance: indeks Kontrak BERGESER antara loading dan settle', () => {
-    // 5 → 3. Kapsul yang mengukur saat loading lalu tidak pernah mengukur ulang
-    // akan tertinggal dua slot, jatuh di bawah item terakhir.
-    expect(ids('finance', true).indexOf('kontrak')).toBe(4)
+    // Indeks 5 saat loading → 3 sesudah settle. Kapsul yang mengukur saat
+    // loading lalu tidak pernah mengukur ulang akan tertinggal DUA slot, jatuh
+    // di bawah item terakhir. Jaraknya melebar dari 1 jadi 2 slot sejak Jurnal
+    // ditambahkan (staffOnly, jadi finance tidak melihatnya setelah settle) —
+    // artinya konsekuensi tidak mengukur ulang justru makin kelihatan.
+    expect(ids('finance', true).indexOf('kontrak')).toBe(5)
     expect(ids('finance', false).indexOf('kontrak')).toBe(3)
   })
 
@@ -145,5 +148,26 @@ describe('NAV_ITEMS', () => {
     // Item yang memakai keduanya akan ambigu; kalau suatu saat perlu, putuskan
     // urutan pemeriksaannya dengan sadar — jangan biarkan kebetulan.
     for (const i of NAV_ITEMS) expect(!!(i.staffOnly && i.contractOnly), i.id).toBe(false)
+  })
+})
+
+// ══ JURNAL ═══════════════════════════════════════════════════════
+// Jurnal duduk tepat SESUDAH Upload: keduanya pintu masuk DATA, dan keduanya
+// staffOnly sehingga jaraknya tidak pernah berubah antar role.
+describe('Jurnal', () => {
+  it.each(['owner', 'akunting'] as const)('%s: Jurnal tepat sesudah Upload', (role) => {
+    const list = ids(role)
+    expect(list.indexOf('jurnal')).toBe(list.indexOf('upload') + 1)
+  })
+
+  it.each(['finance', 'user'] as const)('%s tidak melihat Jurnal sama sekali', (role) => {
+    expect(ids(role)).not.toContain('jurnal')
+  })
+
+  it('Jurnal bertanda staffOnly, sumbu yang sama dengan Upload', () => {
+    const jurnal = NAV_ITEMS.find(i => i.id === 'jurnal')!
+    expect(jurnal.staffOnly).toBe(true)
+    expect(jurnal.contractOnly).toBeUndefined()
+    expect(jurnal.comingSoon).toBeUndefined()
   })
 })

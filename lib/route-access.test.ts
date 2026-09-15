@@ -259,3 +259,27 @@ describe('isPathAllowedForRole — /kontrak', () => {
     }
   })
 })
+
+// /jurnal masuk ACCOUNTING_ONLY bersama surface kerja akunting lain (D3):
+// halamannya tertutup untuk klien DAN finance. API-nya digerbangi terpisah
+// dengan requireAkunting — lihat lib/journals-api.test.ts.
+describe('/jurnal — surface kerja akunting', () => {
+  it('terdaftar di ACCOUNTING_ONLY_PREFIXES', () => {
+    expect([...ACCOUNTING_ONLY_PREFIXES]).toContain('/jurnal')
+  })
+
+  it.each(['owner', 'akunting'] as const)('%s boleh membuka /jurnal', (role) => {
+    expect(isPathAllowedForRole(role, '/jurnal')).toBe(true)
+  })
+
+  it.each(['finance', 'user'] as const)('%s ditolak dari /jurnal', (role) => {
+    expect(isPathAllowedForRole(role, '/jurnal')).toBe(false)
+  })
+
+  it('sub-path ikut tertutup, tapi nama mirip tidak', () => {
+    expect(isPathAllowedForRole('user', '/jurnal/abc')).toBe(false)
+    // '/jurnal-umum' BUKAN sub-path '/jurnal' — tidak ada halaman seperti itu
+    // hari ini, tapi pagar prefix-nya harus tetap presisi.
+    expect(isPathAllowedForRole('user', '/jurnalisme')).toBe(true)
+  })
+})
