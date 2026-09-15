@@ -17,6 +17,8 @@ const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
 const LIST = read('app', 'api', 'journals', 'route.ts')
 const DETAIL = read('app', 'api', 'journals', '[id]', 'route.ts')
 const QUERIES = read('lib', 'api', 'journal-queries.ts')
+const SUGGEST = read('app', 'api', 'journals', 'suggest-account', 'route.ts')
+const SUGGEST_LIB = read('lib', 'gemini', 'suggest-journal-account.ts')
 
 const handler = (src: string, method: string): string => {
   const start = src.indexOf(`export async function ${method}(`)
@@ -212,5 +214,93 @@ describe('nomor bukti dobel jadi 409, bukan 500', () => {
   it('kegagalan tulis lain jatuh ke helper bersama, bukan 500 mentah', () => {
     expect(LIST).toContain('dbWriteErrorResponse(')
     expect(DETAIL).toContain('dbWriteErrorResponse(')
+  })
+})
+
+// A5 — saran akun AI. Modul gemini/* di repo ini memang tidak di-unit-test
+// (tidak ada satu pun berkas uji di lib/gemini), jadi yang dijaga di sini
+// invarian route-nya: gerbang, penyaring, dan JANGAN MENULIS APA PUN.
+describe('route saran akun AI', () => {
+  it('digerbangi requireAkunting, bukan requireUser', () => {
+    expect(SUGGEST).toContain('requireAkunting()')
+    expect(SUGGEST).not.toContain('requireUser()')
+  })
+
+  it('batas antar-klien tetap dinyatakan eksplisit', () => {
+    expect(SUGGEST).toContain('canAccessClientData(')
+  })
+
+  // D10: saran TIDAK PERNAH otomatis dipakai. Route ini membaca saja; yang
+  // memutuskan adalah manusia lewat tombol Terapkan di form.
+  it('tidak menulis apa pun — tanpa insert, update, delete, maupun batch', () => {
+    for (const needle of ['db.insert(', 'db.update(', 'db.delete(', 'db.batch(']) {
+      expect(SUGGEST, needle).not.toContain(needle)
+    }
+  })
+
+  it('membuang saran di bawah ambang keyakinan', () => {
+    expect(SUGGEST).toContain('AI_MIN_CONFIDENCE')
+    expect(SUGGEST).toContain('p.confidence >= AI_MIN_CONFIDENCE')
+  })
+
+  // Model bisa mengembalikan kode yang tidak ada di Master COA klien ini.
+  // Tanpa penyaring ini, kode karangan itu sampai ke layar sebagai saran.
+  it('membuang kode yang tidak ada di Master COA klien', () => {
+    expect(SUGGEST).toContain('byKode.get(p.debitKode)')
+    expect(SUGGEST).toContain('byKode.get(p.kreditKode)')
+    expect(SUGGEST).toContain('if (!debit || !kredit) return null')
+  })
+
+  it('membedakan key belum diisi (400), kuota (429), dan sisanya (502)', () => {
+    expect(SUGGEST).toContain('GEMINI_API_KEY')
+    expect(SUGGEST).toContain('status: 400')
+    expect(SUGGEST).toContain('isQuota ? 429 : 502')
+  })
+
+  it('memberi maxDuration supaya tidak terpotong saat free-tier antre', () => {
+    expect(SUGGEST).toContain('export const maxDuration = 60')
+  })
+
+  it('keterangan kosong ditolak sebelum Gemini dipanggil', () => {
+    const tolak = SUGGEST.indexOf("keterangan === ''")
+    const panggil = SUGGEST.indexOf('suggestJournalAccounts(')
+    expect(tolak).toBeGreaterThan(-1)
+    expect(tolak).toBeLessThan(panggil)
+  })
+
+  it('panjang keterangan dibatasi sebelum dikirim ke Gemini', () => {
+    const batas = SUGGEST.indexOf('KETERANGAN_MAX')
+    const panggil = SUGGEST.indexOf('suggestJournalAccounts(')
+    expect(batas).toBeGreaterThan(-1)
+    expect(batas).toBeLessThan(panggil)
+  })
+})
+
+describe('modul saran akun jurnal', () => {
+  it('mengembalikan paling banyak tiga pasangan (R1)', () => {
+    expect(SUGGEST_LIB).toContain('MAX_SUGGESTION_PAIRS = 3')
+    expect(SUGGEST_LIB).toContain('.slice(0, MAX_SUGGESTION_PAIRS)')
+  })
+
+  it('terurut keyakinan menurun, jadi pilihan teratas yang paling mungkin benar', () => {
+    expect(SUGGEST_LIB).toContain('.sort((a, b) => b.confidence - a.confidence)')
+  })
+
+  it('pasangan dengan sisi kosong atau dua sisi sama dibuang di modul', () => {
+    expect(SUGGEST_LIB).toContain("r.debitKode !== ''")
+    expect(SUGGEST_LIB).toContain('r.debitKode !== r.kreditKode')
+  })
+
+  it('temperature 0 — saran akuntansi tidak boleh berubah tiap ditekan', () => {
+    expect(SUGGEST_LIB).toContain('temperature: 0')
+  })
+
+  it('prompt meminta array kosong saat keterangannya kabur', () => {
+    expect(SUGGEST_LIB).toContain('array KOSONG')
+  })
+
+  it('mengembalikan KODE akun, bukan id basis data', () => {
+    expect(SUGGEST_LIB).toContain('debitKode')
+    expect(SUGGEST_LIB).not.toContain('masterCoa.id')
   })
 })
