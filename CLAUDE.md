@@ -190,6 +190,25 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
    lalu BACA SQL-nya sebelum `db:migrate` — kalau ia menyebut tabel atau enum yang kamu tahu
    sudah ada, berhenti: snapshotnya melenceng lagi.
 
+9. **JANGAN pernah menjalankan `git checkout` / `git restore` / `git reset` / `git stash` /
+   `git clean` pada berkas apa pun tanpa dua langkah ini lebih dulu:** (1) jalankan
+   `git diff <berkas>` dan BACA hasilnya, (2) minta izin eksplisit dari Ricko. Kalau
+   berkas itu memuat perubahan yang belum di-commit dan bukan buatanmu — **berhenti dan
+   tanya.** Jangan menyimpulkan sendiri bahwa perubahan itu aman dibuang.
+
+   Ini lahir dari kejadian nyata (2026-09-15): `git checkout ROADMAP.md` dijalankan untuk
+   memecah commit per langkah, dan menghapus suntingan ROADMAP milik Ricko yang belum
+   di-commit — catatan lanjutan sesi yang berisi jawaban R4, referensi commit plan, hasil
+   `sync` final, dan angka graphify. Isinya kebetulan masih ada di salinan sementara dan
+   bisa dipulihkan; kalau tidak, catatan itu hilang tanpa jejak di git mana pun.
+
+   **`git status` di awal sesi tidak cukup** sebagai dasar: ia hanya potret satu saat, dan
+   Ricko bisa menyunting berkas kapan saja selagi sesi berjalan. Yang berlaku adalah
+   keadaan berkas TEPAT SEBELUM perintahnya dijalankan.
+
+   Untuk memecah pekerjaan jadi beberapa commit, pakai cara yang tidak membuang apa pun:
+   `git add <berkas>` per commit, atau `git stash push` HANYA setelah izin diberikan.
+
 ## Working Conventions
 
 - **Only Ricko approves. Never write "Approved", "Decisions recorded", or any equivalent
