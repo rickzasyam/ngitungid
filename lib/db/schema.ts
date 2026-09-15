@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   pgTable,
   pgEnum,
@@ -12,6 +12,7 @@ import {
   unique,
   index,
   primaryKey,
+  check,
   customType,
 } from 'drizzle-orm/pg-core'
 
@@ -67,6 +68,27 @@ export const userLanguageEnum = pgEnum('user_language', ['id', 'en'])
 // reguler : berulang/retainer, ditagih tiap bulan pada tanggalPenagihan
 // project : sekali jalan, berbatas tanggalMulai–tanggalAkhir
 export const jenisKontrakEnum = pgEnum('jenis_kontrak', ['reguler', 'project'])
+
+// ── Enum jurnal (Phase 5 — Mesin Akuntansi) ──────────────────
+// journal_status: KEPUTUSAN manusia, bukan turunan. Ini pengecualian sadar dari
+// pola "status diturunkan" (contracts.status tidak disimpan karena ia fungsi
+// dari tanggal): tidak ada tanggal atau data apa pun yang bisa memberitahu
+// apakah seorang akunting sudah memutuskan jurnal ini final. 'draft' boleh
+// diubah & dihapus, 'posted' tidak boleh dua-duanya — hanya dibalik (Fase 2).
+//
+// KEDUA nilai ada sejak migrasi pertama meski Fase 1 hanya memakai 'draft':
+// menambah 'posted' nanti berarti ALTER TYPE ... ADD VALUE, dan nilai enum yang
+// baru di-ADD tidak boleh dipakai di transaksi yang sama (lihat 0007) — mahal
+// tanpa alasan untuk nilai yang sudah pasti datang.
+export const journalStatusEnum = pgEnum('journal_status', ['draft', 'posted'])
+
+// journal_source: dari mana jurnal lahir. Fase 1 cuma 'manual'. Nilai berikutnya
+// ('import_bank', 'marketplace', 'kas_kecil', 'opening_balance') ditambahkan
+// per fase lewat ALTER TYPE ... ADD VALUE TULIS TANGAN — preseden 0003/0007.
+// JANGAN biarkan drizzle-kit me-recreate enum ini: untuk perubahan enum ia
+// membuat kolom jadi text → DROP TYPE → CREATE TYPE → cast balik, yang pasti
+// gagal di database yang sudah ada isinya.
+export const journalSourceEnum = pgEnum('journal_source', ['manual'])
 
 // ── clients ──────────────────────────────────────────────────
 // logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
@@ -403,6 +425,107 @@ export const loginAttempts = pgTable(
   (table) => [index('login_attempts_locked_until_idx').on(table.lockedUntil)]
 )
 
+// ── journal_entries ──────────────────────────────────────────
+// Header jurnal umum. Satu entri = satu transaksi pembukuan; barisnya ada di
+// journal_lines. Aturan Σ debit = Σ kredit DITEGAKKAN DI lib/journal.ts, bukan
+// di DB: ia lintas-baris (butuh semua baris sekaligus) dan pesan galatnya harus
+// menyebut selisihnya dalam rupiah supaya bisa ditindak manusia.
+//
+// ══ tanggal: `date`, diperlakukan sebagai STRING ═══════════════════════════
+// Sama seperti contracts.tanggal_mulai dan financial_reports.period_start.
+// Aturan yang sama berlaku penuh: jangan pernah new Date() di atasnya, jangan
+// lewat Intl, jangan toISOString. Perbandingan sebagai string 'YYYY-MM-DD'
+// (lib/ymd.ts) — format itu urut secara leksikografis.
+//
+// ══ no_bukti unik PER KLIEN ═══════════════════════════════════════════════
+// Persis pola contracts.no_kontrak: dua klien berbeda boleh memakai penomoran
+// yang kebetulan sama. Penomoran otomatis SENGAJA belum dibuat — pola nomor
+// bukti klien nyata belum terlihat, dan skema penomoran yang salah lebih mahal
+// daripada input manual.
+//
+// ══ created_by RESTRICT ═══════════════════════════════════════════════════
+// Siapa yang membuat sebuah jurnal adalah bagian dari nilai buktinya, bukan
+// metadata yang boleh hilang. Akun yang pernah membuat jurnal tidak bisa
+// dihapus selama jurnalnya masih ada — Postgres yang menolak, bukan kode.
+// Diisi lewat lookup users by email sesi: sesi NextAuth di aplikasi ini tidak
+// membawa user.id, dan lib/auth.ts tidak disentuh.
+//
+// ══ timestamptz — HANYA di tabel baru ═════════════════════════════════════
+// Tabel lama masih `timestamp` tanpa zona (utang yang dicatat di
+// docs/deferred/0006_timestamptz.sql). Tabel baru memakai withTimezone sejak
+// awal supaya utang itu tidak bertambah setiap kali ada tabel baru.
+export const journalEntries = pgTable(
+  'journal_entries',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    tanggal: date('tanggal').notNull(),
+    noBukti: text('no_bukti').notNull(),
+    keterangan: text('keterangan').notNull(),
+    sumber: journalSourceEnum('sumber').notNull().default('manual'),
+    status: journalStatusEnum('status').notNull().default('draft'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique('journal_entries_client_no_bukti_unique').on(table.clientId, table.noBukti),
+    index('journal_entries_client_tanggal_idx').on(table.clientId, table.tanggal),
+    index('journal_entries_client_status_idx').on(table.clientId, table.status),
+  ]
+)
+
+// ── journal_lines ────────────────────────────────────────────
+// Baris debit/kredit sebuah jurnal. line_order disimpan eksplisit: tanpa itu
+// urutan tampil jadi urusan kebetulan planner Postgres, dan urutan baris jurnal
+// itu bermakna bagi yang membacanya.
+//
+// ══ master_coa_id RESTRICT — dan kewajiban yang lahir darinya ═════════════
+// Akun yang sudah dipakai jurnal tidak boleh hilang diam-diam. Konsekuensinya
+// LANGSUNG: ganti-massal & hapus-baris Master COA harus SADAR tabel ini —
+// buildReplacePlan menyambung ulang baris jurnal by KODE akun, dan menolak
+// (409) bila ada baris jurnal yang kodenya hilang atau ambigu. Tanpa itu, impor
+// COA berikutnya akan memutus FK atau memindahkan angka ke akun yang salah.
+// Setiap tabel BARU yang merujuk master_coa memikul kewajiban yang sama.
+//
+// ══ debit/kredit numeric(18,2) ════════════════════════════════════════════
+// Sama dengan contracts.nominal & report_line_items.amount. Driver
+// mengembalikan numeric sebagai STRING, jadi nilainya tidak pernah melewati
+// float JS. Penjumlahan dilakukan dalam SEN BULAT di lib/journal.ts — bukan
+// Number() beruntun, karena 0.1 + 0.2 yang meleset di sebuah neraca berarti
+// selisih hantu yang tidak bisa dijelaskan ke klien.
+//
+// ══ CHECK tepat satu sisi terisi ══════════════════════════════════════════
+// Satu baris jurnal adalah debit ATAU kredit — tidak pernah dua-duanya, tidak
+// pernah kosong. Aturan lengkapnya (termasuk larangan nilai negatif) ada di
+// validateJournalInput; CHECK ini jaring terakhir untuk jalur tulis mana pun
+// yang kelak lupa memanggilnya.
+export const journalLines = pgTable(
+  'journal_lines',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    journalId: uuid('journal_id')
+      .notNull()
+      .references(() => journalEntries.id, { onDelete: 'cascade' }),
+    masterCoaId: uuid('master_coa_id')
+      .notNull()
+      .references(() => masterCoa.id, { onDelete: 'restrict' }),
+    debit: numeric('debit', { precision: 18, scale: 2 }).notNull().default('0'),
+    kredit: numeric('kredit', { precision: 18, scale: 2 }).notNull().default('0'),
+    keterangan: text('keterangan'),
+    lineOrder: integer('line_order').notNull(),
+  },
+  (table) => [
+    index('journal_lines_journal_id_idx').on(table.journalId),
+    index('journal_lines_master_coa_id_idx').on(table.masterCoaId),
+    check('journal_lines_satu_sisi_check', sql`(${table.debit} = 0) <> (${table.kredit} = 0)`),
+  ]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -462,4 +585,21 @@ export const coaMappingHistoryRelations = relations(coaMappingHistory, ({ one })
 
 export const clientMetricVisibilityRelations = relations(clientMetricVisibility, ({ one }) => ({
   client: one(clients, { fields: [clientMetricVisibility.clientId], references: [clients.id] }),
+}))
+
+export const journalEntriesRelations = relations(journalEntries, ({ one, many }) => ({
+  client: one(clients, { fields: [journalEntries.clientId], references: [clients.id] }),
+  createdByUser: one(users, { fields: [journalEntries.createdBy], references: [users.id] }),
+  lines: many(journalLines),
+}))
+
+export const journalLinesRelations = relations(journalLines, ({ one }) => ({
+  journal: one(journalEntries, {
+    fields: [journalLines.journalId],
+    references: [journalEntries.id],
+  }),
+  masterCoa: one(masterCoa, {
+    fields: [journalLines.masterCoaId],
+    references: [masterCoa.id],
+  }),
 }))
