@@ -1,0 +1,27 @@
+-- 0013 — nama supplier unik per klien TANPA peduli besar-kecil huruf
+--
+-- Keputusan Ricko 2026-09-16. Batasan lama unique(client_id, nama) tidak cukup:
+-- "PT ABC" dan "pt abc" adalah dua string berbeda bagi Postgres, jadi keduanya
+-- lolos — padahal aplikasi memperlakukannya sebagai supplier YANG SAMA saat
+-- upsert impor. Akibatnya impor kedua menyisipkan baris baru alih-alih
+-- memperbarui, dan daftar supplier perlahan terisi kembaran yang tak seorang
+-- pun sengaja buat.
+--
+-- ══ KENAPA lower(nama) SAJA, BUKAN JUGA MERAPIKAN SPASI ═════════════════════
+-- Bagian spasi ganda diselesaikan di sisi aplikasi: normalizeNamaSupplier
+-- merapikan spasi dan mem-trim SEBELUM menulis, jadi tidak ada nilai tersimpan
+-- yang punya spasi ganda. Untuk baris-baris itu lower(nama) sudah setara dengan
+-- normalisasi penuh. Ekspresi yang lebih rumit hanya menolong terhadap INSERT
+-- langsung lewat SQL, yang toh sudah melewati seluruh aturan lain juga.
+--
+-- Batasan lama DIHAPUS, bukan dibiarkan berdampingan: indeks baru ini lebih
+-- kuat dan mencakup seluruh kasus yang dijaga batasan lama, jadi menyimpan
+-- keduanya hanya menambah satu hal lagi yang bisa membingungkan saat dibaca.
+--
+-- Aman dijalankan: sebelum migrasi ini, dev diperiksa dan tidak punya satu pun
+-- baris master_supplier, apalagi yang akan bentrok setelah normalisasi.
+-- Untuk main, jalankan pemeriksaan yang sama lebih dulu: cari kelompok
+-- (client_id, lower(nama)) yang jumlahnya lebih dari satu, dan rapikan manual
+-- sebelum menerapkan — CREATE UNIQUE INDEX akan gagal kalau ada yang bentrok.
+ALTER TABLE "master_supplier" DROP CONSTRAINT "master_supplier_client_nama_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "master_supplier_client_nama_lower_unique" ON "master_supplier" USING btree ("client_id",lower("nama"));

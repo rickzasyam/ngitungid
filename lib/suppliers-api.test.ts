@@ -99,11 +99,11 @@ describe('impor = upsert by nama, tidak pernah menghapus', () => {
     expect(IMPORT).not.toContain('db.delete(')
   })
 
-  it('mencocokkan by nama tanpa peduli besar-kecil huruf', () => {
-    // Kalau di sini case-sensitive sementara parser tidak, "Toko Jaya" dan
-    // "TOKO JAYA" lolos parser sebagai satu baris lalu membentur unique.
-    expect(IMPORT).toContain('s.nama.toLowerCase()')
-    expect(IMPORT).toContain('r.nama.toLowerCase()')
+  it('mencocokkan lewat kunci nama bersama, bukan perbandingan ad-hoc', () => {
+    // Sejak 2026-09-16 kuncinya menyamakan spasi DAN besar-kecil huruf, dan
+    // hidup di satu tempat (namaSupplierKey) supaya route, parser, dan indeks
+    // unik di DB tidak bisa berbeda pendapat.
+    expect(IMPORT).toContain('namaSupplierKey(')
   })
 
   it('membaca data yang dibutuhkan sebelum menulis', () => {
@@ -123,8 +123,11 @@ describe('impor = upsert by nama, tidak pernah menghapus', () => {
   })
 
   it('kode akun tak dikenal jadi warning, bukan menggagalkan berkas', () => {
-    expect(IMPORT).toContain('tidak ada di Master COA — dikosongkan.')
-    expect(IMPORT).toContain('bukan akun hutang — dikosongkan.')
+    // Pesannya kini bercabang: supplier baru "dikosongkan", supplier yang sudah
+    // ada "akun lama dipertahankan" — lihat blok penyesuaian di bawah.
+    expect(IMPORT).toContain('tidak ada di Master COA')
+    expect(IMPORT).toContain('bukan akun hutang')
+    expect(IMPORT).toContain('dikosongkan')
   })
 
   it('galat parser TETAP menggagalkan impor sebelum apa pun ditulis', () => {
@@ -168,5 +171,65 @@ describe('daftar', () => {
       expect(body, m).toContain('isUniqueViolation(e)')
       expect(body, m).toContain('status: 409')
     }
+  })
+})
+
+// Dua penyesuaian 2026-09-16, keduanya soal TIDAK MERUSAK data yang sudah ada.
+describe('impor: pencocokan nama & sel kosong', () => {
+  it('memakai kunci nama bersama, bukan toLowerCase() sendiri', () => {
+    // Kalau route dan parser memakai aturan berbeda, baris yang lolos parser
+    // sebagai satu supplier bisa membentur indeks unik di DB.
+    expect(IMPORT).toContain('namaSupplierKey(s.nama)')
+    expect(IMPORT).toContain('namaSupplierKey(r.nama)')
+    expect(IMPORT).not.toContain('.nama.toLowerCase()')
+  })
+
+  it('supplier BARU: seluruh field ditulis, termasuk yang kosong', () => {
+    const blokBaru = IMPORT.slice(IMPORT.indexOf('if (!ada) {'), IMPORT.indexOf('// Supplier yang SUDAH ADA'))
+    for (const f of ['kontak:', 'npwp:', 'terminPembayaran:', 'akunHutangDefaultId:']) {
+      expect(blokBaru, f).toContain(f)
+    }
+  })
+
+  it('supplier YANG SUDAH ADA: hanya field terisi yang ditulis', () => {
+    // Sel kosong berarti "tidak disebut", bukan "kosongkan". Tanpa penjagaan
+    // ini, berkas impor yang cuma memuat kolom nama akan menghapus kontak,
+    // NPWP, termin, dan akun default seluruh supplier yang disebutnya.
+    expect(IMPORT).toContain('if (r.kontak !== null) isi.kontak = r.kontak')
+    expect(IMPORT).toContain('if (r.npwp !== null) isi.npwp = r.npwp')
+    expect(IMPORT).toContain('if (r.terminPembayaran !== null) isi.terminPembayaran')
+    expect(IMPORT).toContain('if (nilai[i].akunDiputuskan) isi.akunHutangDefaultId')
+  })
+
+  it('kode akun salah pada supplier yang sudah ada TIDAK mengosongkan akun lamanya', () => {
+    expect(IMPORT).toContain('akunDiputuskan')
+    expect(IMPORT).toContain('akun lama dipertahankan')
+  })
+
+  it('kebijakan sel kosong ikut dikirim di respons, bukan cuma di kepala berkas', () => {
+    expect(IMPORT).toContain('CATATAN_SEL_KOSONG')
+    expect(IMPORT).toContain('note: CATATAN_SEL_KOSONG')
+    // Ada di dryRun DAN di commit — layar konfirmasi harus bisa mengatakannya
+    // sebelum orang menekan lanjut.
+    const dry = IMPORT.indexOf('dryRun: true')
+    const sesudahDry = IMPORT.indexOf('note: CATATAN_SEL_KOSONG', dry)
+    expect(sesudahDry).toBeGreaterThan(-1)
+  })
+})
+
+describe('keunikan nama di DB ikut case-insensitive', () => {
+  it('skema memakai indeks unik atas lower(nama), bukan batasan biasa', () => {
+    const SCHEMA = read('lib', 'db', 'schema.ts')
+    expect(SCHEMA).toContain("uniqueIndex('master_supplier_client_nama_lower_unique')")
+    expect(SCHEMA).toContain('lower(${table.nama})')
+    // Batasan lama sudah diganti, bukan dibiarkan berdampingan.
+    expect(SCHEMA).not.toContain("unique('master_supplier_client_nama_unique')")
+  })
+
+  it('migrasi 0013 mengganti batasan lama dengan indeks baru', () => {
+    const M = read('lib', 'db', 'migrations', '0013_supplier_nama_case_insensitive.sql')
+    expect(M).toContain('DROP CONSTRAINT "master_supplier_client_nama_unique"')
+    expect(M).toContain('CREATE UNIQUE INDEX')
+    expect(M).toContain('lower("nama")')
   })
 })

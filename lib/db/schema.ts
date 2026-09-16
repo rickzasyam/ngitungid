@@ -10,6 +10,7 @@ import {
   date,
   timestamp,
   unique,
+  uniqueIndex,
   index,
   primaryKey,
   check,
@@ -579,7 +580,19 @@ export const masterSupplier = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique('master_supplier_client_nama_unique').on(table.clientId, table.nama),
+    // Unik per klien, TIDAK PEDULI BESAR-KECIL HURUF. Batasan biasa atas
+    // kolomnya saja tidak cukup: "PT ABC" dan "pt abc" adalah dua string
+    // berbeda bagi Postgres, jadi keduanya akan lolos — padahal aplikasi
+    // memperlakukannya sebagai supplier yang sama saat upsert impor, dan
+    // daftarnya perlahan terisi kembaran yang tak seorang pun sengaja buat.
+    //
+    // Bagian spasi ganda sudah diselesaikan normalizeNamaSupplier sebelum
+    // ditulis, jadi nilai tersimpan tidak pernah punya spasi ganda dan lower()
+    // saja sudah cukup di sini.
+    uniqueIndex('master_supplier_client_nama_lower_unique').on(
+      table.clientId,
+      sql`lower(${table.nama})`
+    ),
     index('master_supplier_client_id_idx').on(table.clientId),
     index('master_supplier_akun_hutang_idx').on(table.akunHutangDefaultId),
   ]

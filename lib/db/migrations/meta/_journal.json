@@ -92,6 +92,13 @@
       "when": 1789551212784,
       "tag": "0012_master_supplier",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1789554817429,
+      "tag": "0013_supplier_nama_case_insensitive",
+      "breakpoints": true
     }
   ]
 }

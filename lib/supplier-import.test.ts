@@ -155,3 +155,20 @@ describe('pemilihan sheet', () => {
     expect(hasil.rows[0].nama).toBe('Dari Sheet Supplier')
   })
 })
+
+describe('nama dobel di berkas: beda spasi & huruf tetap terdeteksi', () => {
+  it('spasi ganda dan besar-kecil huruf tidak membuat baris kedua lolos', () => {
+    const hasil = parseSupplierWorkbook(
+      wb([['Nama Supplier', 'Kontak'], ['PT ABC', 'Budi'], ['pt  abc ', 'Andi']])
+    )
+    expect(hasil.errors).toEqual([])
+    expect(hasil.rows).toHaveLength(1)
+    expect(hasil.rows[0].kontak).toBe('Budi')
+    expect(hasil.warnings?.join(' ')).toContain('sudah ada di baris')
+  })
+
+  it('nama tersimpan dalam bentuk yang sudah dirapikan', () => {
+    const hasil = parseSupplierWorkbook(wb([['Nama Supplier'], ['  PT   Maju  Jaya  ']]))
+    expect(hasil.rows[0].nama).toBe('PT Maju Jaya')
+  })
+})

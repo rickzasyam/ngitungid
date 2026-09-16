@@ -1,5 +1,12 @@
 import * as XLSX from 'xlsx'
-import { NAMA_MAX, NAMA_MIN, TERMIN_MAX, TERMIN_MIN } from '@/lib/supplier'
+import {
+  NAMA_MAX,
+  NAMA_MIN,
+  TERMIN_MAX,
+  TERMIN_MIN,
+  namaSupplierKey,
+  normalizeNamaSupplier,
+} from '@/lib/supplier'
 
 // Parser impor Master Supplier. Pola persis lib/coa-import.ts: alias header,
 // deteksi baris header lintas-sheet, dan kontrak "kalau `errors` tidak kosong,
@@ -161,7 +168,9 @@ export function parseSupplierWorkbook(data: ArrayBuffer): SupplierParseResult {
     const baris = matrix[i] ?? []
     const nomorBaris = i + 1 // 1-based, seperti terlihat di Excel
 
-    const nama = ambil(baris, 'nama')
+    // Dinormalkan lebih dulu: spasi ganda dirapikan, ujung di-trim. Nilai yang
+    // ditulis ke DB harus sama bentuknya dengan yang ditulis formulir.
+    const nama = normalizeNamaSupplier(ambil(baris, 'nama'))
     if (nama === '') continue // baris kosong / pemisah — dilewati diam-diam
 
     if (nama.length < NAMA_MIN) {
@@ -176,7 +185,10 @@ export function parseSupplierWorkbook(data: ArrayBuffer): SupplierParseResult {
     // Nama dobel DI DALAM FILE: yang belakangan dilewati, bukan menimpa yang
     // depan. Impor memakai upsert by nama, jadi dua baris bernama sama di satu
     // file berarti file itu sendiri tidak bisa menentukan nilai mana yang benar.
-    const kunci = nama.toLowerCase()
+    // Kunci pencocokan yang SAMA dengan yang dipakai route saat upsert.
+    // Kalau keduanya berbeda, baris yang lolos parser sebagai satu supplier
+    // bisa membentur indeks unik di DB.
+    const kunci = namaSupplierKey(nama)
     const sebelumnya = namaTerpakai.get(kunci)
     if (sebelumnya !== undefined) {
       warnings.push(

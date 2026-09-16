@@ -17,6 +17,31 @@ export const TERMIN_MIN = 0
 export const TERMIN_MAX = 365
 
 /**
+ * Bentuk SIMPAN sebuah nama supplier: spasi ganda dirapikan, ujungnya di-trim.
+ * Huruf besar-kecil DIPERTAHANKAN — "PT ABC" tetap tampil "PT ABC".
+ */
+export function normalizeNamaSupplier(nama: string): string {
+  return nama.replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Kunci PENCOCOKAN sebuah nama supplier. Dipakai upsert impor, deteksi dobel di
+ * dalam berkas, dan pemeriksaan duplikat.
+ *
+ * "PT ABC", "pt abc ", dan "PT  ABC" adalah supplier YANG SAMA bagi orang yang
+ * mengetiknya. Kalau kuncinya cuma perbandingan string apa adanya, impor kedua
+ * akan menyisipkan baris baru alih-alih memperbarui, dan daftarnya perlahan
+ * terisi kembaran yang tak seorang pun sengaja buat.
+ *
+ * Basis data ikut menjaga ini lewat indeks unik atas (client_id, lower(nama)) —
+ * bagian spasinya sudah diselesaikan di sini sebelum ditulis, jadi nilai yang
+ * tersimpan tidak pernah punya spasi ganda dan `lower()` saja sudah cukup.
+ */
+export function namaSupplierKey(nama: string): string {
+  return normalizeNamaSupplier(nama).toLowerCase()
+}
+
+/**
  * Akun ini akun HUTANG?
  *
  * Diturunkan dari `subKelompok` lewat `classifyBs` — mesin klasifikasi yang
@@ -68,7 +93,10 @@ export function validateSupplierInput(input: SupplierInput): SupplierCheck {
   if (typeof input.nama !== 'string' || input.nama.trim() === '') {
     errors.push('Nama supplier wajib diisi.')
   } else {
-    nama = input.nama.trim()
+    // Dinormalkan SEBELUM diukur & disimpan: "PT  ABC " tersimpan "PT ABC",
+    // sehingga nilai di DB tidak pernah punya spasi ganda dan indeks unik atas
+    // lower(nama) cukup untuk menjaga keunikannya.
+    nama = normalizeNamaSupplier(input.nama)
     if (nama.length < NAMA_MIN) {
       errors.push(`Nama supplier minimal ${NAMA_MIN} karakter.`)
     } else if (nama.length > NAMA_MAX) {

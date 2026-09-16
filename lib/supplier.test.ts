@@ -6,6 +6,8 @@ import {
   NAMA_MAX,
   TERMIN_MIN,
   TERMIN_MAX,
+  normalizeNamaSupplier,
+  namaSupplierKey,
 } from './supplier'
 
 const AKUN = '11111111-1111-4111-8111-111111111111'
@@ -150,5 +152,44 @@ describe('validateSupplierInput — yang ditolak', () => {
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(r.errors.length).toBeGreaterThanOrEqual(3)
+  })
+})
+
+// ══ PENJAGA BERDIRI: NAMA YANG "SAMA" BAGI MANUSIA ═══════════════
+// "PT ABC", "pt abc ", dan "PT  ABC" adalah supplier yang sama bagi orang yang
+// mengetiknya. Kalau kunci pencocokannya cuma perbandingan string apa adanya,
+// impor kedua menyisipkan baris baru alih-alih memperbarui, dan daftar supplier
+// perlahan terisi kembaran yang tak seorang pun sengaja buat.
+describe('normalisasi nama supplier', () => {
+  it('bentuk simpan merapikan spasi ganda dan ujungnya, huruf dipertahankan', () => {
+    expect(normalizeNamaSupplier('  PT   ABC  ')).toBe('PT ABC')
+    expect(normalizeNamaSupplier('PT ABC')).toBe('PT ABC')
+    // Besar-kecil TIDAK diubah — yang disimpan harus tampil seperti diketik.
+    expect(normalizeNamaSupplier('pt abc')).toBe('pt abc')
+  })
+
+  it('kunci pencocokan menyamakan spasi DAN besar-kecil huruf', () => {
+    const kunci = namaSupplierKey('PT ABC')
+    for (const varian of ['PT ABC', 'pt abc ', 'PT  ABC', '  pt   AbC  ']) {
+      expect(namaSupplierKey(varian), varian).toBe(kunci)
+    }
+  })
+
+  it('nama yang benar-benar berbeda tetap berbeda kuncinya', () => {
+    expect(namaSupplierKey('PT ABC')).not.toBe(namaSupplierKey('PT ABCD'))
+    expect(namaSupplierKey('Toko Jaya')).not.toBe(namaSupplierKey('Toko Jaya Abadi'))
+  })
+
+  it('validateSupplierInput menyimpan bentuk yang sudah dirapikan', () => {
+    const r = validateSupplierInput({ nama: '  PT   Maju  Jaya  ' })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.nama).toBe('PT Maju Jaya')
+  })
+
+  it('panjang nama diukur SETELAH dirapikan', () => {
+    // '  A  ' rapi jadi 'A' (1 karakter) → tetap ditolak, bukan lolos karena
+    // spasi ikut terhitung.
+    expect(validateSupplierInput({ nama: '  A  ' }).ok).toBe(false)
   })
 })
