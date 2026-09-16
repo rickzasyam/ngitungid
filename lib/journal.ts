@@ -183,10 +183,20 @@ export type JournalLineValue = {
 
 export type JournalValue = {
   tanggal: string
-  noBukti: string
-  keterangan: string
+  /** null = memang tidak ada nomor bukti. Lihat catatan di validateJournalInput. */
+  noBukti: string | null
+  keterangan: string | null
   lines: JournalLineValue[]
 }
+
+/**
+ * Label prosa untuk jurnal yang tidak punya nomor bukti.
+ *
+ * Dipakai di kalimat yang menyebut sebuah jurnal — pesan blokir 409 Master COA,
+ * label aksesibilitas tombol. Di dalam SEL TABEL, konvensi repo ini tetap "—".
+ * Satu tempat supaya kalimatnya tidak berbunyi "Jurnal null memakai akun 5-100".
+ */
+export const TANPA_NO_BUKTI = '(tanpa no. bukti)'
 
 export type JournalCheck = { ok: true; value: JournalValue } | { ok: false; errors: string[] }
 
@@ -209,20 +219,26 @@ export function validateJournalInput(input: JournalInput): JournalCheck {
     errors.push('Tanggal tidak valid (format YYYY-MM-DD).')
   }
 
-  let noBukti = ''
-  if (typeof input.noBukti !== 'string' || input.noBukti.trim() === '') {
-    errors.push('Nomor bukti wajib diisi.')
-  } else {
+  // ══ NOMOR BUKTI & KETERANGAN OPSIONAL ═══════════════════════════════════
+  // Keputusan Ricko 2026-09-16, sesudah uji klik CP-3. Banyak transaksi kecil
+  // memang tidak punya nomor bukti, dan mewajibkannya cuma melahirkan nomor
+  // karangan yang tidak menunjuk dokumen apa pun.
+  //
+  // Kosong dinormalkan jadi NULL, BUKAN ''. Ini bukan selera: `no_bukti` punya
+  // batasan unik per klien, dan '' adalah satu nilai konkret — jurnal KEDUA
+  // tanpa nomor bukti akan bentrok dengan yang pertama. Di Postgres, NULL tidak
+  // pernah dianggap sama dengan NULL, jadi jurnal tanpa nomor bukti boleh
+  // sebanyak apa pun sementara yang terisi tetap wajib unik.
+  let noBukti: string | null = null
+  if (typeof input.noBukti === 'string' && input.noBukti.trim() !== '') {
     noBukti = input.noBukti.trim()
     if (noBukti.length > NO_BUKTI_MAX) {
       errors.push(`Nomor bukti maksimal ${NO_BUKTI_MAX} karakter.`)
     }
   }
 
-  let keterangan = ''
-  if (typeof input.keterangan !== 'string' || input.keterangan.trim() === '') {
-    errors.push('Keterangan wajib diisi.')
-  } else {
+  let keterangan: string | null = null
+  if (typeof input.keterangan === 'string' && input.keterangan.trim() !== '') {
     keterangan = input.keterangan.trim()
   }
 

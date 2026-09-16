@@ -6,7 +6,7 @@
 
 import { Loader2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
-import { computeTotals } from '@/lib/journal'
+import { computeTotals, TANPA_NO_BUKTI } from '@/lib/journal'
 
 export interface JournalLineRow {
   id: string
@@ -22,8 +22,8 @@ export interface JournalLineRow {
 export interface JournalDetailData {
   id: string
   tanggal: string
-  noBukti: string
-  keterangan: string
+  noBukti: string | null
+  keterangan: string | null
   createdByName: string
   createdAt: string
   lines: JournalLineRow[]
@@ -83,7 +83,7 @@ export function JournalDetail({
       <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #f0f0f0', background: 'white' }}>
         <table className="w-full" style={{ borderCollapse: 'collapse' }}>
           <caption className="sr-only">
-            Rincian baris jurnal {detail.noBukti}
+            Rincian baris jurnal {detail.noBukti ?? TANPA_NO_BUKTI}
           </caption>
           <thead>
             <tr style={{ background: '#fafafa' }}>

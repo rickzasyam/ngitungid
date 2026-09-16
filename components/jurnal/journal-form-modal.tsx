@@ -133,8 +133,11 @@ export function JournalFormModal({
   })
 
   const cukupBaris = form.lines.length >= MIN_LINES
-  const headerLengkap =
-    form.tanggal.trim() !== '' && form.noBukti.trim() !== '' && form.keterangan.trim() !== ''
+  // Hanya TANGGAL yang wajib di header. Nomor bukti dan keterangan opsional
+  // sejak 2026-09-16: banyak transaksi kecil memang tidak punya nomor bukti,
+  // dan mewajibkannya cuma melahirkan nomor karangan. Keduanya dinormalkan
+  // jadi NULL di lib/journal.ts, bukan string kosong.
+  const headerLengkap = form.tanggal.trim() !== ''
   const bolehSimpan =
     headerLengkap && cukupBaris && seimbang && barisBermasalah.every(x => x === null) && !submitting
 
@@ -200,6 +203,7 @@ export function JournalFormModal({
     setAiPairs(null)
   }
 
+  const optional: React.CSSProperties = { fontWeight: 400, color: 'var(--color-text-muted)' }
   const label: React.CSSProperties = {
     display: 'block',
     fontSize: 12,
@@ -294,7 +298,7 @@ export function JournalFormModal({
           </div>
           <div>
             <label style={label} htmlFor="jurnal-no-bukti">
-              No. Bukti
+              No. Bukti <span style={optional}>(opsional)</span>
             </label>
             <input
               id="jurnal-no-bukti"
@@ -308,7 +312,7 @@ export function JournalFormModal({
           </div>
           <div>
             <label style={label} htmlFor="jurnal-keterangan">
-              Keterangan
+              Keterangan <span style={optional}>(opsional)</span>
             </label>
             <input
               id="jurnal-keterangan"

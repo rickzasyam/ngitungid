@@ -58,8 +58,10 @@ export interface ReportMeta {
 export interface AffectedJournalLine {
   id: string
   journalId: string
-  /** Nomor bukti header-nya — supaya pesan blokir bisa ditindak manusia. */
-  noBukti: string
+  /** Nomor bukti header-nya — supaya pesan blokir bisa ditindak manusia.
+   *  null = jurnal itu memang tidak punya nomor bukti (opsional sejak 0011);
+   *  label penggantinya dipasang di titik TAMPIL, bukan di sini. */
+  noBukti: string | null
   /** NOT NULL di DB, jadi tidak pernah null di sini. */
   masterCoaId: string
 }
@@ -73,7 +75,7 @@ export interface AffectedSupplier {
 /** Jurnal yang menghalangi penggantian: akunnya hilang/ambigu di berkas baru. */
 export interface BlockedJournal {
   journalId: string
-  noBukti: string
+  noBukti: string | null
   kode: string
 }
 
@@ -358,9 +360,14 @@ export function buildReplacePlan(input: PlanInput): {
     journalBlocked.push({ journalId: jl.journalId, noBukti: jl.noBukti, kode })
   }
 
-  journalBlocked.sort((a, b) =>
-    a.noBukti === b.noBukti ? a.kode.localeCompare(b.kode) : a.noBukti.localeCompare(b.noBukti)
-  )
+  // Jurnal tanpa nomor bukti diurutkan ke BELAKANG memakai kunci kosong —
+  // localeCompare pada null akan melempar, dan urutan yang stabil membuat
+  // daftar blokir terbaca sama tiap kali dibuka.
+  journalBlocked.sort((a, b) => {
+    const ka = a.noBukti ?? ''
+    const kb = b.noBukti ?? ''
+    return ka === kb ? a.kode.localeCompare(b.kode) : ka.localeCompare(kb)
+  })
 
   // ── master_supplier.akun_hutang_default_id: NULL-able, jadi boleh diputus ──
   // Kehilangan akun default hanya membuat form supplier kembali kosong; tidak

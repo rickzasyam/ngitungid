@@ -160,7 +160,11 @@ export async function POST(req: Request) {
   try {
     await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
   } catch (e) {
-    if (isUniqueViolation(e)) {
+    // Hanya masuk akal kalau nomor buktinya MEMANG terisi. Jurnal tanpa nomor
+    // bukti tidak bisa bentrok (NULL tidak pernah sama dengan NULL), jadi
+    // pelanggaran unique di situ pasti berasal dari hal lain dan tidak boleh
+    // disalahartikan sebagai nomor bukti dobel.
+    if (isUniqueViolation(e) && check.value.noBukti !== null) {
       return NextResponse.json(
         { error: `Nomor bukti "${check.value.noBukti}" sudah dipakai jurnal lain di klien ini.` },
         { status: 409 }

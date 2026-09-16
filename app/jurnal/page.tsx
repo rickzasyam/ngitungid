@@ -32,7 +32,12 @@ import { useRupiah } from '@/lib/preferences-context'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
-import { canEditJournal, JOURNAL_STATUS_LABEL, type JournalStatus } from '@/lib/journal'
+import {
+  canEditJournal,
+  JOURNAL_STATUS_LABEL,
+  TANPA_NO_BUKTI,
+  type JournalStatus,
+} from '@/lib/journal'
 import {
   JournalFormModal,
   blankJournalForm,
@@ -48,8 +53,8 @@ import {
 interface JournalRow {
   id: string
   tanggal: string
-  noBukti: string
-  keterangan: string
+  noBukti: string | null
+  keterangan: string | null
   sumber: string
   status: JournalStatus
   createdAt: string
@@ -194,8 +199,8 @@ export default function JurnalPage() {
       }
       setFormInitial({
         tanggal: d.tanggal,
-        noBukti: d.noBukti,
-        keterangan: d.keterangan,
+        noBukti: d.noBukti ?? '',
+        keterangan: d.keterangan ?? '',
         lines: d.lines.map(l => ({
           key: l.id,
           masterCoaId: l.masterCoaId,
@@ -457,7 +462,7 @@ export default function JurnalPage() {
                                 type="button"
                                 onClick={() => void toggleRow(r)}
                                 aria-expanded={open}
-                                aria-label={`${open ? 'Tutup' : 'Buka'} rincian jurnal ${r.noBukti}`}
+                                aria-label={`${open ? 'Tutup' : 'Buka'} rincian jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
                                 className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                                 style={{
                                   width: 32,
@@ -476,7 +481,16 @@ export default function JurnalPage() {
                               </button>
                             </td>
                             <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtTanggal(r.tanggal)}</td>
-                            <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 600 }}>{r.noBukti}</td>
+                            <td
+                              style={{
+                                ...td,
+                                whiteSpace: 'nowrap',
+                                fontWeight: r.noBukti ? 600 : 400,
+                                color: r.noBukti ? undefined : 'var(--color-text-muted)',
+                              }}
+                            >
+                              {r.noBukti ?? '—'}
+                            </td>
                             <td
                               style={{
                                 ...td,
@@ -485,9 +499,9 @@ export default function JurnalPage() {
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
                               }}
-                              title={r.keterangan}
+                              title={r.keterangan ?? undefined}
                             >
-                              {r.keterangan}
+                              {r.keterangan ?? '—'}
                             </td>
                             <td
                               style={{
@@ -522,7 +536,7 @@ export default function JurnalPage() {
                                   <button
                                     type="button"
                                     onClick={() => void bukaUbah(r)}
-                                    aria-label={`Ubah jurnal ${r.noBukti}`}
+                                    aria-label={`Ubah jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
                                     className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                                     style={iconBtn}
                                   >
@@ -531,7 +545,7 @@ export default function JurnalPage() {
                                   <button
                                     type="button"
                                     onClick={() => setHapusTarget(r)}
-                                    aria-label={`Hapus jurnal ${r.noBukti}`}
+                                    aria-label={`Hapus jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
                                     className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                                     style={iconBtn}
                                   >
@@ -597,7 +611,9 @@ export default function JurnalPage() {
               Hapus jurnal ini?
             </h2>
             <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
-              <strong style={{ color: 'var(--color-text-primary)' }}>{hapusTarget.noBukti}</strong>{' '}
+              <strong style={{ color: 'var(--color-text-primary)' }}>
+                {hapusTarget.noBukti ?? TANPA_NO_BUKTI}
+              </strong>{' '}
               · {fmtTanggal(hapusTarget.tanggal)} · {hapusTarget.lineCount} baris. Jurnal draf
               beserta barisnya dihapus permanen.
             </p>

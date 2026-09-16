@@ -65,3 +65,29 @@ describe('kolom jurnal yang dipakai jalur ganti Master COA', () => {
     expect(SCHEMA).toContain("references(() => masterCoa.id, { onDelete: 'restrict' })")
   })
 })
+
+// Nomor bukti & keterangan jadi OPSIONAL lewat migrasi 0011 (keputusan Ricko
+// 2026-09-16). Yang dikunci di sini bukan cuma "boleh null", tapi juga bahwa
+// batasan UNIK-nya TIDAK ikut dilonggarkan: nomor bukti yang terisi tetap wajib
+// unik per klien, dan yang kosong disimpan NULL sehingga tidak saling bentrok.
+describe('no_bukti & keterangan opsional (migrasi 0011)', () => {
+  const MIGRASI_0011 = read('lib', 'db', 'migrations', '0011_journal_no_bukti_opsional.sql')
+
+  it('skema tidak lagi menandai keduanya notNull', () => {
+    expect(SCHEMA).toContain("noBukti: text('no_bukti'),")
+    expect(SCHEMA).toContain("keterangan: text('keterangan'),")
+    expect(SCHEMA).not.toContain("noBukti: text('no_bukti').notNull()")
+  })
+
+  it('migrasi 0011 hanya melepas NOT NULL, tidak menyentuh yang lain', () => {
+    expect(MIGRASI_0011).toContain('ALTER COLUMN "no_bukti" DROP NOT NULL')
+    expect(MIGRASI_0011).toContain('ALTER COLUMN "keterangan" DROP NOT NULL')
+    expect(MIGRASI_0011).not.toContain('DROP CONSTRAINT')
+    expect(MIGRASI_0011).not.toContain('CREATE TABLE')
+  })
+
+  it('batasan unik nomor bukti per klien TETAP ADA di skema', () => {
+    // Inilah yang membuat normalisasi ke NULL (bukan '') jadi penting.
+    expect(SCHEMA).toContain("unique('journal_entries_client_no_bukti_unique')")
+  })
+})

@@ -387,22 +387,81 @@ describe('validateJournalInput — header', () => {
     }
   })
 
-  it('menolak nomor bukti kosong dan yang melebihi batas', () => {
-    expect(validateJournalInput({ ...base, noBukti: '' }).ok).toBe(false)
-    expect(validateJournalInput({ ...base, noBukti: '   ' }).ok).toBe(false)
+  it('menolak nomor bukti yang melebihi batas', () => {
     const r = validateJournalInput({ ...base, noBukti: 'A'.repeat(NO_BUKTI_MAX + 1) })
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(punyaGalat(r.errors, `maksimal ${NO_BUKTI_MAX} karakter`)).toBe(true)
   })
+})
 
-  it('menolak keterangan kosong', () => {
+// ══ PENJAGA BERDIRI: KOSONG JADI NULL, BUKAN STRING KOSONG ═══════
+// Nomor bukti & keterangan jadi OPSIONAL 2026-09-16 (keputusan Ricko sesudah
+// uji klik CP-3). Dua test di blok ini dulu berbunyi kebalikannya — "menolak
+// nomor bukti kosong" dan "menolak keterangan kosong" — dan sengaja dibalik.
+//
+// Yang TIDAK boleh berubah: hasilnya harus NULL, bukan ''. `no_bukti` punya
+// unique(client_id, no_bukti), dan '' adalah satu nilai konkret — jurnal KEDUA
+// tanpa nomor bukti akan bentrok dengan yang pertama. NULL tidak pernah bentrok
+// dengan NULL di Postgres. Kalau normalisasi ini bergeser balik ke '', gejalanya
+// muncul jauh dari sini: akunting tidak bisa menyimpan jurnal kedua tanpa nomor
+// bukti, dengan pesan "nomor bukti sudah dipakai" yang tidak masuk akal.
+describe('nomor bukti & keterangan opsional', () => {
+  it('nomor bukti kosong DITERIMA dan disimpan sebagai null', () => {
+    for (const noBukti of ['', '   ', null, undefined, 42]) {
+      const r = validateJournalInput({ ...base, noBukti })
+      expect(r.ok, String(noBukti)).toBe(true)
+      if (!r.ok) continue
+      expect(r.value.noBukti, String(noBukti)).toBeNull()
+    }
+  })
+
+  it('keterangan kosong DITERIMA dan disimpan sebagai null', () => {
     for (const keterangan of ['', '   ', null, undefined, 42]) {
       const r = validateJournalInput({ ...base, keterangan })
-      expect(r.ok).toBe(false)
-      if (r.ok) continue
-      expect(punyaGalat(r.errors, 'Keterangan wajib diisi')).toBe(true)
+      expect(r.ok, String(keterangan)).toBe(true)
+      if (!r.ok) continue
+      expect(r.value.keterangan, String(keterangan)).toBeNull()
     }
+  })
+
+  it('keduanya kosong sekaligus tetap diterima', () => {
+    const r = validateJournalInput({ ...base, noBukti: '', keterangan: '' })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.noBukti).toBeNull()
+    expect(r.value.keterangan).toBeNull()
+  })
+
+  it('hasilnya TIDAK PERNAH string kosong — itu yang membuat unique tetap bekerja', () => {
+    const r = validateJournalInput({ ...base, noBukti: '   ', keterangan: '   ' })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.noBukti).not.toBe('')
+    expect(r.value.keterangan).not.toBe('')
+  })
+
+  it('yang terisi tetap di-trim dan dipertahankan apa adanya', () => {
+    const r = validateJournalInput({ ...base, noBukti: '  JU-9  ', keterangan: '  sewa  ' })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.noBukti).toBe('JU-9')
+    expect(r.value.keterangan).toBe('sewa')
+  })
+
+  it('aturan lain TIDAK ikut longgar — jurnal tanpa keduanya masih harus seimbang', () => {
+    const r = validateJournalInput({
+      ...base,
+      noBukti: '',
+      keterangan: '',
+      lines: [
+        { masterCoaId: AKUN_A, debit: '100', kredit: '' },
+        { masterCoaId: AKUN_B, debit: '', kredit: '40' },
+      ],
+    })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(punyaGalat(r.errors, 'tidak seimbang')).toBe(true)
   })
 })
 
@@ -411,21 +470,23 @@ describe('validateJournalInput — header', () => {
 // dalam sekali kirim.
 describe('validateJournalInput mengumpulkan SEMUA galat', () => {
   it('jurnal yang salah di banyak tempat melaporkan semuanya sekaligus', () => {
+    // Nomor bukti & keterangan SENGAJA tidak lagi ikut di sini: keduanya
+    // opsional sejak 2026-09-16, jadi mengosongkannya bukan galat. Yang diuji
+    // tetap sama — beberapa galat dari lapisan berbeda dilaporkan sekaligus.
     const r = validateJournalInput({
       tanggal: '2026-02-31',
-      noBukti: '',
+      noBukti: 'A'.repeat(NO_BUKTI_MAX + 1),
       keterangan: '',
       lines: [{ masterCoaId: 'bukan-uuid', debit: '100', kredit: '50' }],
     })
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(punyaGalat(r.errors, 'Tanggal tidak valid')).toBe(true)
-    expect(punyaGalat(r.errors, 'Nomor bukti wajib diisi')).toBe(true)
-    expect(punyaGalat(r.errors, 'Keterangan wajib diisi')).toBe(true)
+    expect(punyaGalat(r.errors, `maksimal ${NO_BUKTI_MAX} karakter`)).toBe(true)
     expect(punyaGalat(r.errors, 'minimal 2 baris')).toBe(true)
     expect(punyaGalat(r.errors, 'akun belum dipilih')).toBe(true)
     expect(punyaGalat(r.errors, 'tidak keduanya')).toBe(true)
-    expect(r.errors.length).toBeGreaterThanOrEqual(6)
+    expect(r.errors.length).toBeGreaterThanOrEqual(5)
   })
 
   it('galat tiap baris disebut terpisah dengan nomor barisnya', () => {

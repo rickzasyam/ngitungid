@@ -331,3 +331,28 @@ describe('modul saran akun jurnal', () => {
     expect(SUGGEST_LIB).not.toContain('masterCoa.id')
   })
 })
+
+// Nomor bukti opsional sejak 2026-09-16. Jurnal tanpa nomor bukti TIDAK BISA
+// bentrok (NULL tidak pernah sama dengan NULL), jadi pelanggaran unique di situ
+// pasti berasal dari hal lain — menyebutnya "nomor bukti dobel" akan mengirim
+// orang mencari masalah yang tidak ada.
+describe('409 nomor bukti dilewati saat nomor buktinya kosong', () => {
+  it('POST dan PATCH sama-sama menjaga syarat noBukti !== null', () => {
+    for (const [src, m] of [
+      [LIST, 'POST'],
+      [DETAIL, 'PATCH'],
+    ] as const) {
+      const body = handler(src, m)
+      expect(body, m).toContain("isUniqueViolation(e) && check.value.noBukti !== null")
+    }
+  })
+
+  it('kegagalan tulis lain tetap jatuh ke helper bersama', () => {
+    for (const [src, m] of [
+      [LIST, 'POST'],
+      [DETAIL, 'PATCH'],
+    ] as const) {
+      expect(handler(src, m), m).toContain('dbWriteErrorResponse(')
+    }
+  })
+})

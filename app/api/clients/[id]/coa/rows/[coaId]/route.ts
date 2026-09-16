@@ -14,6 +14,7 @@ import { requireAkunting } from '@/lib/api/guards'
 import { parseCoaRowInput } from '@/lib/coa/row-input'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 import { buildReplacePlan } from '@/lib/coa/replace-plan'
+import { TANPA_NO_BUKTI } from '@/lib/journal'
 
 export const runtime = 'nodejs'
 
@@ -179,7 +180,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       {
         error: `Akun "${g.row.kode}" dipakai di jurnal, jadi tidak bisa dihapus.`,
         details: plan.journalBlocked.map(
-          b => `Jurnal ${b.noBukti} memakai akun ${b.kode}.`
+          b => `Jurnal ${b.noBukti ?? TANPA_NO_BUKTI} memakai akun ${b.kode}.`
         ),
         impact: plan,
       },

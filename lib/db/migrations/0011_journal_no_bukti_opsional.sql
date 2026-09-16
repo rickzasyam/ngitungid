@@ -1,0 +1,21 @@
+-- 0011 — no_bukti & keterangan jurnal jadi OPSIONAL
+--
+-- Keputusan Ricko 2026-09-16, sesudah uji klik CP-3: banyak transaksi kecil
+-- memang tidak punya nomor bukti, dan mewajibkannya cuma melahirkan nomor
+-- karangan yang tidak menunjuk dokumen apa pun.
+--
+-- ══ KOSONG DISIMPAN SEBAGAI NULL, BUKAN STRING KOSONG ═══════════════════════
+-- Ini yang membuat perubahan ini aman. unique(client_id, no_bukti) TETAP ADA
+-- dan tidak disentuh: nomor bukti yang terisi tetap wajib unik per klien.
+-- Kalau kosong disimpan sebagai string kosong, jurnal KEDUA tanpa nomor bukti
+-- akan bentrok dengan yang pertama — string kosong adalah satu nilai konkret.
+-- Di Postgres, NULL tidak pernah dianggap sama dengan NULL, jadi jurnal tanpa
+-- nomor bukti boleh sebanyak apa pun. Normalisasi ke NULL dilakukan
+-- validateJournalInput (lib/journal.ts), bukan diserahkan ke pemanggil.
+--
+-- Tidak ada backfill: 0010 baru diterapkan kemarin dan kolomnya NOT NULL, jadi
+-- tidak ada baris lama bernilai string kosong yang perlu dibersihkan.
+--
+-- Hanya melonggarkan batasan, jadi aman dijalankan pada tabel berisi.
+ALTER TABLE "journal_entries" ALTER COLUMN "no_bukti" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal_entries" ALTER COLUMN "keterangan" DROP NOT NULL;

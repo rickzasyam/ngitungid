@@ -462,8 +462,12 @@ export const journalEntries = pgTable(
       .notNull()
       .references(() => clients.id, { onDelete: 'cascade' }),
     tanggal: date('tanggal').notNull(),
-    noBukti: text('no_bukti').notNull(),
-    keterangan: text('keterangan').notNull(),
+    // OPSIONAL sejak migrasi 0011 (keputusan Ricko 2026-09-16). Kosong disimpan
+    // sebagai NULL, bukan '' — kolomnya unique per klien dan '' adalah satu nilai
+    // konkret, jadi jurnal kedua tanpa nomor bukti akan bentrok. NULL tidak pernah
+    // bentrok dengan NULL di Postgres. Normalisasinya di validateJournalInput.
+    noBukti: text('no_bukti'),
+    keterangan: text('keterangan'),
     sumber: journalSourceEnum('sumber').notNull().default('manual'),
     status: journalStatusEnum('status').notNull().default('draft'),
     createdBy: uuid('created_by')

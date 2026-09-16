@@ -17,6 +17,7 @@ import { canAccessClientData } from '@/lib/roles'
 import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { buildReplacePlan, historyToReinsert } from '@/lib/coa/replace-plan'
+import { TANPA_NO_BUKTI } from '@/lib/journal'
 
 // xlsx parsing + neon-http butuh Node runtime (bukan edge).
 export const runtime = 'nodejs'
@@ -231,7 +232,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       {
         error: 'Master COA tidak bisa diganti: ada akun terpakai jurnal yang hilang di file baru.',
         details: plan.journalBlocked.map(
-          b => `Jurnal ${b.noBukti} memakai akun ${b.kode}, yang tidak ada di file baru.`
+          b => `Jurnal ${b.noBukti ?? TANPA_NO_BUKTI} memakai akun ${b.kode}, yang tidak ada di file baru.`
         ),
         impact: plan,
       },

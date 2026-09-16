@@ -6,6 +6,7 @@ import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect } from '@/components/ui/styled-select'
 import { classificationWarnings } from '@/lib/coa/classification-health'
 import type { CoaImpact } from './coa-replace-dialog'
+import { TANPA_NO_BUKTI } from '@/lib/journal'
 
 export interface CoaAccountRow {
   id: string
@@ -446,7 +447,7 @@ export function CoaDeleteDialog({
                         className="text-xs font-medium"
                         style={{ color: 'var(--color-text-primary)' }}
                       >
-                        {b.noBukti}
+                        {b.noBukti ?? TANPA_NO_BUKTI}
                       </li>
                     ))}
                   </ul>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { AlertTriangle, ArrowRight, ChevronDown, ChevronUp, Link2, Loader2, Unlink } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
+import { TANPA_NO_BUKTI } from '@/lib/journal'
 
 // Layar konfirmasi "Ganti Master COA". Dulu tombol Ganti Excel langsung POST —
 // admin tak pernah tahu berapa mapping yang akan putus sampai semuanya sudah
@@ -40,7 +41,7 @@ export interface CoaImpact {
    * Tidak kosong = server akan menolak (409), jadi tombol Lanjutkan dimatikan.
    * Opsional supaya respons lama (sebelum jurnal ada) tetap terbaca.
    */
-  journalBlocked?: { journalId: string; noBukti: string; kode: string }[]
+  journalBlocked?: { journalId: string; noBukti: string | null; kode: string }[]
   journalRelinkedCount?: number
 }
 
@@ -174,7 +175,7 @@ export function CoaReplaceDialog({
                     {blocked.slice(0, 8).map(b => (
                       <li key={`${b.journalId}-${b.kode}`} className="text-xs flex items-center gap-1.5">
                         <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                          {b.noBukti}
+                          {b.noBukti ?? TANPA_NO_BUKTI}
                         </span>
                         <ArrowRight className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
                         <span

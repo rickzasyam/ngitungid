@@ -133,7 +133,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
   } catch (e) {
-    if (isUniqueViolation(e)) {
+    // Sama seperti POST: jurnal tanpa nomor bukti tidak bisa bentrok, jadi
+    // pelanggaran unique di situ bukan soal nomor bukti dobel.
+    if (isUniqueViolation(e) && check.value.noBukti !== null) {
       return NextResponse.json(
         { error: `Nomor bukti "${check.value.noBukti}" sudah dipakai jurnal lain di klien ini.` },
         { status: 409 }
