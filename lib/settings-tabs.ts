@@ -15,6 +15,7 @@ import { isOwner, isInternal, canManageCommercial, type Role } from '@/lib/roles
 export type SettingsTabId =
   | 'general'
   | 'coa'
+  | 'supplier'
   | 'analytics'
   | 'users'
   | 'layanan'
@@ -25,6 +26,7 @@ export type SettingsTabId =
 export const SETTINGS_TABS: { id: SettingsTabId; ownerOnly?: boolean; commercialOnly?: boolean }[] = [
   { id: 'general' },
   { id: 'coa' },
+  { id: 'supplier' },
   { id: 'analytics' },
   { id: 'users', ownerOnly: true },
   // Master Layanan: katalog jasa yang dijual. owner + finance, TANPA akunting —
@@ -54,7 +56,12 @@ export const USER_VISIBLE_TABS: SettingsTabId[] = ['general', 'coa', 'account']
  */
 // CATATAN: 'layanan' TIDAK di daftar ini — tab commercialOnly ditangani lebih
 // dulu lewat canManageCommercial(), jadi finance mendapatnya dari sana.
-export const FINANCE_VISIBLE_TABS: SettingsTabId[] = ['general', 'account']
+// 'supplier' ADA di sini sejak R4 (jawaban Ricko 2026-09-15): finance boleh
+// MELIHAT daftar rekanan, tapi tidak mengelolanya. Tab-nya dirender read-only
+// lewat prop readOnly, dan API-nya menegakkan pembelahan yang sama — baca
+// requireInternal, tulis requireAkunting. Menyembunyikan tombol saja bukan
+// kontrol keamanan; yang menegakkan tetap penjaga di route.
+export const FINANCE_VISIBLE_TABS: SettingsTabId[] = ['general', 'supplier', 'account']
 
 /** Boleh-kah `role` melihat tab `id`? */
 export function isSettingsTabVisible(role: Role | null | undefined, id: SettingsTabId): boolean {

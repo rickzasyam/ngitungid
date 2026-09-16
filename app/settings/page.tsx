@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-replace-dialog'
 import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
+import { SupplierTab } from '@/components/settings/supplier-manager'
 import {
   FileSpreadsheet,
   Upload,
@@ -30,6 +31,7 @@ import {
   Building2,
   KeyRound,
   Package,
+  Truck,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
@@ -163,6 +165,7 @@ type TabId = SettingsTabId
 const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe; scoped: boolean; soon?: boolean }> = {
   general:       { label: 'General',           desc: 'Bahasa & format nominal',     Icon: Globe,             scoped: false },
   coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
+  supplier:      { label: 'Supplier',          desc: 'Master data rekanan klien',   Icon: Truck,             scoped: true },
   analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
   users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
   layanan:       { label: 'Layanan',           desc: 'Master jasa yang dijual',     Icon: Package,           scoped: false },
@@ -1862,6 +1865,10 @@ export default function SettingsPage() {
 
               {activeTab === 'coa' && activeClient && (
                 <MasterCoaTab key={activeClient.id} clientId={activeClient.id} readOnly={!canDoAccounting} />
+              )}
+
+              {activeTab === 'supplier' && activeClient && (
+                <SupplierTab key={activeClient.id} clientId={activeClient.id} readOnly={!canDoAccounting} />
               )}
 
               {activeTab === 'analytics' && activeClient && (
