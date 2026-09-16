@@ -32,16 +32,43 @@ const handler = (src: string, method: string): string => {
 describe('guard jurnal', () => {
   // D3: /jurnal masuk ACCOUNTING_ONLY_PREFIXES, jadi halamannya tertutup untuk
   // klien DAN finance. Kalau API-nya requireUser, gerbang itu jadi kosmetik.
-  it('SEMUA handler memakai requireAkunting, termasuk yang membaca', () => {
+  // Tiap handler diperiksa PER BADANNYA, bukan "asal kata itu ada di berkasnya".
+  // Bentuk longgar (mencari di seluruh berkas) akan tetap hijau walau salah satu
+  // handler gerbangnya diganti, selama handler tetangganya masih memakainya —
+  // penjaga yang berhenti menjaga tanpa terlihat rusak.
+  //
+  // Route detail memusatkan gerbangnya di satu helper `guard()`, jadi yang sah
+  // bagi handler di sana adalah memanggil helper itu; `guard()` sendiri diuji
+  // terpisah di bawah.
+  it('SETIAP handler digerbangi, diperiksa per badan handler', () => {
     for (const [src, m] of [
       [LIST, 'GET'],
       [LIST, 'POST'],
       [DETAIL, 'GET'],
       [DETAIL, 'PATCH'],
       [DETAIL, 'DELETE'],
+      [SUGGEST, 'POST'],
     ] as const) {
-      const body = m === 'GET' && src === DETAIL ? src : handler(src, m)
-      expect(body.includes('requireAkunting') || src.includes('requireAkunting'), `${m}`).toBe(true)
+      const body = handler(src, m)
+      const langsung = body.includes('await requireAkunting()')
+      const lewatHelper = body.includes('await guard(params)')
+      expect(langsung || lewatHelper, `${m} di ${src === LIST ? 'daftar' : src === DETAIL ? 'detail' : 'saran'}`).toBe(true)
+    }
+  })
+
+  it('helper guard() route detail benar-benar memanggil requireAkunting', () => {
+    const helper = DETAIL.slice(DETAIL.indexOf('async function guard('))
+    expect(helper.slice(0, 400)).toContain('await requireAkunting()')
+  })
+
+  it('tidak ada handler yang lolos tanpa gerbang sama sekali', () => {
+    // Menghitung: jumlah handler yang diekspor harus sama dengan jumlah yang
+    // tergerbangi. Kalau ada handler BARU ditambahkan tanpa gerbang, selisihnya
+    // muncul di sini alih-alih menunggu seseorang menyadarinya.
+    for (const src of [LIST, DETAIL, SUGGEST]) {
+      const diekspor = (src.match(/export async function (GET|POST|PATCH|DELETE)\(/g) ?? []).length
+      const tergerbang = (src.match(/await (requireAkunting\(\)|guard\(params\))/g) ?? []).length
+      expect(tergerbang, `handler diekspor ${diekspor}`).toBeGreaterThanOrEqual(diekspor)
     }
   })
 
