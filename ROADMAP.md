@@ -652,17 +652,92 @@ klien nyata sampai kuncinya naik ke paid tier. Kalau kelak perlu dibatasi lebih 
 sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache saran per
 (klien, keterangan-ternormalisasi).
 
-**Urutan rilis Phase 5 ke produksi (hanya Ricko).** Jangan dibalik:
+## Checklist rilis Phase 5 Fase 1 ke produksi (hanya Ricko)
 
-1. Terapkan migrasi ke DB **main** berurutan: **0010** (tabel jurnal) → **0011** (`no_bukti` &
-   `keterangan` opsional) → **0012** (`master_supplier`). Main harus sudah berada di 0000–0009
-   lebih dulu (lihat CLAUDE.md gotcha #8), dan 0010 dipakai **apa adanya** — jangan di-generate
-   ulang.
-2. **Baru** merge/push kodenya ke `main`.
+Ditulis 2026-09-16 setelah Fase 1 selesai di dev. **Jangan dibalik urutannya.**
+Setiap langkah punya alasan; yang paling mahal kalau tertukar ditandai.
 
-Kalau kodenya naik lebih dulu, aplikasi akan menanyakan tabel `journal_entries` yang belum ada
-dan setiap halaman yang menyentuhnya gagal. Urutan sebaliknya (migrasi dulu) aman: ketiga migrasi
-itu hanya menambah tabel dan melonggarkan batasan, jadi kode lama tetap jalan di atasnya.
+### 0. Cek dulu: DB main ada di migrasi mana
+
+Read-only. Hanya mencetak jumlah migrasi terpakai dan cap waktu terakhir —
+tidak pernah mencetak `DATABASE_URL`, host, maupun kredensial apa pun.
+Jalankan dengan `.env.local` diarahkan ke **main**.
+
+```bash
+cat > scripts/_cek-migrasi.ts <<'EOF'
+import { neon } from '@neondatabase/serverless'
+const sql = neon(process.env.DATABASE_URL!)
+const r = await sql`select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations`
+console.log('migrasi terpakai:', r[0].n, '| created_at terakhir:', r[0].last)
+EOF
+npx tsx --env-file=.env.local scripts/_cek-migrasi.ts; rm -f scripts/_cek-migrasi.ts
+```
+
+**Harus menunjukkan 10 migrasi** (0000–0009) sebelum mulai. Kalau lebih dari
+10, seseorang sudah menerapkan sebagian Phase 5 — berhenti dan periksa dulu.
+Kalau kurang, main tertinggal dan migrasi 0010 akan gagal karena tabel yang
+dirujuknya belum ada.
+
+### 1. Backup branch Neon
+
+Buat branch cadangan dari `main` di Neon **sebelum** menyentuh apa pun. Empat
+migrasi di bawah tidak menghapus data, tapi cadangan adalah satu-satunya jalan
+kembali kalau ada yang tidak terduga — dan membuatnya di Neon murah.
+
+### 2. Terapkan migrasi ke main, BERURUTAN
+
+`.env.local` diarahkan ke main, lalu `pnpm db:migrate`. Keempatnya berurut:
+
+| # | Isi | Sifat |
+|---|---|---|
+| **0010** | `journal_entries` + `journal_lines` + 2 enum | menambah tabel |
+| **0011** | `no_bukti` & `keterangan` jurnal jadi NULL-able | melonggarkan |
+| **0012** | `master_supplier` | menambah tabel |
+| **0013** | nama supplier unik tanpa peduli besar-kecil huruf | mengganti batasan |
+
+**0010 dipakai APA ADANYA — jangan pernah di-generate ulang.** Berkasnya sudah
+dipangkas tangan; hasil generate akan kembali memuat objek yang sudah ada di
+main dan gagal di statement pertama. Lihat CLAUDE.md gotcha #8.
+
+### 2b. Pra-cek WAJIB sebelum 0013
+
+Dijalankan **sesudah 0012 dan sebelum 0013** — tabelnya baru ada setelah 0012.
+`CREATE UNIQUE INDEX` akan GAGAL kalau ada dua supplier yang namanya hanya
+berbeda spasi atau besar-kecil huruf:
+
+```sql
+select client_id, lower(btrim(regexp_replace(nama, '\s+', ' ', 'g'))) as kunci, count(*)
+from master_supplier group by 1, 2 having count(*) > 1;
+```
+
+Harus mengembalikan **0 baris**. Pada main yang baru menerima 0012 tabelnya
+masih kosong, jadi ini formalitas — tapi jalankan tetap, karena satu-satunya
+saat pemeriksaan ini mahal adalah saat ia dilewati.
+
+### 3. BARU merge/push kode ke `main`
+
+Urutannya penting dan hanya salah ke satu arah. Kode duluan = aplikasi
+menanyakan `journal_entries` yang belum ada, dan setiap halaman yang
+menyentuhnya gagal. Migrasi duluan aman: keempatnya hanya menambah tabel dan
+melonggarkan batasan, jadi kode lama tetap jalan di atas skema baru.
+
+### 4. Smoke test di produksi
+
+- **`/jurnal`** — buka sebagai owner/akunting, buat satu jurnal seimbang,
+  cek muncul di daftar dengan kolom "Dibuat oleh" terisi, lalu hapus lagi.
+- **Settings → Supplier** — tambah satu supplier, lalu hapus. Cek tab-nya
+  TIDAK muncul untuk akun klien, dan muncul read-only untuk finance.
+- **Settings → Master COA** — pastikan ganti Excel masih jalan seperti biasa
+  pada klien yang BELUM punya jurnal (jalur lama, tidak berubah).
+- Sidebar: item **Jurnal** muncul untuk owner/akunting, hilang untuk
+  finance & klien.
+
+### 5. Gemini: paid tier SEBELUM dipakai data klien nyata
+
+Tombol "Sarankan akun (AI)" mengirim keterangan transaksi + seluruh Master COA
+klien ke Gemini setiap kali ditekan. Selama kuncinya masih free tier, jangan
+dipakai di atas data klien nyata. Rinciannya di catatan risiko di bawah.
+
 **Catatan operasional:** `GEMINI_API_KEY` masih **free tier (5 req/menit)** — cukup 1 upload (≤3 file); pemakaian rutin butuh billing berbayar (lihat `.env.example`). Cocok-angka-real Dashboard/Analytics vs PDF asli masih tertunda karena 503 high-demand di free tier.
 
 **Dev fixture.** `pnpm db:seed:dev` (`lib/db/seed-dev.ts`) mengisi Master COA + 1–2 periode laporan berbeda per klien; idempotent, tidak menyentuh `seed.ts`. ⚠️ **DESTRUKTIF** untuk 3 klien seed (menghapus reports/COA mereka) — jangan jalankan tanpa sengaja.
