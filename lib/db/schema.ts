@@ -537,6 +537,54 @@ export const journalLines = pgTable(
   ]
 )
 
+
+// ── master_supplier ──────────────────────────────────────────
+// Master supplier PER KLIEN, sama seperti master_coa — bandingkan `layanan`
+// yang global. Supplier "Toko Bangunan Jaya" milik satu klien tidak ada
+// hubungannya dengan supplier bernama sama milik klien lain, dan menyatukannya
+// berarti satu klien bisa melihat daftar rekanan klien lain.
+//
+// ══ nama unik per klien ═══════════════════════════════════════════════════
+// Bukan sekadar kerapian: impor supplier memakai UPSERT BY NAMA (D8), jadi nama
+// adalah kunci pencocokannya. Tanpa batasan ini, dua baris bernama sama membuat
+// impor berikutnya tidak bisa menentukan mana yang harus diperbarui.
+//
+// ══ akun_hutang_default_id SET NULL, bukan restrict ═══════════════════════
+// Beda sengaja dari journal_lines.master_coa_id yang restrict. Akun hutang
+// default cuma pengisi awal formulir — kehilangannya tidak mengubah satu angka
+// pun, jadi ganti-massal Master COA boleh memutusnya (dan buildReplacePlan
+// menghitungnya sebagai supplierUnlinkedCount). Baris jurnal tidak punya
+// kemewahan itu: ia pencatatan yang sudah terjadi.
+//
+// ══ termin_pembayaran integer, bukan interval ═════════════════════════════
+// Isinya JUMLAH HARI (0–365), pola yang sama dengan contracts.tanggalPenagihan
+// yang menyimpan hari-dalam-bulan sebagai integer. Tipe interval Postgres
+// mengundang nilai seperti '1 mon 3 days' yang tidak bisa dijumlahkan ke tanggal
+// jatuh tempo tanpa aturan tambahan.
+export const masterSupplier = pgTable(
+  'master_supplier',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    nama: text('nama').notNull(),
+    kontak: text('kontak'),
+    npwp: text('npwp'),
+    terminPembayaran: integer('termin_pembayaran'),
+    akunHutangDefaultId: uuid('akun_hutang_default_id').references(() => masterCoa.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique('master_supplier_client_nama_unique').on(table.clientId, table.nama),
+    index('master_supplier_client_id_idx').on(table.clientId),
+    index('master_supplier_akun_hutang_idx').on(table.akunHutangDefaultId),
+  ]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -611,6 +659,14 @@ export const journalLinesRelations = relations(journalLines, ({ one }) => ({
   }),
   masterCoa: one(masterCoa, {
     fields: [journalLines.masterCoaId],
+    references: [masterCoa.id],
+  }),
+}))
+
+export const masterSupplierRelations = relations(masterSupplier, ({ one }) => ({
+  client: one(clients, { fields: [masterSupplier.clientId], references: [clients.id] }),
+  akunHutangDefault: one(masterCoa, {
+    fields: [masterSupplier.akunHutangDefaultId],
     references: [masterCoa.id],
   }),
 }))
