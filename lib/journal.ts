@@ -299,6 +299,132 @@ export function validateJournalInput(input: JournalInput): JournalCheck {
   return { ok: true, value: { tanggal: input.tanggal as string, noBukti, keterangan, lines } }
 }
 
+// ── Riwayat perubahan (Fase 2, D12) ──────────────────────────
+
+/**
+ * Nama peristiwa yang ditulis ke `journal_events`.
+ *
+ * Kolomnya `text`, BUKAN enum (D12): daftarnya tumbuh tiap fase, dan enum
+ * Postgres menuntut migrasi tiap kali bertambah — pola yang sama dengan
+ * `users.currency_format`. Konstanta di sini yang menjadi daftar resminya.
+ *
+ * CATATAN R2 (belum diputuskan Ricko): revisi §3.3 mengusulkan tabelnya diganti
+ * `audit_events` generik supaya COA dan kunci periode ikut memakainya. Sampai
+ * itu diputuskan, Fase 2 memakai `journal_events` sesuai §8.5 — untung-ruginya
+ * dibahas di CP-5.
+ */
+export const JOURNAL_EVENTS = [
+  'created',
+  'updated',
+  'deleted',
+  'posted',
+  'reversal_created',
+] as const
+export type JournalEvent = (typeof JOURNAL_EVENTS)[number]
+
+// ── Posting & jurnal balik (Fase 2, D13) ─────────────────────
+
+/** Predikat gagal selalu membawa ALASAN — route mengembalikannya apa adanya. */
+export type Verdict = { ok: true } | { ok: false; reason: string }
+
+export interface PostableEntry {
+  status: JournalStatus
+  tanggal: string
+  lines: readonly { debit?: unknown; kredit?: unknown }[]
+}
+
+/**
+ * Boleh diposting?
+ *
+ * Tiga syarat, dan ketiganya diperiksa ulang DI SINI meski UI sudah
+ * menyaringnya: daftar di layar bisa basi beberapa detik, dan posting adalah
+ * pintu satu arah — sesudahnya jurnal hanya bisa dibalik, tidak diubah.
+ *
+ * `isLocked` dioper pemanggil supaya modul ini tetap murni. Fase 2 mengopernya
+ * `() => false`; §7.B menggantinya dengan kunci periode yang sebenarnya, tanpa
+ * menyentuh fungsi ini.
+ */
+export function canPost(
+  entry: PostableEntry,
+  { isLocked }: { isLocked: (tanggal: string) => boolean }
+): Verdict {
+  if (entry.status !== 'draft') {
+    return {
+      ok: false,
+      reason: `Hanya jurnal draf yang bisa diposting; jurnal ini berstatus ${JOURNAL_STATUS_LABEL[entry.status] ?? entry.status}.`,
+    }
+  }
+  if (entry.lines.length < MIN_LINES) {
+    return { ok: false, reason: `Jurnal minimal ${MIN_LINES} baris.` }
+  }
+  const totals = computeTotals(entry.lines)
+  if (totals.selisih !== 0) {
+    return {
+      ok: false,
+      reason: `Debit dan kredit tidak seimbang — selisih ${fromMinorUnits(totals.selisih)}.`,
+    }
+  }
+  if (isLocked(entry.tanggal)) {
+    return { ok: false, reason: `Periode ${entry.tanggal} sudah dikunci.` }
+  }
+  return { ok: true }
+}
+
+/**
+ * Boleh dibalik?
+ *
+ * Hanya jurnal TERPOSTING, dan hanya sekali. "Sudah dibalik" TIDAK disimpan
+ * sebagai kolom (P3) — ia diturunkan dari ada-tidaknya pembalik yang sudah
+ * terposting. Pembalik yang masih draf tidak menghitung: ia belum masuk buku
+ * besar, jadi jurnalnya secara akuntansi belum terbalik.
+ */
+export function canReverse(
+  entry: { status: JournalStatus },
+  existingReversal: { status: JournalStatus } | null
+): Verdict {
+  if (entry.status !== 'posted') {
+    return { ok: false, reason: 'Hanya jurnal terposting yang bisa dibalik.' }
+  }
+  if (existingReversal && existingReversal.status === 'posted') {
+    return { ok: false, reason: 'Jurnal ini sudah pernah dibalik.' }
+  }
+  return { ok: true }
+}
+
+/**
+ * Baris pembalik: sisi D dan K DITUKAR, sisanya dipertahankan apa adanya.
+ *
+ * Akun, keterangan, dan `line_order` sengaja tidak diubah supaya pembalik
+ * terbaca berdampingan dengan aslinya baris demi baris. Yang ditukar hanya
+ * nominalnya — itulah seluruh isi "membalik" dalam akuntansi.
+ */
+export function buildReversalLines(
+  lines: readonly JournalLineValue[]
+): JournalLineValue[] {
+  return lines.map(l => ({
+    masterCoaId: l.masterCoaId,
+    debit: l.kredit,
+    kredit: l.debit,
+    keterangan: l.keterangan,
+    lineOrder: l.lineOrder,
+  }))
+}
+
+/**
+ * Usulan nomor bukti untuk jurnal pembalik.
+ *
+ * Jurnal tanpa nomor bukti menghasilkan pembalik yang juga TANPA nomor bukti —
+ * keputusan Ricko 2026-09-18. MP menyarankan `REV-<asli>`, tapi kalau aslinya
+ * kosong, formula itu akan mengarang penanda yang tidak menunjuk dokumen apa
+ * pun. Keterkaitan asli ↔ pembalik dijaga kolom `reversal_of_id`, bukan
+ * konvensi penamaan; nomor bukti tetap milik dokumen fisik.
+ *
+ * Hanya USULAN untuk mengisi form — pengguna boleh menggantinya.
+ */
+export function defaultReversalNoBukti(asli: string | null): string | null {
+  return asli === null ? null : `REV-${asli}`
+}
+
 // ── Immutabilitas ────────────────────────────────────────────
 
 /**

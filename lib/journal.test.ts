@@ -12,6 +12,11 @@ import {
   isBalanced,
   validateJournalInput,
   canEditJournal,
+  canPost,
+  canReverse,
+  buildReversalLines,
+  defaultReversalNoBukti,
+  JOURNAL_EVENTS,
   type JournalInput,
 } from './journal'
 
@@ -515,5 +520,147 @@ describe('canEditJournal', () => {
 
   it('setiap nilai status punya jawaban pasti', () => {
     for (const s of JOURNAL_STATUS) expect(typeof canEditJournal(s)).toBe('boolean')
+  })
+})
+
+// ══ FASE 2: POSTING & JURNAL BALIK ═══════════════════════════════
+// Posting adalah pintu SATU ARAH: sesudahnya jurnal hanya bisa dibalik, tidak
+// diubah. Predikatnya diperiksa ulang di server meski UI sudah menyaring,
+// karena daftar di layar bisa basi beberapa detik.
+describe('canPost', () => {
+  const draf = {
+    status: 'draft' as const,
+    tanggal: '2026-09-18',
+    lines: [
+      { debit: '100.00', kredit: '0.00' },
+      { debit: '0.00', kredit: '100.00' },
+    ],
+  }
+  const tidakTerkunci = { isLocked: () => false }
+
+  it('draf seimbang boleh diposting', () => {
+    expect(canPost(draf, tidakTerkunci)).toEqual({ ok: true })
+  })
+
+  it('jurnal terposting ditolak, dengan alasan yang menyebut statusnya', () => {
+    const r = canPost({ ...draf, status: 'posted' }, tidakTerkunci)
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('Terposting')
+  })
+
+  it('tidak seimbang ditolak, alasannya menyebut selisih', () => {
+    const r = canPost(
+      { ...draf, lines: [{ debit: '100.00' }, { kredit: '40.00' }] },
+      tidakTerkunci
+    )
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('60.00')
+  })
+
+  it('kurang dari dua baris ditolak', () => {
+    const r = canPost({ ...draf, lines: [{ debit: '100.00' }] }, tidakTerkunci)
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('minimal 2 baris')
+  })
+
+  it('periode terkunci ditolak — predikatnya dioper, bukan diputuskan di sini', () => {
+    // Fase 2 mengoper () => false; §7.B menggantinya dengan kunci sungguhan
+    // tanpa menyentuh canPost.
+    const r = canPost(draf, { isLocked: t => t <= '2026-09-30' })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('dikunci')
+  })
+
+  it('tanggal yang dilewatkan ke isLocked adalah tanggal jurnalnya', () => {
+    let dilihat: string | null = null
+    canPost(draf, { isLocked: t => { dilihat = t; return false } })
+    expect(dilihat).toBe('2026-09-18')
+  })
+})
+
+describe('canReverse', () => {
+  it('jurnal terposting yang belum dibalik boleh dibalik', () => {
+    expect(canReverse({ status: 'posted' }, null)).toEqual({ ok: true })
+  })
+
+  it('draf tidak bisa dibalik — belum masuk buku besar', () => {
+    const r = canReverse({ status: 'draft' }, null)
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('terposting')
+  })
+
+  it('yang sudah punya pembalik TERPOSTING ditolak', () => {
+    const r = canReverse({ status: 'posted' }, { status: 'posted' })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.reason).toContain('sudah pernah dibalik')
+  })
+
+  it('pembalik yang masih DRAF tidak menghitung — boleh dibalik lagi', () => {
+    // Pembalik draf belum masuk buku besar, jadi secara akuntansi jurnalnya
+    // belum terbalik. "Sudah dibalik" diturunkan, bukan disimpan (P3).
+    expect(canReverse({ status: 'posted' }, { status: 'draft' })).toEqual({ ok: true })
+  })
+})
+
+describe('buildReversalLines', () => {
+  const lines = [
+    { masterCoaId: 'A1', debit: '100.00', kredit: '0.00', keterangan: 'sewa', lineOrder: 0 },
+    { masterCoaId: 'A2', debit: '0.00', kredit: '100.00', keterangan: null, lineOrder: 1 },
+  ]
+
+  it('menukar sisi debit dan kredit', () => {
+    const balik = buildReversalLines(lines)
+    expect(balik[0]).toMatchObject({ debit: '0.00', kredit: '100.00' })
+    expect(balik[1]).toMatchObject({ debit: '100.00', kredit: '0.00' })
+  })
+
+  it('akun, keterangan, dan urutan baris dipertahankan', () => {
+    const balik = buildReversalLines(lines)
+    expect(balik.map(l => l.masterCoaId)).toEqual(['A1', 'A2'])
+    expect(balik.map(l => l.keterangan)).toEqual(['sewa', null])
+    expect(balik.map(l => l.lineOrder)).toEqual([0, 1])
+  })
+
+  it('hasil pembalik tetap seimbang', () => {
+    expect(isBalanced(buildReversalLines(lines))).toBe(true)
+  })
+
+  it('membalik dua kali mengembalikan bentuk semula', () => {
+    expect(buildReversalLines(buildReversalLines(lines))).toEqual(lines)
+  })
+
+  it('tidak memutasi baris masukan', () => {
+    buildReversalLines(lines)
+    expect(lines[0]).toMatchObject({ debit: '100.00', kredit: '0.00' })
+  })
+})
+
+describe('defaultReversalNoBukti', () => {
+  it('jurnal bernomor menghasilkan usulan REV-<asli>', () => {
+    expect(defaultReversalNoBukti('JU-2026-09-001')).toBe('REV-JU-2026-09-001')
+  })
+
+  it('jurnal TANPA nomor bukti menghasilkan pembalik tanpa nomor bukti juga', () => {
+    // Keputusan Ricko 2026-09-18: jangan mengarang penanda. Keterkaitan asli ↔
+    // pembalik dijaga kolom reversal_of_id, bukan konvensi penamaan.
+    expect(defaultReversalNoBukti(null)).toBeNull()
+  })
+})
+
+describe('JOURNAL_EVENTS', () => {
+  it('memuat peristiwa yang dipakai Fase 1 dan Fase 2', () => {
+    for (const e of ['created', 'updated', 'deleted', 'posted', 'reversal_created']) {
+      expect([...JOURNAL_EVENTS]).toContain(e)
+    }
+  })
+
+  it('tidak ada duplikat', () => {
+    expect(new Set(JOURNAL_EVENTS).size).toBe(JOURNAL_EVENTS.length)
   })
 })
