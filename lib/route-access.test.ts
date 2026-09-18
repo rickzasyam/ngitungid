@@ -283,3 +283,33 @@ describe('/jurnal — surface kerja akunting', () => {
     expect(isPathAllowedForRole('user', '/jurnalisme')).toBe(true)
   })
 })
+
+// /buku-besar membaca jurnal yang SAMA, per akun. Gerbangnya wajib identik
+// dengan /jurnal — kalau tidak, yang lebih ketat cuma menahan pintu depan
+// sementara pintu sampingnya terbuka.
+describe('/buku-besar — gerbang yang sama dengan /jurnal', () => {
+  it('terdaftar di ACCOUNTING_ONLY_PREFIXES', () => {
+    expect([...ACCOUNTING_ONLY_PREFIXES]).toContain('/buku-besar')
+  })
+
+  it.each(['owner', 'akunting'] as const)('%s boleh membuka /buku-besar', (role) => {
+    expect(isPathAllowedForRole(role, '/buku-besar')).toBe(true)
+  })
+
+  it.each(['finance', 'user'] as const)('%s ditolak dari /buku-besar', (role) => {
+    expect(isPathAllowedForRole(role, '/buku-besar')).toBe(false)
+  })
+
+  it('jawabannya SAMA PERSIS dengan /jurnal untuk setiap role', () => {
+    for (const role of ['owner', 'akunting', 'finance', 'user'] as const) {
+      expect(isPathAllowedForRole(role, '/buku-besar'), role).toBe(
+        isPathAllowedForRole(role, '/jurnal')
+      )
+    }
+  })
+
+  it('sub-path ikut tertutup, nama mirip tidak', () => {
+    expect(isPathAllowedForRole('user', '/buku-besar/abc')).toBe(false)
+    expect(isPathAllowedForRole('user', '/buku-besaran')).toBe(true)
+  })
+})

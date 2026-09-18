@@ -17,6 +17,10 @@ import { canDoAccounting, canViewContracts, isInternal, type Role } from '@/lib/
 export const ACCOUNTING_ONLY_PREFIXES = [
   '/upload',
   '/jurnal',
+  // Buku besar = jurnal yang sama dibaca per akun. Gerbangnya WAJIB sama dengan
+  // /jurnal: gerbang yang lebih longgar di salah satunya membuat yang lebih
+  // ketat jadi kosmetik, karena isinya bisa dibaca lewat pintu sebelah.
+  '/buku-besar',
   '/coa-mapping',
   '/extraction-review',
 ] as const

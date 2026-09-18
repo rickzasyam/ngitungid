@@ -14,7 +14,7 @@ const ids = (role: Role | null | undefined, sessionLoading = false): NavItemId[]
 describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
   it('owner: semuanya', () => {
     expect(ids('owner')).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -23,7 +23,7 @@ describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
     // Akunting membukukan pekerjaan klien; katalog & kontrak komersial bukan
     // urusannya. Ini satu-satunya item yang staf kehilangan tapi klien punya.
     expect(ids('akunting')).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'laporan',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'laporan',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -76,7 +76,7 @@ describe('sessionLoading — semua item tampil, apa pun role-nya', () => {
 
   it('daftar penuhnya persis NAV_ITEMS, urutan apa adanya', () => {
     expect(ids(null, true)).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -93,12 +93,13 @@ describe('daftar berubah setelah sesi resolve — kapsul wajib mengukur ulang', 
   })
 
   it('finance: indeks Kontrak BERGESER antara loading dan settle', () => {
-    // Indeks 5 saat loading → 3 sesudah settle. Kapsul yang mengukur saat
-    // loading lalu tidak pernah mengukur ulang akan tertinggal DUA slot, jatuh
-    // di bawah item terakhir. Jaraknya melebar dari 1 jadi 2 slot sejak Jurnal
-    // ditambahkan (staffOnly, jadi finance tidak melihatnya setelah settle) —
-    // artinya konsekuensi tidak mengukur ulang justru makin kelihatan.
-    expect(ids('finance', true).indexOf('kontrak')).toBe(5)
+    // Indeks 6 saat loading → 3 sesudah settle. Kapsul yang mengukur saat
+    // loading lalu tidak pernah mengukur ulang akan tertinggal TIGA slot, jatuh
+    // di bawah item terakhir. Jaraknya melebar 1 → 2 saat Jurnal ditambahkan
+    // dan 2 → 3 saat Buku Besar menyusul (keduanya staffOnly, jadi finance
+    // tidak melihatnya setelah settle) — konsekuensi tidak mengukur ulang
+    // justru makin kelihatan tiap kali surface akunting bertambah.
+    expect(ids('finance', true).indexOf('kontrak')).toBe(6)
     expect(ids('finance', false).indexOf('kontrak')).toBe(3)
   })
 
@@ -169,5 +170,36 @@ describe('Jurnal', () => {
     expect(jurnal.staffOnly).toBe(true)
     expect(jurnal.contractOnly).toBeUndefined()
     expect(jurnal.comingSoon).toBeUndefined()
+  })
+})
+
+// ══ BUKU BESAR ═══════════════════════════════════════════════════
+// Isinya jurnal yang SAMA, dibaca per akun — jadi ia duduk tepat sesudah
+// Jurnal, dan gerbangnya wajib identik.
+describe('Buku Besar', () => {
+  it.each(['owner', 'akunting'] as const)('%s: Buku Besar tepat sesudah Jurnal', (role) => {
+    const list = ids(role)
+    expect(list.indexOf('buku-besar')).toBe(list.indexOf('jurnal') + 1)
+  })
+
+  it.each(['finance', 'user'] as const)('%s tidak melihat Buku Besar sama sekali', (role) => {
+    expect(ids(role)).not.toContain('buku-besar')
+  })
+
+  it('bertanda staffOnly, persis seperti Jurnal', () => {
+    const bb = NAV_ITEMS.find(i => i.id === 'buku-besar')!
+    const jurnal = NAV_ITEMS.find(i => i.id === 'jurnal')!
+    expect(bb.staffOnly).toBe(jurnal.staffOnly)
+    expect(bb.contractOnly).toBeUndefined()
+    expect(bb.comingSoon).toBeUndefined()
+  })
+
+  it('kedua surface jurnal terlihat oleh himpunan role yang SAMA', () => {
+    // Kalau salah satunya kelak dilonggarkan sendirian, yang lebih ketat jadi
+    // kosmetik: isinya bisa dibaca lewat pintu sebelah.
+    for (const role of ['owner', 'akunting', 'finance', 'user'] as const) {
+      const list = ids(role)
+      expect(list.includes('buku-besar'), role).toBe(list.includes('jurnal'))
+    }
   })
 })

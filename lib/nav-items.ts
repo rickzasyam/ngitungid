@@ -22,6 +22,7 @@ export type NavItemId =
   | 'analytics'
   | 'upload'
   | 'jurnal'
+  | 'buku-besar'
   | 'laporan'
   | 'kontrak'
   | 'coa-mapping'
@@ -51,12 +52,19 @@ export interface NavItem {
  * Jurnal duduk tepat SESUDAH Upload: keduanya pintu masuk DATA, dan keduanya
  * staffOnly sehingga jaraknya tidak pernah berubah antar role — beda dengan
  * menaruhnya di dekat Laporan, yang akan membuatnya melompat untuk finance.
+ *
+ * Buku Besar duduk tepat SESUDAH Jurnal, dengan alasan yang sama sekali bukan
+ * kosmetik: isinya jurnal yang SAMA, dibaca per akun. Menaruhnya di dekat
+ * Laporan akan menyarankan ia laporan periodik hasil olahan, padahal ia
+ * pembacaan langsung buku — dan orang yang mencarinya akan mencarinya di
+ * sebelah Jurnal.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'upload', label: 'Upload', staffOnly: true },
   { id: 'jurnal', label: 'Jurnal', staffOnly: true },
+  { id: 'buku-besar', label: 'Buku Besar', staffOnly: true },
   { id: 'laporan', label: 'Laporan' },
   { id: 'kontrak', label: 'Kontrak', contractOnly: true },
   { id: 'coa-mapping', label: 'COA Mapping', staffOnly: true },
