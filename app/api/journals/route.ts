@@ -14,6 +14,7 @@ import {
   loadJournalDetail,
   resolveUserId,
 } from '@/lib/api/journal-queries'
+import { recordJournalEvent } from '@/lib/api/audit'
 
 export const runtime = 'nodejs'
 
@@ -155,6 +156,9 @@ export async function POST(req: Request) {
         lineOrder: l.lineOrder,
       }))
     ),
+    // P10: satu mutasi = satu batch + satu baris riwayat, DI DALAM batch yang
+    // sama. Di luar batch, jurnal bisa tersimpan tanpa riwayat (atau sebaliknya).
+    recordJournalEvent({ clientId, journalId, event: 'created', userId: createdBy }),
   ]
 
   try {

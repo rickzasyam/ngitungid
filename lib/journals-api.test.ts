@@ -19,6 +19,9 @@ const DETAIL = read('app', 'api', 'journals', '[id]', 'route.ts')
 const QUERIES = read('lib', 'api', 'journal-queries.ts')
 const SUGGEST = read('app', 'api', 'journals', 'suggest-account', 'route.ts')
 const SUGGEST_LIB = read('lib', 'gemini', 'suggest-journal-account.ts')
+const POSTING = read('app', 'api', 'journals', '[id]', 'post', 'route.ts')
+const REVERSE = read('app', 'api', 'journals', '[id]', 'reverse', 'route.ts')
+const AUDIT = read('lib', 'api', 'audit.ts')
 
 const handler = (src: string, method: string): string => {
   const start = src.indexOf(`export async function ${method}(`)
@@ -356,3 +359,230 @@ describe('409 nomor bukti dilewati saat nomor buktinya kosong', () => {
     }
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════
+// FASE 2 — posting, jurnal balik, riwayat
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('gerbang route posting & pembalikan', () => {
+  it('keduanya requireAkunting, bukan requireUser', () => {
+    for (const [src, nama] of [
+      [POSTING, 'post'],
+      [REVERSE, 'reverse'],
+    ] as const) {
+      expect(handler(src, 'POST'), nama).toContain('await requireAkunting()')
+      expect(src, nama).not.toContain('requireUser()')
+    }
+  })
+
+  it('batas antar-klien dinyatakan, dan SESUDAH barisnya dibaca', () => {
+    for (const [src, nama] of [
+      [POSTING, 'post'],
+      [REVERSE, 'reverse'],
+    ] as const) {
+      const body = handler(src, 'POST')
+      const ambil = body.indexOf('loadJournalHeaderForWrite(')
+      const cek = body.indexOf('canAccessClientData(')
+      expect(ambil, nama).toBeGreaterThan(-1)
+      expect(cek, nama).toBeGreaterThan(-1)
+      expect(ambil, nama).toBeLessThan(cek)
+    }
+  })
+
+  it('clientId diambil dari barisnya, tidak pernah dari body atau query', () => {
+    expect(POSTING).not.toContain('raw.clientId')
+    expect(REVERSE).not.toContain('raw.clientId')
+    expect(POSTING).toContain('header.clientId')
+    expect(REVERSE).toContain('asli.clientId')
+  })
+})
+
+describe('predikat pembukuan ditegakkan di server, bukan di layar', () => {
+  it('posting memanggil canPost sebelum db.batch', () => {
+    const body = handler(POSTING, 'POST')
+    const cek = body.indexOf('canPost(')
+    const tulis = body.indexOf('db.batch(')
+    expect(cek).toBeGreaterThan(-1)
+    expect(cek).toBeLessThan(tulis)
+  })
+
+  it('pembalikan memanggil canReverse sebelum menyentuh apa pun', () => {
+    const body = handler(REVERSE, 'POST')
+    const cek = body.indexOf('canReverse(')
+    const tulis = body.indexOf('db.batch(')
+    expect(cek).toBeGreaterThan(-1)
+    expect(cek).toBeLessThan(tulis)
+  })
+
+  it('gagal predikat = 409 dengan ALASANNYA, bukan pesan generik', () => {
+    for (const [src, nama] of [
+      [POSTING, 'post'],
+      [REVERSE, 'reverse'],
+    ] as const) {
+      const body = handler(src, 'POST')
+      expect(body, nama).toContain('verdict.reason')
+      expect(body, nama).toContain('status: 409')
+    }
+  })
+
+  // canPost menerima isLocked sebagai parameter supaya modulnya tetap murni.
+  // Fase 2 mengopernya dari SATU tempat (lib/api/period-lock.ts) — §7.B cukup
+  // mengganti isi berkas itu. Kalau route menuliskan `() => false` sendiri,
+  // §7.B harus menemukan setiap tempat yang menuliskannya, dan yang terlewat
+  // meloloskan posting ke periode terkunci tanpa galat.
+  it('isLocked datang dari periodLockChecker, bukan ditulis ulang di route', () => {
+    expect(POSTING).toContain('periodLockChecker(')
+    expect(POSTING).not.toContain('() => false')
+  })
+
+  it('pembalik memakai buildReversalLines, bukan menukar D/K sendiri', () => {
+    expect(REVERSE).toContain('buildReversalLines(')
+  })
+
+  it('pembalik tetap lewat validateJournalInput — tidak ada jalur tulis khusus', () => {
+    const body = handler(REVERSE, 'POST')
+    const validasi = body.indexOf('validateJournalInput(')
+    const tulis = body.indexOf('db.batch(')
+    expect(validasi).toBeGreaterThan(-1)
+    expect(validasi).toBeLessThan(tulis)
+  })
+
+  it('pembalik lahir sebagai DRAF, bukan langsung terposting', () => {
+    const body = handler(REVERSE, 'POST')
+    expect(body).toContain('reversalOfId: id')
+    expect(body).not.toContain("status: 'posted'")
+  })
+
+  // Antara pembacaan header dan UPDATE, permintaan lain bisa sudah memposting
+  // jurnal yang sama. Tanpa syarat ini yang kedua menimpa posted_by milik yang
+  // pertama — pemosting sebenarnya hilang dari satu-satunya catatan yang ada.
+  it('UPDATE posting menyaring status draft di WHERE, bukan cuma di predikat', () => {
+    const body = handler(POSTING, 'POST')
+    expect(body).toContain("eq(journalEntries.status, 'draft')")
+    expect(body).toContain('.returning(')
+  })
+})
+
+describe('riwayat ditulis DI DALAM batch yang sama (P10)', () => {
+  const potongStatements = (body: string): string => {
+    const mulai = body.indexOf('const statements')
+    expect(mulai, 'array statements ada').toBeGreaterThan(-1)
+    const batch = body.indexOf('db.batch(', mulai)
+    return body.slice(mulai, batch)
+  }
+
+  it('POST, PATCH, posting, dan pembalikan semuanya menulis event', () => {
+    for (const [src, m, nama] of [
+      [LIST, 'POST', 'buat'],
+      [DETAIL, 'PATCH', 'ubah'],
+      [POSTING, 'POST', 'posting'],
+      [REVERSE, 'POST', 'balik'],
+    ] as const) {
+      expect(potongStatements(handler(src, m)), nama).toContain('recordJournalEvent(')
+    }
+  })
+
+  it('pembalikan menulis DUA event: pada pembalik baru DAN pada jurnal aslinya', () => {
+    const statements = potongStatements(handler(REVERSE, 'POST'))
+    expect((statements.match(/recordJournalEvent\(/g) ?? []).length).toBe(2)
+    expect(statements).toContain("event: 'created'")
+    expect(statements).toContain("event: 'reversal_created'")
+  })
+
+  it('tidak ada route jurnal yang menulis event di luar batch', () => {
+    // `await recordJournalEvent(...)` akan MENJALANKAN query-nya sendiri
+    // (pembangun drizzle bersifat thenable), di transaksi yang berbeda dari
+    // perubahan yang diriwayatkannya.
+    for (const [src, nama] of [
+      [LIST, 'daftar'],
+      [DETAIL, 'detail'],
+      [POSTING, 'posting'],
+      [REVERSE, 'balik'],
+    ] as const) {
+      expect(src, nama).not.toContain('await recordJournalEvent(')
+      expect(src, nama).not.toContain('await purgeAuditEvents(')
+      expect(src, nama).not.toContain('db.insert(auditEvents)')
+    }
+  })
+
+  it('audit_events append-only: tidak ada UPDATE di mana pun', () => {
+    for (const src of [LIST, DETAIL, POSTING, REVERSE, AUDIT]) {
+      expect(src).not.toContain('update(auditEvents)')
+    }
+  })
+})
+
+// ══ PENJAGA BERDIRI: HAPUS JURNAL = HAPUS RIWAYATNYA, SATU TRANSAKSI ══════
+// audit_events.entity_id polimorfik → tidak punya FK → Postgres TIDAK akan
+// meng-cascade apa pun. Kewajiban ini yang menggantikannya, dan ia hanya hidup
+// di kode. Kalau purge-nya dilepas dari batch (atau hilang), tidak ada satu pun
+// batasan database yang akan mengeluh — yang tertinggal adalah riwayat yang
+// menunjuk jurnal yang sudah tidak ada.
+describe('penghapusan jurnal ikut menghapus riwayatnya', () => {
+  const DEL = handler(DETAIL, 'DELETE')
+
+  it('purgeAuditEvents dipanggil di handler DELETE', () => {
+    expect(DEL).toContain("purgeAuditEvents('journal'")
+  })
+
+  it('purge dan penghapusan jurnal berada di ARRAY statements yang sama', () => {
+    // Dipotong sampai KURUNG TUTUP arraynya, bukan sampai db.batch — kalau
+    // batasnya db.batch, purge yang sudah dipindah keluar array (tapi masih di
+    // atas batch) akan tetap lolos, dan penjaga ini berhenti menjaga tanpa
+    // terlihat rusak.
+    const mulai = DEL.indexOf('const statements')
+    const tutup = DEL.indexOf('\n  ]', mulai)
+    expect(mulai).toBeGreaterThan(-1)
+    expect(tutup).toBeGreaterThan(mulai)
+    const statements = DEL.slice(mulai, tutup)
+    expect(statements).toContain('purgeAuditEvents(')
+    expect(statements).toContain('db.delete(journalEntries)')
+  })
+
+  it('TIDAK ADA tulis mandiri di DELETE — semuanya lewat db.batch', () => {
+    // Bentuk inilah yang merah kalau purge-nya dipindah keluar transaksi:
+    // memindahkannya berarti menulis `await db.delete(...)` atau
+    // `await purgeAuditEvents(...)` berdiri sendiri.
+    expect(DEL.match(/await db\.(insert|update|delete)\(/g)).toBeNull()
+    expect(DEL).not.toContain('await purgeAuditEvents(')
+    expect(DEL).toContain('await db.batch(')
+  })
+
+  it('purge hanya boleh lahir dari helper bersama, bukan delete langsung', () => {
+    // Satu-satunya DELETE yang sah atas tabel append-only ini ada di lib/api/audit.ts.
+    expect(DETAIL).not.toContain('delete(auditEvents)')
+    expect(AUDIT).toContain('.delete(auditEvents)')
+  })
+
+  it('helper purge menyaring entity_type DAN entity_id, bukan salah satunya', () => {
+    // Menyaring entity_id saja akan menghapus event entitas lain yang kebetulan
+    // ber-uuid sama — mustahil hari ini, tapi uuid bukan jaminan yang dinyatakan.
+    expect(AUDIT).toContain('eq(auditEvents.entityType, entityType)')
+    expect(AUDIT).toContain('eq(auditEvents.entityId, entityId)')
+  })
+})
+
+describe('detail jurnal membawa riwayat & keterkaitan pembalik', () => {
+  it('events disaring entity_type journal + entity_id jurnalnya', () => {
+    expect(QUERIES).toContain("eq(auditEvents.entityType, 'journal')")
+    expect(QUERIES).toContain('eq(auditEvents.entityId, journalId)')
+  })
+
+  it('nama pelaku lewat leftJoin — riwayat tidak hilang saat usernya dihapus', () => {
+    expect(QUERIES).toContain('.leftJoin(users, eq(auditEvents.userId, users.id))')
+  })
+
+  it('"sudah dibalik" DITURUNKAN dari pembalik terposting, tidak disimpan (P3)', () => {
+    expect(QUERIES).toContain("reversals.find(r => r.status === 'posted')")
+    expect(SCHEMA_TIDAK_PUNYA_KOLOM_SUDAH_DIBALIK()).toBe(true)
+  })
+
+  it('pembalik yang masih draf tidak menghalangi pembalikan berikutnya', () => {
+    expect(QUERIES).toContain("eq(journalEntries.status, 'posted')")
+  })
+})
+
+function SCHEMA_TIDAK_PUNYA_KOLOM_SUDAH_DIBALIK(): boolean {
+  const schema = read('lib', 'db', 'schema.ts')
+  return !schema.includes('sudahDibalik') && !schema.includes('is_reversed')
+}

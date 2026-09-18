@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { journalEntries, journalLines, masterCoa, users } from '@/lib/db/schema'
+import { auditEvents, journalEntries, journalLines, masterCoa, users } from '@/lib/db/schema'
+import type { JournalLineValue } from '@/lib/journal'
 
 // Query & penjaga yang dipakai BERSAMA oleh route daftar jurnal dan route
 // detailnya. Hidup di modul terpisah karena Next menolak export non-handler di
@@ -63,6 +64,9 @@ export async function loadJournalDetail(journalId: string) {
       createdAt: journalEntries.createdAt,
       updatedAt: journalEntries.updatedAt,
       createdByName: users.name,
+      postedAt: journalEntries.postedAt,
+      postedById: journalEntries.postedBy,
+      reversalOfId: journalEntries.reversalOfId,
     })
     .from(journalEntries)
     .innerJoin(users, eq(journalEntries.createdBy, users.id))
@@ -70,6 +74,20 @@ export async function loadJournalDetail(journalId: string) {
     .limit(1)
 
   if (!header) return null
+
+  // Nama pemosting diambil TERPISAH, bukan lewat alias join kedua ke `users`.
+  // Bukan karena join-nya salah, tapi karena query yang dijalankan hanya kalau
+  // jurnalnya memang sudah diposting: jurnal draf — mayoritas yang dibuka di
+  // layar — tidak membayar apa pun untuk kolom yang pasti kosong.
+  let postedByName: string | null = null
+  if (header.postedById) {
+    const [u] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, header.postedById))
+      .limit(1)
+    postedByName = u?.name ?? null
+  }
 
   const lines = await db
     .select({
@@ -87,5 +105,114 @@ export async function loadJournalDetail(journalId: string) {
     .where(eq(journalLines.journalId, journalId))
     .orderBy(asc(journalLines.lineOrder))
 
-  return { ...header, lines }
+  // Riwayat: terbaru dulu, sama dengan urutan baca panel Riwayat di layar.
+  // leftJoin users — user_id boleh NULL (ON DELETE set null), dan riwayat yang
+  // hilang karena penggunanya dihapus jauh lebih buruk daripada nama kosong.
+  const events = await db
+    .select({
+      id: auditEvents.id,
+      event: auditEvents.event,
+      catatan: auditEvents.catatan,
+      at: auditEvents.at,
+      userName: users.name,
+    })
+    .from(auditEvents)
+    .leftJoin(users, eq(auditEvents.userId, users.id))
+    .where(and(eq(auditEvents.entityType, 'journal'), eq(auditEvents.entityId, journalId)))
+    .orderBy(desc(auditEvents.at))
+
+  // Pembalik jurnal ini. DAFTAR, bukan satu baris: canReverse hanya melarang
+  // pembalik kedua kalau yang pertama SUDAH TERPOSTING, jadi beberapa draf
+  // pembalik memang bisa hidup bersamaan. Menampilkan salah satunya saja akan
+  // menyembunyikan sisanya dari orang yang harus membereskannya.
+  const reversals = await db
+    .select({
+      id: journalEntries.id,
+      noBukti: journalEntries.noBukti,
+      tanggal: journalEntries.tanggal,
+      status: journalEntries.status,
+    })
+    .from(journalEntries)
+    .where(eq(journalEntries.reversalOfId, journalId))
+    .orderBy(asc(journalEntries.createdAt))
+
+  // "Sudah dibalik" = ada pembalik TERPOSTING. Diturunkan di sini, tidak
+  // disimpan (P3) — persis definisi yang dipakai canReverse.
+  const reversedBy = reversals.find(r => r.status === 'posted') ?? null
+
+  let reversalOf: { id: string; noBukti: string | null; tanggal: string } | null = null
+  if (header.reversalOfId) {
+    const [asli] = await db
+      .select({
+        id: journalEntries.id,
+        noBukti: journalEntries.noBukti,
+        tanggal: journalEntries.tanggal,
+      })
+      .from(journalEntries)
+      .where(eq(journalEntries.id, header.reversalOfId))
+      .limit(1)
+    reversalOf = asli ?? null
+  }
+
+  return { ...header, postedByName, lines, events, reversals, reversedBy, reversalOf }
+}
+
+/**
+ * Header ringkas untuk jalur TULIS (posting, pembalikan).
+ *
+ * Sengaja terpisah dari loadJournalDetail: yang dibutuhkan predikat hanyalah
+ * status, tanggal, dan pemilik kliennya — bukan riwayat, bukan daftar pembalik.
+ * Route posting yang menarik seluruh detail hanya untuk membuang 90%-nya
+ * membuat jalur tulis bergantung pada bentuk tampilan.
+ */
+export async function loadJournalHeaderForWrite(journalId: string) {
+  const [row] = await db
+    .select({
+      id: journalEntries.id,
+      clientId: journalEntries.clientId,
+      tanggal: journalEntries.tanggal,
+      noBukti: journalEntries.noBukti,
+      keterangan: journalEntries.keterangan,
+      status: journalEntries.status,
+    })
+    .from(journalEntries)
+    .where(eq(journalEntries.id, journalId))
+    .limit(1)
+  return row ?? null
+}
+
+/**
+ * Baris jurnal dalam bentuk JournalLineValue — bentuk yang sama dengan keluaran
+ * validateJournalInput, sehingga bisa langsung dioper ke buildReversalLines dan
+ * computeTotals tanpa satu pun konversi di tengah.
+ */
+export async function loadJournalLineValues(journalId: string): Promise<JournalLineValue[]> {
+  return db
+    .select({
+      masterCoaId: journalLines.masterCoaId,
+      debit: journalLines.debit,
+      kredit: journalLines.kredit,
+      keterangan: journalLines.keterangan,
+      lineOrder: journalLines.lineOrder,
+    })
+    .from(journalLines)
+    .where(eq(journalLines.journalId, journalId))
+    .orderBy(asc(journalLines.lineOrder))
+}
+
+/**
+ * Pembalik TERPOSTING milik sebuah jurnal, kalau ada.
+ *
+ * "Sudah dibalik" tidak disimpan sebagai kolom (P3) — ia pertanyaan yang
+ * dijawab tabelnya sendiri. Pembalik yang masih draf sengaja tidak dicari di
+ * sini: canReverse memang tidak menghitungnya, karena draf belum masuk buku
+ * besar dan jurnalnya secara akuntansi belum terbalik.
+ */
+export async function findPostedReversal(journalId: string) {
+  const [row] = await db
+    .select({ id: journalEntries.id, status: journalEntries.status })
+    .from(journalEntries)
+    .where(and(eq(journalEntries.reversalOfId, journalId), eq(journalEntries.status, 'posted')))
+    .limit(1)
+  return row ?? null
 }

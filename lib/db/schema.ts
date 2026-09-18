@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   index,
   primaryKey,
+  foreignKey,
   check,
   customType,
 } from 'drizzle-orm/pg-core'
@@ -90,6 +91,22 @@ export const journalStatusEnum = pgEnum('journal_status', ['draft', 'posted'])
 // membuat kolom jadi text → DROP TYPE → CREATE TYPE → cast balik, yang pasti
 // gagal di database yang sudah ada isinya.
 export const journalSourceEnum = pgEnum('journal_source', ['manual'])
+
+// audit_entity_type: entitas mana yang diriwayatkan sebuah baris audit_events.
+//
+// ENUM, bukan text — dan itu SENGAJA berbeda dari kolom `event` di tabel yang
+// sama. Dua kolom itu berbeda sifat: daftar `event` tumbuh tiap fase (D12), jadi
+// enum di sana berarti migrasi berulang; daftar ENTITAS tertutup dan sudah
+// diketahui seluruhnya. Perbedaan yang dibayar enum di sini adalah salah ketik:
+// 'jurnal' alih-alih 'journal' pada kolom text akan tersimpan diam-diam, dan
+// riwayatnya lenyap dari layar tanpa satu pun galat — persis kegagalan yang
+// tidak punya FK untuk menangkapnya (lihat catatan entity_id di audit_events).
+export const auditEntityTypeEnum = pgEnum('audit_entity_type', [
+  'journal',
+  'master_coa',
+  'period_lock',
+  'supplier',
+])
 
 // ── clients ──────────────────────────────────────────────────
 // logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
@@ -474,6 +491,17 @@ export const journalEntries = pgTable(
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    // ── Fase 2 (migrasi 0014) ──────────────────────────────────
+    // posted_at/posted_by NULL selama masih draf. Keduanya nullable dan tidak
+    // punya default: "kapan diposting" hanya ada artinya kalau posting memang
+    // sudah terjadi, dan default now() akan membuat setiap draf berbohong.
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    postedBy: uuid('posted_by').references(() => users.id, { onDelete: 'restrict' }),
+    // Self-FK RESTRICT: jurnal yang sudah dibalik tidak boleh lenyap sementara
+    // pembaliknya tinggal menunjuk id hantu. RESTRICT, bukan cascade — menghapus
+    // jurnal asli TIDAK boleh diam-diam ikut menghapus pembaliknya, karena
+    // pembalik adalah entri tersendiri yang bisa saja sudah terposting.
+    reversalOfId: uuid('reversal_of_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
@@ -481,6 +509,15 @@ export const journalEntries = pgTable(
     unique('journal_entries_client_no_bukti_unique').on(table.clientId, table.noBukti),
     index('journal_entries_client_tanggal_idx').on(table.clientId, table.tanggal),
     index('journal_entries_client_status_idx').on(table.clientId, table.status),
+    index('journal_entries_reversal_of_idx').on(table.reversalOfId),
+    // FK self-referensial dideklarasikan di sini, bukan inline di kolomnya:
+    // `references(() => journalEntries.id)` inline akan merujuk tabel yang belum
+    // selesai didefinisikan. Bentuk ini pola resmi drizzle untuk self-FK.
+    foreignKey({
+      name: 'journal_entries_reversal_of_id_fk',
+      columns: [table.reversalOfId],
+      foreignColumns: [table.id],
+    }).onDelete('restrict'),
   ]
 )
 
@@ -523,6 +560,17 @@ export const journalLines = pgTable(
     masterCoaId: uuid('master_coa_id')
       .notNull()
       .references(() => masterCoa.id, { onDelete: 'restrict' }),
+    // ── Fase 2 (migrasi 0014) ──────────────────────────────────
+    // Supplier yang dimaksud baris hutang ini. NULL untuk baris yang bukan akun
+    // hutang — dan juga untuk baris hutang yang memang belum diurai per
+    // supplier, yang justru menjadi penjelas selisih di rekonsiliasi (§5.C F2).
+    // RESTRICT: supplier yang sudah dipakai jurnal tidak boleh hilang, alasan
+    // yang sama persis dengan master_coa_id di atas.
+    //
+    // Kolomnya lahir di migrasi 0014 bersama posting; yang MEMAKAINYA adalah
+    // §5.C F1. Dibundel karena nomor migrasi Fase 2 sudah ditetapkan (0014/0015)
+    // dan ADD COLUMN nullable tidak menyentuh satu baris pun yang sudah ada.
+    supplierId: uuid('supplier_id').references(() => masterSupplier.id, { onDelete: 'restrict' }),
     debit: numeric('debit', { precision: 18, scale: 2 }).notNull().default('0'),
     kredit: numeric('kredit', { precision: 18, scale: 2 }).notNull().default('0'),
     keterangan: text('keterangan'),
@@ -531,6 +579,7 @@ export const journalLines = pgTable(
   (table) => [
     index('journal_lines_journal_id_idx').on(table.journalId),
     index('journal_lines_master_coa_id_idx').on(table.masterCoaId),
+    index('journal_lines_supplier_id_idx').on(table.supplierId),
     check(
       'journal_lines_satu_sisi_check',
       sql`${table.debit} >= 0 AND ${table.kredit} >= 0 AND ((${table.debit} = 0) <> (${table.kredit} = 0))`
@@ -598,6 +647,63 @@ export const masterSupplier = pgTable(
   ]
 )
 
+// ── audit_events (0014) ──────────────────────────────────────
+// Riwayat "kapan, oleh siapa, apa" untuk SEMUA entitas yang perlu diriwayatkan,
+// bukan hanya jurnal. Keputusan Ricko 2026-09-18 (R2), menggantikan
+// `journal_events` di MP §8.5.
+//
+// ══ KENAPA GENERIK SEJAK AWAL ═════════════════════════════════════════════
+// Bentuk khusus-jurnal sudah bocor di rancangan aslinya sendiri: §8.5 harus
+// membuat `journal_id` nullable "untuk event periode", padahal kunci periode
+// bukan jurnal dan tidak akan pernah punya id jurnal. Selain itu konsumen kedua
+// dan ketiga sudah TERTULIS di master plan yang sama — riwayat keterangan akun
+// COA (F03-14) dan log buka-kunci periode (F07-8/11) — jadi ini bukan
+// generalisasi atas pemakai yang baru diduga-duga.
+//
+// ══ HARGA YANG DIBAYAR: TIDAK ADA FK UNTUK entity_id ══════════════════════
+// Kolom polimorfik tidak bisa punya foreign key, jadi jaminan "event ini
+// menunjuk baris yang benar-benar ada" pindah dari Postgres ke kode — selamanya.
+// Tiga hal membayar kembali sebagian:
+//   1. entity_type ENUM (bukan text) — salah ketik entitas ditolak database.
+//   2. CHECK di bawah — event ber-entitas 'journal' WAJIB punya entity_id.
+//   3. Penghapusan jurnal WAJIB menghapus event-nya DI DALAM db.batch yang sama
+//      (lihat DELETE /api/journals/[id] dan penjaga strukturalnya). Ini yang
+//      menggantikan `ON DELETE CASCADE` yang dulu dikerjakan FK.
+// Yang TIDAK bisa dibeli kembali: tidak ada yang mencegah event menunjuk id yang
+// sudah tidak ada kalau kelak ada jalur hapus baru yang lupa nomor 3. Karena itu
+// penjaganya struktural, bukan sekadar konvensi.
+//
+// ══ APPEND-ONLY ═══════════════════════════════════════════════════════════
+// Tidak ada UPDATE. Satu-satunya DELETE yang sah adalah pembersihan bersamaan
+// dengan entitasnya (nomor 3 di atas) — riwayat yang bisa disunting bukan
+// riwayat.
+export const auditEvents = pgTable(
+  'audit_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    entityType: auditEntityTypeEnum('entity_type').notNull(),
+    /** Id baris yang diriwayatkan. TANPA FK — lihat catatan di atas. */
+    entityId: uuid('entity_id'),
+    /** Daftar resminya konstanta di lib (JOURNAL_EVENTS dst), text bukan enum (D12). */
+    event: text('event').notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    catatan: text('catatan'),
+    at: timestamp('at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Query riwayat SELALU "entitas ini, terbaru dulu" — ketiganya satu index.
+    index('audit_events_entity_idx').on(table.entityType, table.entityId, table.at),
+    index('audit_events_client_at_idx').on(table.clientId, table.at),
+    check(
+      'audit_events_entity_id_check',
+      sql`${table.entityType} <> 'journal' OR ${table.entityId} IS NOT NULL`
+    ),
+  ]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -661,7 +767,29 @@ export const clientMetricVisibilityRelations = relations(clientMetricVisibility,
 
 export const journalEntriesRelations = relations(journalEntries, ({ one, many }) => ({
   client: one(clients, { fields: [journalEntries.clientId], references: [clients.id] }),
-  createdByUser: one(users, { fields: [journalEntries.createdBy], references: [users.id] }),
+  // Dua relasi ke `users` dari tabel yang sama → relationName wajib, kalau tidak
+  // drizzle tidak bisa memutuskan yang mana yang dimaksud (pola yang sama sudah
+  // dipakai masterCoaRelations terhadap reportLineItems).
+  createdByUser: one(users, {
+    fields: [journalEntries.createdBy],
+    references: [users.id],
+    relationName: 'journalCreatedBy',
+  }),
+  postedByUser: one(users, {
+    fields: [journalEntries.postedBy],
+    references: [users.id],
+    relationName: 'journalPostedBy',
+  }),
+  // Jurnal asli ↔ pembaliknya. Satu arah `one` (aku membalik siapa) dan satu
+  // arah `many` (siapa saja yang membalikku) — `many`, bukan `one`, karena yang
+  // menjamin "cuma sekali" adalah predikat canReverse, bukan batasan kolom:
+  // pembalik yang masih DRAF tidak menghitung, jadi kolom unik akan salah.
+  reversalOf: one(journalEntries, {
+    fields: [journalEntries.reversalOfId],
+    references: [journalEntries.id],
+    relationName: 'journalReversal',
+  }),
+  reversals: many(journalEntries, { relationName: 'journalReversal' }),
   lines: many(journalLines),
 }))
 
@@ -674,6 +802,18 @@ export const journalLinesRelations = relations(journalLines, ({ one }) => ({
     fields: [journalLines.masterCoaId],
     references: [masterCoa.id],
   }),
+  supplier: one(masterSupplier, {
+    fields: [journalLines.supplierId],
+    references: [masterSupplier.id],
+  }),
+}))
+
+// audit_events hanya punya relasi ke client & user. entity_id SENGAJA tidak
+// punya relasi: ia polimorfik, dan relasi drizzle butuh satu tabel tujuan yang
+// pasti — tidak ada yang bisa ditulis di sini tanpa berbohong.
+export const auditEventsRelations = relations(auditEvents, ({ one }) => ({
+  client: one(clients, { fields: [auditEvents.clientId], references: [clients.id] }),
+  user: one(users, { fields: [auditEvents.userId], references: [users.id] }),
 }))
 
 export const masterSupplierRelations = relations(masterSupplier, ({ one }) => ({

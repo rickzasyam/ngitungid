@@ -1,0 +1,148 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+// Test STRUKTURAL atas route buku besar — pola sama dengan lib/journals-api.test.ts.
+//
+// Yang dijaga di sini tidak muncul di nilai kembalian mana pun, dan dua di
+// antaranya mahal kalau lolos:
+//   1. Saringan `status = 'posted'`. Kalau lepas, saldo di layar memuat jurnal
+//      draf yang masih disunting seseorang — angka yang sudah diserahkan ke
+//      klien berubah tanpa ada yang menyentuhnya.
+//   2. Gerbang requireAkunting. Halaman /buku-besar staffOnly; API yang lebih
+//      longgar membuat gerbang halaman itu jadi kosmetik.
+
+const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
+
+const LEDGER = read('app', 'api', 'ledger', 'route.ts')
+const SUMMARY = read('app', 'api', 'ledger', 'summary', 'route.ts')
+const QUERIES = read('lib', 'api', 'ledger-queries.ts')
+
+const SEMUA_ROUTE = [
+  [LEDGER, 'buku besar'],
+  [SUMMARY, 'neraca saldo'],
+] as const
+
+describe('gerbang buku besar', () => {
+  it('keduanya requireAkunting — keputusan Ricko 2026-09-18, menyimpang dari MP', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      expect(src, nama).toContain('await requireAkunting()')
+      expect(src, nama).not.toContain('requireUser()')
+    }
+  })
+
+  it('batas antar-klien dinyatakan eksplisit di dua-duanya', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      expect(src, nama).toContain('canAccessClientData(')
+    }
+  })
+
+  it('pemeriksaan akses mendahului query data', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      const cek = src.indexOf('canAccessClientData(')
+      const ambil = src.indexOf('loadPostedLines(')
+      expect(cek, nama).toBeGreaterThan(-1)
+      expect(ambil, nama).toBeGreaterThan(-1)
+      expect(cek, nama).toBeLessThan(ambil)
+    }
+  })
+
+  it('akun dicari DENGAN clientId, bukan dicari lalu dibandingkan', () => {
+    // Dibandingkan sesudahnya, "akun klien lain" dan "akun tidak ada" jadi dua
+    // jawaban berbeda — dan selisihnya memberi tahu penebak bahwa id itu nyata.
+    expect(QUERIES).toContain('eq(masterCoa.clientId, clientId), eq(masterCoa.id, masterCoaId)')
+  })
+})
+
+// ══ PENJAGA BERDIRI: BUKU BESAR HANYA BERISI JURNAL TERPOSTING ═══════════
+describe('hanya baris terposting yang masuk buku besar', () => {
+  it('saringan posted ada di modul query', () => {
+    expect(QUERIES).toContain("eq(journalEntries.status, 'posted')")
+  })
+
+  it('saringannya SATU tempat — route tidak menyusun query barisnya sendiri', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      expect(src, nama).not.toContain('.from(journalLines)')
+      expect(src, nama).toContain('loadPostedLines(')
+    }
+  })
+
+  it('tidak ada jalur yang meminta status selain posted', () => {
+    expect(QUERIES).not.toContain("'draft'")
+  })
+})
+
+describe('buku besar tidak menulis apa pun', () => {
+  it('tanpa insert, update, delete, maupun batch', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      for (const needle of ['db.insert(', 'db.update(', 'db.delete(', 'db.batch(']) {
+        expect(src, nama + ' ' + needle).not.toContain(needle)
+      }
+    }
+    for (const needle of ['db.insert(', 'db.update(', 'db.delete(']) {
+      expect(QUERIES, needle).not.toContain(needle)
+    }
+  })
+})
+
+describe('urutan & saldo datang dari mesin murni, bukan dari SQL', () => {
+  it('route memakai computeRunningBalance / summarizeByAccount', () => {
+    expect(LEDGER).toContain('computeRunningBalance(')
+    expect(SUMMARY).toContain('summarizeByAccount(')
+  })
+
+  // Urutan baku (tanggal, no_bukti NULLS LAST, line_order, id) hidup di
+  // compareLedgerLines dan diuji di lib/ledger.test.ts. Kalau route menambah
+  // ORDER BY sendiri, ada dua urutan untuk satu tabel — dan yang menang
+  // tergantung siapa yang jalan belakangan.
+  it('query baris tidak punya ORDER BY sendiri', () => {
+    const potong = QUERIES.slice(QUERIES.indexOf('export async function loadPostedLines'))
+    expect(potong).not.toContain('.orderBy(')
+  })
+
+  it('saldo awal dipisah dengan perbandingan STRING tanggal, tanpa objek Date', () => {
+    expect(LEDGER).toContain('l.tanggal < periodStart')
+    expect(LEDGER).toContain('l.tanggal >= periodStart')
+    expect(LEDGER).not.toContain('new Date(')
+  })
+})
+
+describe('uang tetap sen sampai ujung', () => {
+  it('konversi ke desimal hanya lewat fromMinorUnits', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      expect(src, nama).toContain('fromMinorUnits(')
+      expect(src, nama).not.toContain('toFixed(')
+      expect(src, nama).not.toContain('Number(')
+    }
+  })
+
+  it('debit/kredit dilewatkan apa adanya — sudah string dari driver', () => {
+    expect(LEDGER).toContain('debit: r.debit')
+    expect(LEDGER).toContain('kredit: r.kredit')
+  })
+
+  it('total neraca saldo dijumlahkan dari baris yang DITAMPILKAN, bukan query kedua', () => {
+    // Dua sumber untuk angka yang seharusnya sama persis adalah cara paling
+    // mudah membuat total tidak cocok dengan rinciannya.
+    expect(SUMMARY).toContain('for (const r of ringkasan)')
+    expect(SUMMARY).toContain('totalDebit === totalKredit')
+  })
+})
+
+describe('validasi parameter', () => {
+  it('tanggal lewat isValidYmd, bukan konstruktor Date', () => {
+    for (const [src, nama] of SEMUA_ROUTE) {
+      expect(src, nama).toContain('isValidYmd(')
+    }
+  })
+
+  it('buku besar menolak periode terbalik', () => {
+    expect(LEDGER).toContain('periodEnd < periodStart')
+  })
+
+  it('neraca saldo memang tidak punya periodStart — ia keadaan satu tanggal', () => {
+    // Needle-nya pembacaan parameternya, bukan katanya: kata 'periodStart'
+    // muncul di komentar yang menjelaskan kenapa justru TIDAK ada.
+    expect(SUMMARY).not.toContain("searchParams.get('periodStart')")
+  })
+})

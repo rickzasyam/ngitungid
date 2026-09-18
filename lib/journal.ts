@@ -302,16 +302,26 @@ export function validateJournalInput(input: JournalInput): JournalCheck {
 // ── Riwayat perubahan (Fase 2, D12) ──────────────────────────
 
 /**
- * Nama peristiwa yang ditulis ke `journal_events`.
+ * Nama peristiwa jurnal yang ditulis ke `audit_events` (entity_type `journal`).
  *
- * Kolomnya `text`, BUKAN enum (D12): daftarnya tumbuh tiap fase, dan enum
- * Postgres menuntut migrasi tiap kali bertambah — pola yang sama dengan
+ * Kolom `event` bertipe `text`, BUKAN enum (D12): daftarnya tumbuh tiap fase,
+ * dan enum Postgres menuntut migrasi tiap kali bertambah — pola yang sama dengan
  * `users.currency_format`. Konstanta di sini yang menjadi daftar resminya.
  *
- * CATATAN R2 (belum diputuskan Ricko): revisi §3.3 mengusulkan tabelnya diganti
- * `audit_events` generik supaya COA dan kunci periode ikut memakainya. Sampai
- * itu diputuskan, Fase 2 memakai `journal_events` sesuai §8.5 — untung-ruginya
- * dibahas di CP-5.
+ * R2 DIAMBIL (Ricko, 2026-09-18): tabelnya `audit_events` generik, bukan
+ * `journal_events`. Yang berubah cuma tempat menulisnya; daftar nama di bawah
+ * tetap milik modul ini — lihat lib/audit.ts.
+ *
+ * ══ `deleted` TIDAK PERNAH BERTAHAN, DAN ITU BUKAN CACAT BARU ═════════════
+ * Menghapus jurnal juga menghapus seluruh event-nya (kewajiban yang menggantikan
+ * FK cascade, lihat purgeAuditEvents). Jadi event `deleted` untuk sebuah jurnal
+ * akan ikut terhapus oleh penghapusan yang melahirkannya — karena itu DELETE
+ * tidak menulisnya sama sekali, alih-alih menulis lalu membuangnya dalam batch
+ * yang sama. Rancangan `journal_events` di §8.5 pun sudah begitu: `journal_id`
+ * di sana ON DELETE CASCADE, jadi event `deleted` di sana juga tidak akan
+ * pernah punya pembaca. Namanya dipertahankan di daftar ini untuk saat riwayat
+ * penghapusan dibutuhkan — bentuknya nanti perlu tempat yang tidak ikut hilang
+ * bersama barisnya (mis. entity_id NULL, yang CHECK hari ini justru melarang).
  */
 export const JOURNAL_EVENTS = [
   'created',

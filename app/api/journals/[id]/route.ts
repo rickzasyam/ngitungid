@@ -6,8 +6,13 @@ import { journalEntries, journalLines } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { canEditJournal, validateJournalInput, JOURNAL_STATUS_LABEL } from '@/lib/journal'
-import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
-import { assertAccountsBelongToClient, loadJournalDetail } from '@/lib/api/journal-queries'
+import { dbWriteErrorResponse, isFkViolation, isUniqueViolation } from '@/lib/api/db-errors'
+import {
+  assertAccountsBelongToClient,
+  loadJournalDetail,
+  resolveUserId,
+} from '@/lib/api/journal-queries'
+import { purgeAuditEvents, recordJournalEvent } from '@/lib/api/audit'
 
 export const runtime = 'nodejs'
 
@@ -46,7 +51,9 @@ async function guard(params: Promise<{ id: string }>) {
   if (!canAccessClientData(g.user.role, g.user.clientId, row.clientId)) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
-  return { row }
+  // Usernya ikut dikembalikan: sejak Fase 2 setiap mutasi menulis riwayat, dan
+  // riwayat tanpa "oleh siapa" adalah separuh riwayat.
+  return { row, user: g.user }
 }
 
 /** Jurnal terposting tidak bisa diubah/dihapus — hanya dibalik (Fase 2, P11). */
@@ -107,6 +114,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // pola yang sama dengan PATCH kontrak. Bukan diff per baris: id baris jurnal
   // tidak punya makna di luar jurnalnya, jadi mempertahankannya tidak ada
   // gunanya dan justru menambah jalur yang bisa salah.
+  const userId = await resolveUserId(g.user.email)
+
   const statements: BatchItem<'pg'>[] = [
     db
       .update(journalEntries)
@@ -128,6 +137,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         lineOrder: l.lineOrder,
       }))
     ),
+    recordJournalEvent({
+      clientId: g.row.clientId,
+      journalId: g.row.id,
+      event: 'updated',
+      userId,
+    }),
   ]
 
   try {
@@ -149,6 +164,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 // DELETE /api/journals/[id] — hapus draf. Barisnya ikut lewat FK cascade.
+//
+// ══ RIWAYATNYA TIDAK IKUT LEWAT FK — HARUS DIHAPUS DI SINI ════════════════
+// `audit_events.entity_id` polimorfik, jadi tidak ada foreign key yang bisa
+// meng-cascade-nya (R2). Penghapusan riwayat DIGABUNG ke db.batch yang sama
+// dengan penghapusan jurnalnya: satu transaksi, dua-duanya jadi atau dua-duanya
+// batal. Kalau dilepas jadi dua await terpisah, kegagalan di antaranya
+// meninggalkan riwayat yang menunjuk jurnal yang sudah tidak ada — dan tidak
+// ada satu pun batasan database yang akan mengeluh.
+//
+// Tidak ada event `deleted` yang ditulis: ia akan terhapus oleh purge yang sama
+// dalam batch yang sama. Lihat catatan JOURNAL_EVENTS di lib/journal.ts.
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await guard(params)
   if ('error' in g) return g.error
@@ -156,9 +182,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const blocked = assertEditable(g.row.status)
   if (blocked) return blocked
 
+  const statements: BatchItem<'pg'>[] = [
+    purgeAuditEvents('journal', g.row.id),
+    db.delete(journalEntries).where(eq(journalEntries.id, g.row.id)),
+  ]
+
   try {
-    await db.delete(journalEntries).where(eq(journalEntries.id, g.row.id))
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
   } catch (e) {
+    // Jurnal yang sudah dibalik tidak bisa dihapus: reversal_of_id RESTRICT.
+    // Hanya draf yang sampai ke sini, dan draf tidak bisa punya pembalik — tapi
+    // jaringnya tetap dipasang, sama seperti hapus supplier.
+    if (isFkViolation(e)) {
+      return NextResponse.json(
+        { error: 'Jurnal ini masih dirujuk jurnal lain (jurnal balik) dan tidak bisa dihapus.' },
+        { status: 409 }
+      )
+    }
     return dbWriteErrorResponse(e, 'Gagal menghapus jurnal. Coba lagi.')
   }
 
