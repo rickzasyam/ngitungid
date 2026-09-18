@@ -332,6 +332,27 @@ export const JOURNAL_EVENTS = [
 ] as const
 export type JournalEvent = (typeof JOURNAL_EVENTS)[number]
 
+/**
+ * Label panel Riwayat.
+ *
+ * Record ber-key JournalEvent, jadi tsc yang menagih label untuk setiap nama
+ * baru — bukan layar yang menampilkan 'reversal_created' mentah ke akunting.
+ * Kolomnya di DB tetap text bebas, jadi pembacanya tetap harus punya jalan
+ * keluar untuk nilai di luar daftar (lihat labelEvent).
+ */
+export const JOURNAL_EVENT_LABEL: Record<JournalEvent, string> = {
+  created: 'Dibuat',
+  updated: 'Diubah',
+  deleted: 'Dihapus',
+  posted: 'Diposting',
+  reversal_created: 'Dibuatkan jurnal balik',
+}
+
+/** Label yang tidak pernah kosong — nilai tak dikenal ditampilkan apa adanya. */
+export function labelEvent(event: string): string {
+  return JOURNAL_EVENT_LABEL[event as JournalEvent] ?? event
+}
+
 // ── Posting & jurnal balik (Fase 2, D13) ─────────────────────
 
 /** Predikat gagal selalu membawa ALASAN — route mengembalikannya apa adanya. */

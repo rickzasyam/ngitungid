@@ -256,8 +256,8 @@
 ### 5.3 Fase 2 — Buku Besar & Posting (MP §5.A) — **DISETUJUI 2026-09-18** (D11–D13); migrasi **0014**
 - ✅ C1 `canPost`/`canReverse`/`buildReversalLines`, `lib/ledger.ts` saldo berjalan — 38 test — **CP-5 diterima Ricko 2026-09-18**
 - ✅ C2 Migrasi **0014** (`posted_at`/`posted_by`/`reversal_of_id`, `audit_events`, `journal_lines.supplier_id`); `POST /api/journals/[id]/post` & `/reverse`; `GET /api/ledger` + `/summary` (keduanya `requireAkunting`); riwayat di POST/PATCH jurnal; DELETE memurnikan event di batch yang sama — 57 test baru
-- 🔒 C3 Nav `buku-besar`
-- 🔒 C4 UI posting/balik/riwayat + halaman `/buku-besar` — ⏸ CP-6
+- ✅ C3 Nav `buku-besar` (sesudah Jurnal, `staffOnly`) + `/buku-besar` di `ACCOUNTING_ONLY_PREFIXES`; test menuntut jawaban aksesnya SAMA PERSIS dengan `/jurnal` untuk tiap role
+- ✅ C4 UI: tombol **Posting** (konfirmasi "tidak bisa diubah, hanya dibalik") & **Balik** (modal tanggal/no bukti/keterangan → draf pembalik langsung dibuka), lencana "Dibalik oleh …"/"Pembalik dari …", panel **Riwayat** di detail; halaman `/buku-besar` (pemilih akun searchable + rentang tanggal, Saldo Awal/berjalan/Saldo Akhir, klik no bukti → rincian jurnal, tab **Neraca Saldo**) — ⏸ **CP-6 menunggu uji klik Ricko**
 - 🔒 C5 ROADMAP + sync
 
 ### 5.4 Fase 2 — Master COA Bertipe (MP §5.B) — **DISETUJUI 2026-09-18** (D14); migrasi **0015**

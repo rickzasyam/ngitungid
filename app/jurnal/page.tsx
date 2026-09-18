@@ -17,6 +17,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Inbox,
@@ -25,6 +26,7 @@ import {
   Plus,
   RotateCw,
   Trash2,
+  Undo2,
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { useClient } from '@/lib/client-context'
@@ -49,6 +51,10 @@ import {
   fmtTanggal,
   type JournalDetailData,
 } from '@/components/jurnal/journal-detail'
+import {
+  JournalReverseModal,
+  type ReverseValue,
+} from '@/components/jurnal/journal-reverse-modal'
 
 interface JournalRow {
   id: string
@@ -61,6 +67,13 @@ interface JournalRow {
   createdByName: string
   totalDebit: string
   lineCount: number
+  /** Id pembalik yang SUDAH TERPOSTING — null berarti belum pernah dibalik.
+   *  Definisinya sama persis dengan canReverse di server, jadi tombol di layar
+   *  dan penolakan server tidak pernah berbeda pendapat. */
+  reversedById: string | null
+  reversedByNoBukti: string | null
+  reversalOfId: string | null
+  reversalOfNoBukti: string | null
 }
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
@@ -96,6 +109,12 @@ export default function JurnalPage() {
   const [hapusTarget, setHapusTarget] = useState<JournalRow | null>(null)
   const [hapusBusy, setHapusBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const [postingTarget, setPostingTarget] = useState<JournalRow | null>(null)
+  const [postingBusy, setPostingBusy] = useState(false)
+  const [balikTarget, setBalikTarget] = useState<JournalRow | null>(null)
+  const [balikBusy, setBalikBusy] = useState(false)
+  const [balikErrors, setBalikErrors] = useState<string[]>([])
 
   const clientId = activeClient?.id ?? null
 
@@ -156,16 +175,14 @@ export default function JurnalPage() {
     }
   }, [clientId])
 
-  async function toggleRow(row: JournalRow) {
-    if (expanded === row.id) {
-      setExpanded(null)
-      return
-    }
-    setExpanded(row.id)
+  /** Buka rincian satu jurnal. Dipakai tombol expand DAN sesudah posting /
+   *  pembalikan, supaya hasilnya (riwayat, lencana) langsung terlihat. */
+  async function bukaDetail(id: string) {
+    setExpanded(id)
     setDetail(null)
     setDetailLoading(true)
     try {
-      const res = await fetch(`/api/journals/${row.id}`)
+      const res = await fetch(`/api/journals/${id}`)
       const payload = (await res.json().catch(() => null)) as JournalDetailData | null
       setDetail(res.ok ? payload : null)
     } catch {
@@ -173,6 +190,14 @@ export default function JurnalPage() {
     } finally {
       setDetailLoading(false)
     }
+  }
+
+  async function toggleRow(row: JournalRow) {
+    if (expanded === row.id) {
+      setExpanded(null)
+      return
+    }
+    await bukaDetail(row.id)
   }
 
   function bukaBuat() {
@@ -275,6 +300,66 @@ export default function JurnalPage() {
       setActionError('Gagal menghubungi server.')
     } finally {
       setHapusBusy(false)
+    }
+  }
+
+  // ── Posting ───────────────────────────────────────────────────
+  // Konfirmasi dulu, selalu: sesudah diposting jurnal tidak bisa diubah maupun
+  // dihapus, hanya dibalik. Server memeriksa ulang seluruh syaratnya lewat
+  // canPost — tombol yang tampil di sini bukan izin, cuma jalan pintas.
+  async function posting() {
+    if (!postingTarget) return
+    const id = postingTarget.id
+    setPostingBusy(true)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/journals/${id}/post`, { method: 'POST' })
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        setActionError(payload?.error ?? 'Gagal memposting jurnal.')
+        return
+      }
+      setPostingTarget(null)
+      await muat()
+      await bukaDetail(id)
+    } catch {
+      setActionError('Gagal menghubungi server.')
+    } finally {
+      setPostingBusy(false)
+    }
+  }
+
+  // ── Jurnal balik ──────────────────────────────────────────────
+  // Barisnya disusun SERVER dari jurnal aslinya (buildReversalLines). Yang
+  // dikirim dari sini hanya tanggal, nomor bukti, dan keterangan pembaliknya.
+  async function balik(value: ReverseValue) {
+    if (!balikTarget) return
+    setBalikBusy(true)
+    setBalikErrors([])
+    try {
+      const res = await fetch(`/api/journals/${balikTarget.id}/reverse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(value),
+      })
+      const payload = (await res.json().catch(() => null)) as
+        | { id?: string; error?: string; details?: string[] }
+        | null
+      if (!res.ok) {
+        setBalikErrors(
+          payload?.details?.length ? payload.details : [payload?.error ?? 'Gagal membuat jurnal balik.']
+        )
+        return
+      }
+      setBalikTarget(null)
+      await muat()
+      // Yang dibuka adalah DRAF PEMBALIKNYA, bukan jurnal asal: pekerjaannya
+      // belum selesai — draf itu masih harus diposting.
+      if (payload?.id) await bukaDetail(payload.id)
+    } catch {
+      setBalikErrors(['Gagal menghubungi server.'])
+    } finally {
+      setBalikBusy(false)
     }
   }
 
@@ -454,6 +539,12 @@ export default function JurnalPage() {
                     {rows.map(r => {
                       const open = expanded === r.id
                       const bisaUbah = bolehTulis && canEditJournal(r.status)
+                      const bisaPosting = bolehTulis && r.status === 'draft'
+                      // "Belum dibalik" = belum punya pembalik TERPOSTING.
+                      // Pembalik yang masih draf tidak menghalangi, persis
+                      // seperti canReverse di server.
+                      const bisaBalik = bolehTulis && r.status === 'posted' && !r.reversedById
+                      const adaAksi = bisaUbah || bisaPosting || bisaBalik
                       return (
                         <Fragment key={r.id}>
                           <tr style={{ borderTop: '1px solid #f5f5f5' }}>
@@ -490,6 +581,26 @@ export default function JurnalPage() {
                               }}
                             >
                               {r.noBukti ?? '—'}
+                              {/* Lencana keterkaitan pembalik. Ditaruh di sel
+                                  nomor bukti, bukan di kolom Status: yang
+                                  ditunjuknya adalah DOKUMEN lain, bukan
+                                  keadaan jurnal ini. */}
+                              {r.reversedById && (
+                                <span
+                                  style={lencana}
+                                  title={`Dibalik oleh ${r.reversedByNoBukti ?? TANPA_NO_BUKTI}`}
+                                >
+                                  Dibalik oleh {r.reversedByNoBukti ?? TANPA_NO_BUKTI}
+                                </span>
+                              )}
+                              {r.reversalOfId && (
+                                <span
+                                  style={lencana}
+                                  title={`Pembalik dari ${r.reversalOfNoBukti ?? TANPA_NO_BUKTI}`}
+                                >
+                                  Pembalik dari {r.reversalOfNoBukti ?? TANPA_NO_BUKTI}
+                                </span>
+                              )}
                             </td>
                             <td
                               style={{
@@ -531,26 +642,54 @@ export default function JurnalPage() {
                             </td>
                             <td style={{ ...td, whiteSpace: 'nowrap' }}>{r.createdByName}</td>
                             <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                              {bisaUbah ? (
+                              {adaAksi ? (
                                 <span className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => void bukaUbah(r)}
-                                    aria-label={`Ubah jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
-                                    className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                                    style={iconBtn}
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setHapusTarget(r)}
-                                    aria-label={`Hapus jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
-                                    className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                                    style={iconBtn}
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  {bisaUbah && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => void bukaUbah(r)}
+                                        aria-label={`Ubah jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
+                                        className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                        style={iconBtn}
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setHapusTarget(r)}
+                                        aria-label={`Hapus jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
+                                        className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                        style={iconBtn}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                  {bisaPosting && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setActionError(null); setPostingTarget(r) }}
+                                      aria-label={`Posting jurnal ${r.noBukti ?? TANPA_NO_BUKTI}`}
+                                      title="Posting jurnal ini"
+                                      className="inline-flex items-center gap-1 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                      style={aksiBtn}
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Posting
+                                    </button>
+                                  )}
+                                  {bisaBalik && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setBalikErrors([]); setBalikTarget(r) }}
+                                      aria-label={`Buat jurnal balik untuk ${r.noBukti ?? TANPA_NO_BUKTI}`}
+                                      title="Buat jurnal balik"
+                                      className="inline-flex items-center gap-1 rounded-full font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                      style={{ ...aksiBtn, background: 'white', border: '1px solid #e5e7eb', color: 'var(--color-text-muted)' }}
+                                    >
+                                      <Undo2 className="w-3.5 h-3.5" /> Balik
+                                    </button>
+                                  )}
                                 </span>
                               ) : (
                                 <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
@@ -592,6 +731,85 @@ export default function JurnalPage() {
             setFormInitial(null)
             setEditingId(null)
             setFormErrors([])
+          }}
+        />
+      )}
+
+      {postingTarget && (
+        <ModalShell
+          labelledBy="jurnal-posting-title"
+          className="max-w-md"
+          onDismiss={postingBusy ? null : () => setPostingTarget(null)}
+        >
+          <div className="px-5 sm:px-6 py-5">
+            <h2
+              id="jurnal-posting-title"
+              className="text-base font-bold"
+              style={{ color: 'var(--color-text-primary)' }}
+            >
+              Posting jurnal ini?
+            </h2>
+            <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+              <strong style={{ color: 'var(--color-text-primary)' }}>
+                {postingTarget.noBukti ?? TANPA_NO_BUKTI}
+              </strong>{' '}
+              · {fmtTanggal(postingTarget.tanggal)} · {rupiah(Number(postingTarget.totalDebit))}
+            </p>
+            <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
+              <strong style={{ color: 'var(--color-text-primary)' }}>
+                Setelah diposting, jurnal tidak bisa diubah — hanya dibalik.
+              </strong>{' '}
+              Baris-barisnya masuk buku besar dan ikut menghitung saldo akun.
+            </p>
+          </div>
+          <div
+            className="flex items-center justify-end gap-2 px-5 sm:px-6 py-3.5 border-t"
+            style={{ borderColor: '#f0f0f0', background: 'white' }}
+          >
+            <button
+              type="button"
+              onClick={() => setPostingTarget(null)}
+              disabled={postingBusy}
+              className="px-4 py-2 rounded-full text-xs font-medium disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)', minHeight: 34 }}
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={() => void posting()}
+              disabled={postingBusy}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
+              style={{
+                background: 'var(--color-accent-primary)',
+                color: 'var(--color-accent-primary-fg)',
+                border: 'none',
+                minHeight: 34,
+              }}
+            >
+              {postingBusy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Memposting…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Posting
+                </>
+              )}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
+      {balikTarget && (
+        <JournalReverseModal
+          target={balikTarget}
+          submitting={balikBusy}
+          serverErrors={balikErrors}
+          onSubmit={v => void balik(v)}
+          onCancel={() => {
+            setBalikTarget(null)
+            setBalikErrors([])
           }}
         />
       )}
@@ -679,4 +897,28 @@ const iconBtn: React.CSSProperties = {
   background: 'white',
   color: 'var(--color-text-muted)',
   cursor: 'pointer',
+}
+
+// Tombol beraksara (Posting/Balik), bukan ikon telanjang: keduanya aksi yang
+// tidak bisa dibatalkan begitu saja, dan ikon tanpa label menyisakan tebakan.
+const aksiBtn: React.CSSProperties = {
+  padding: '6px 12px',
+  fontSize: 11.5,
+  minHeight: 32,
+  border: 'none',
+  background: 'var(--color-accent-primary)',
+  color: 'var(--color-accent-primary-fg)',
+  cursor: 'pointer',
+}
+
+const lencana: React.CSSProperties = {
+  display: 'inline-block',
+  marginLeft: 6,
+  borderRadius: 999,
+  padding: '1px 8px',
+  fontSize: 10.5,
+  fontWeight: 600,
+  background: 'color-mix(in srgb, var(--color-accent-secondary) 28%, white)',
+  color: 'var(--color-text-primary)',
+  verticalAlign: 'middle',
 }

@@ -4,9 +4,9 @@
 // Dipisah dari halamannya supaya page.tsx tetap soal daftar & aksi, bukan soal
 // tata letak tabel bersarang.
 
-import { Loader2 } from 'lucide-react'
+import { History, Loader2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
-import { computeTotals, TANPA_NO_BUKTI } from '@/lib/journal'
+import { computeTotals, labelEvent, TANPA_NO_BUKTI } from '@/lib/journal'
 
 export interface JournalLineRow {
   id: string
@@ -19,6 +19,21 @@ export interface JournalLineRow {
   lineOrder: number
 }
 
+export interface JournalEventRow {
+  id: string
+  event: string
+  catatan: string | null
+  at: string
+  userName: string | null
+}
+
+export interface JournalRefRow {
+  id: string
+  noBukti: string | null
+  tanggal: string
+  status?: string
+}
+
 export interface JournalDetailData {
   id: string
   tanggal: string
@@ -27,6 +42,14 @@ export interface JournalDetailData {
   createdByName: string
   createdAt: string
   lines: JournalLineRow[]
+  // ── Fase 2. Opsional supaya komponen ini tetap bisa membaca respons lama
+  //    (dan supaya tidak ada layar kosong kalau salah satu query gagal).
+  postedAt?: string | null
+  postedByName?: string | null
+  events?: JournalEventRow[]
+  reversals?: JournalRefRow[]
+  reversedBy?: JournalRefRow | null
+  reversalOf?: JournalRefRow | null
 }
 
 const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
@@ -134,9 +157,83 @@ export function JournalDetail({
         Dibuat oleh <strong style={{ color: 'var(--color-text-primary)' }}>{detail.createdByName}</strong>
         {' · '}
         {fmtWaktu(detail.createdAt)}
+        {detail.postedAt && (
+          <>
+            {' · Diposting oleh '}
+            <strong style={{ color: 'var(--color-text-primary)' }}>
+              {detail.postedByName ?? '—'}
+            </strong>
+            {' · '}
+            {fmtWaktu(detail.postedAt)}
+          </>
+        )}
       </p>
+
+      {/* Keterkaitan asli ↔ pembalik. Draf pembalik DITAMPILKAN terpisah: ia
+          belum membalik apa pun, dan menyembunyikannya membuat orang membuat
+          draf kedua tanpa tahu yang pertama masih menunggu diposting. */}
+      {(detail.reversedBy || detail.reversalOf || (detail.reversals?.length ?? 0) > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+          {detail.reversalOf && (
+            <span style={chip} title={`Jurnal aslinya ${fmtTanggal(detail.reversalOf.tanggal)}`}>
+              Pembalik dari {detail.reversalOf.noBukti ?? TANPA_NO_BUKTI}
+            </span>
+          )}
+          {detail.reversedBy && (
+            <span style={chip} title={`Dibalik pada ${fmtTanggal(detail.reversedBy.tanggal)}`}>
+              Dibalik oleh {detail.reversedBy.noBukti ?? TANPA_NO_BUKTI}
+            </span>
+          )}
+          {detail.reversals
+            ?.filter(r => r.status === 'draft')
+            .map(r => (
+              <span key={r.id} style={{ ...chip, opacity: 0.75 }}>
+                Draf pembalik {r.noBukti ?? TANPA_NO_BUKTI} — belum diposting
+              </span>
+            ))}
+        </div>
+      )}
+
+      {/* Riwayat. Append-only: yang tampil di sini tidak pernah bisa disunting
+          dari mana pun di aplikasi. */}
+      {detail.events && detail.events.length > 0 && (
+        <div className="mt-3">
+          <p
+            className="flex items-center gap-1.5 text-[11px] font-semibold mb-1.5"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            <History className="w-3.5 h-3.5" /> Riwayat
+          </p>
+          <ol className="flex flex-col gap-1" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {detail.events.map(e => (
+              <li
+                key={e.id}
+                className="text-[11px] flex flex-wrap items-baseline gap-x-1.5"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  {labelEvent(e.event)}
+                </span>
+                <span>{fmtWaktu(e.at)}</span>
+                <span>· {e.userName ?? 'pengguna yang sudah dihapus'}</span>
+                {e.catatan && <span>· {e.catatan}</span>}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   )
+}
+
+const chip: React.CSSProperties = {
+  display: 'inline-block',
+  borderRadius: 999,
+  padding: '2px 10px',
+  fontSize: 11,
+  fontWeight: 600,
+  background: 'color-mix(in srgb, var(--color-accent-secondary) 28%, white)',
+  color: 'var(--color-text-primary)',
 }
 
 const th: React.CSSProperties = {

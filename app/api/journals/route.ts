@@ -74,6 +74,29 @@ export async function GET(req: Request) {
       createdByName: users.name,
       totalDebit: sql<string>`coalesce(sum(${journalLines.debit}), 0)::numeric(18,2)::text`,
       lineCount: sql<number>`count(${journalLines.id})::int`,
+      // ── Keterkaitan pembalik (Fase 2) ─────────────────────────
+      // Subquery berkorelasi, bukan self-join: join kedua ke tabel yang sama
+      // akan melipatgandakan baris sebelum GROUP BY, dan totalDebit di atas
+      // ikut berlipat. Kesalahan seperti itu tidak melempar — ia cuma membuat
+      // angka di layar salah.
+      //
+      // Dipilih `status = 'posted'`: pembalik yang masih draf belum masuk buku
+      // besar, jadi jurnalnya belum terbalik. Definisi yang sama persis dengan
+      // canReverse, supaya tombol di layar dan penolakan server tidak pernah
+      // berbeda pendapat.
+      reversedById: sql<string | null>`(
+        select rev.id from journal_entries rev
+        where rev.reversal_of_id = ${journalEntries.id} and rev.status = 'posted' limit 1
+      )`,
+      reversedByNoBukti: sql<string | null>`(
+        select rev.no_bukti from journal_entries rev
+        where rev.reversal_of_id = ${journalEntries.id} and rev.status = 'posted' limit 1
+      )`,
+      reversalOfId: journalEntries.reversalOfId,
+      reversalOfNoBukti: sql<string | null>`(
+        select asli.no_bukti from journal_entries asli
+        where asli.id = ${journalEntries.reversalOfId}
+      )`,
     })
     .from(journalEntries)
     .innerJoin(users, eq(journalEntries.createdBy, users.id))

@@ -17,6 +17,7 @@ const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
 const LEDGER = read('app', 'api', 'ledger', 'route.ts')
 const SUMMARY = read('app', 'api', 'ledger', 'summary', 'route.ts')
 const QUERIES = read('lib', 'api', 'ledger-queries.ts')
+const HALAMAN = read('app', 'buku-besar', 'page.tsx')
 
 const SEMUA_ROUTE = [
   [LEDGER, 'buku besar'],
@@ -144,5 +145,36 @@ describe('validasi parameter', () => {
     // Needle-nya pembacaan parameternya, bukan katanya: kata 'periodStart'
     // muncul di komentar yang menjelaskan kenapa justru TIDAK ada.
     expect(SUMMARY).not.toContain("searchParams.get('periodStart')")
+  })
+})
+
+// ══ PENJAGA BERDIRI: HALAMAN TIDAK MENGHITUNG SALDO ══════════════════════
+// Saldo datang JADI dari server, dihitung di sen bulat oleh lib/ledger.ts. Dua
+// tempat yang menghitung saldo berarti dua jawaban yang bisa berbeda — dan yang
+// di layar yang akan dipercaya orang.
+describe('halaman /buku-besar menampilkan, tidak menghitung', () => {
+  it('tidak menjumlahkan debit/kredit sendiri', () => {
+    for (const needle of ['reduce(', 'computeRunningBalance(', 'summarizeByAccount(']) {
+      expect(HALAMAN, needle).not.toContain(needle)
+    }
+  })
+
+  it('tidak memakai objek Date untuk tanggal kalender', () => {
+    // Satu-satunya `new Date` yang sah adalah penentu akhir bulan di
+    // bulanBerjalan(), pola yang sama dengan /jurnal.
+    expect((HALAMAN.match(/new Date\(/g) ?? []).length).toBe(1)
+    expect(HALAMAN).toContain('new Date(y, m, 0).getDate()')
+  })
+
+  it('memakai fmtTanggal bersama, bukan pemformat tanggal sendiri', () => {
+    expect(HALAMAN).toContain('fmtTanggal(')
+    expect(HALAMAN).not.toContain('toLocaleDateString(')
+  })
+
+  it('saldo awal SELALU dirender, termasuk saat nol', () => {
+    // Baris yang hilang saat nol membuat "memang nol" tidak bisa dibedakan
+    // dari "belum dihitung".
+    expect(HALAMAN).toContain('Saldo awal per')
+    expect(HALAMAN).not.toContain('Number(ledger.opening) !== 0 &&')
   })
 })
