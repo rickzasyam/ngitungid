@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
 **Last Updated:** 2026-09-16
-**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja) · **Phase 5 Mesin Akuntansi & Jurnal Manual: Fase 1 SELESAI di dev 2026-09-16** (Jurnal Umum + Master Data Supplier; A8 dibatalkan). Belum dirilis ke produksi — lihat "Checklist rilis Phase 5 Fase 1". Fase 2 menunggu D11–D15
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja) · **Phase 5 Mesin Akuntansi & Jurnal Manual: Fase 1 SELESAI di dev 2026-09-16** (Jurnal Umum + Master Data Supplier; A8 dibatalkan). Belum dirilis ke produksi — lihat "Checklist rilis Phase 5 Fase 1". **Fase 2 C1–C4 ter-commit 2026-09-18 (CP-6 menunggu uji klik); perubahan konsep 2026-09-19 menambah tiga modul (Pembelian, Mutasi Kas/Bank, Monitoring Hutang) yang menunggu jawaban D27–D45**
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -218,16 +218,31 @@
 
 ## Phase 5 — Mesin Akuntansi & Jurnal Manual
 
-**Status:** DISETUJUI Ricko 2026-09-15 (keputusan D0–D10, Fase 1). Belum ada satu baris kode pun. Keputusan Fase 2–4 (D11–D26) **menunggu** — wajib dijawab Ricko sebelum fase terkait dimulai.
+**Status:** Fase 1 (5.1, 5.2) **selesai di dev**; Fase 2 langkah C1–C4 (5.3) **ter-commit, CP-6 menunggu uji klik**. Migrasi 0010–0014 ada di dev, **belum ada yang naik ke produksi**.
+
+> ### 🆕 Perubahan konsep Ricko — 2026-09-19
+>
+> **Tujuan bisnis:** melacak hutang usaha ke supplier dari pembelian sampai lunas, dengan jurnal yang terbentuk otomatis sehingga akunting tidak menginput dua kali.
+>
+> Tiga modul baru masuk Fase 2 — **5.5 Laporan Pembelian**, **5.6 Mutasi Kas/Bank**, **5.7 Monitoring Hutang** — dan **5.8 Rekonsiliasi dirancang ulang**. Ia juga **membatalkan G1–G5 (Impor Bank, MP §6.A)**, yang diserap 5.6.
+>
+> **Urutan yang disetujui Ricko:** `C5` → `5.4 E1–E5` → `5.5 M1–M8` → `5.6 N1–N7` → `5.7 U1–U5` → `5.8 F1–F5`.
+> **E1–E5 wajib lebih dulu** karena 5.6 memilih akun kas dari COA bertanda `is_kas`, dan `is_kas` baru lahir di migrasi 0015.
+>
+> **Keputusan 2026-09-20 — Ricko menyetujui:** **D28** (subtotal baris disimpan) · **D30** (snapshot akun hutang ke invoice) · **D40** (FIFO bawaan **+ penimpaan pencocokan manual oleh akunting**) · **D41** (rancang ulang F1–F4) · **D42** (**bawaan `FALSE` — posting permanen**, mitigasi tetap wajib) · **D45** (finance melihat `/hutang` tanpa `/jurnal` & `/buku-besar`) · pembatalan G1–G5 & CP-9 · penundaan `bank_mapping_rules` · penomoran CP tidak diubah.
+>
+> **Masih menunggu: D27, D29, D31–D39, D43, D44** — modul baru tidak dimulai sebelum itu dijawab. Rinciannya, beserta kotak konsekuensi D42 dan risiko rilis 0019 (DROP termin supplier), ada di **MP §3.4, §3.5, §8.14, §12**.
+
+Keputusan Fase 3–4 lama (D16–D26) tetap **menunggu**.
 **Plan teknis — WAJIB dibaca seluruhnya sebelum menyentuh apa pun:** `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md` (selanjutnya "MP").
 **Sumber:** PRD di server NgodingPakeAI — workspace `a3bbf493-5431-4bef-8065-e48c37e9a752`, plan `e2cbb3a7-5976-43dd-937a-5bec14f6c35c`, 214 task. **Katalog lengkap + pemetaan tiap task ke langkah MP: `docs/plans/ngodingpakeai-tasks-214.md`** — 124 kerja baru (F01–F08 + F15) dan **90 task (F09–F14) yang mendeskripsikan fitur yang SUDAH ADA: verifikasi lalu `task complete`, jangan bangun ulang**. Task dikerjakan **satu per satu** lewat `npx --yes ngodingpakeai task next --plan e2cbb3a7-5976-43dd-937a-5bec14f6c35c --json` (izin `Bash(npx --yes ngodingpakeai:*)` sudah ada di `.claude/settings.local.json`).
 
 ### 5.0 Mulai di sini — protokol agen pelaksana
 1. Baca `CLAUDE.md` → bagian ini → MP §0–§3 seluruhnya → baru MP §4.
 2. `npx --yes ngodingpakeai login --token <token dari Ricko>` bila belum; `plan get` sekali untuk PRD.
-3. Urutan eksekusi (MP §1): **§4.A → §4.B → §5.A → §5.B → §5.C → §7.B → §6.A → §6.B → §6.C → §7.A → §7.C.** Nomor fase vendor di `task next` ≠ nomor fase PRD — petakan lewat **nama fitur** (MP §9).
+3. Urutan eksekusi (MP §1, **diperbarui 2026-09-19**): **§4.A ✅ → §4.B ✅ → §5.A (C1–C4 ✅, C5 sisa) → §5.B → §5.D Pembelian → §5.E Mutasi Kas/Bank → §5.F Monitoring Hutang → §5.C Rekonsiliasi → §7.B → ~~§6.A~~ (dibatalkan) → §6.B → §6.C → §7.A → §7.C.** Nomor fase vendor di `task next` ≠ nomor fase PRD — petakan lewat **nama fitur** (MP §9).
 4. Tiap langkah: modul murni + test → route → UI (bukan frontend-dulu-mock — D0). Task "(mock)" dipenuhi oleh UI di atas data nyata.
-5. **Berhenti** di setiap ⏸ checkpoint (MP §10, 15 buah) dan di checkpoint vendor (ganti `layer` / naik `phase.current`). Lapor, tunggu "lanjut".
+5. **Berhenti** di setiap ⏸ checkpoint (MP §10 — 17 buah: CP-1…CP-8, CP-10…CP-18; **CP-9 dibatalkan**) dan di checkpoint vendor (ganti `layer` / naik `phase.current`). Lapor, tunggu "lanjut". **Nomor CP ≠ urutan eksekusi** — CP-16–CP-18 dikerjakan sebelum CP-8 dan CP-10+; nomornya sengaja tidak disusun ulang karena CP-5/CP-6 sudah dirujuk dari komentar kode dan pesan commit.
 6. Setelah tiap langkah: baris log di tabel Decisions & Notes (faktual, tanpa "approved") + `graphify update .`. Setelah Ricko commit: `sync --if-changed --plan` (metadata, aman) → tulis ringkasan berkas di `pending.json` ke `summaries.json`. **Jangan `sync` final (unggah ringkasan) di tengah siklus** — aturan keras vendor: hanya saat semua task plan selesai atau Ricko meminta.
 7. Batasan: eslint **24 warning** tetap; tsc/vitest hijau; **pnpm**; cek `.env.local` (dev vs main) sebelum `db:*`; migrasi ke main **hanya Ricko**; `lib/auth.ts`/`proxy.ts`/`app/login/page.tsx`/`login-rate-limit*`/`account/password` **tidak disentuh**; hanya Ricko yang menyetujui; jangan commit tanpa diminta.
 8. Task yang tidak cocok ke langkah MP mana pun → **berhenti dan tanya**, jangan mengarang.
@@ -267,26 +282,66 @@
 - 🔒 E4 UI form COA + "Isi tipe dari berkas" + dampak — ⏸ CP-7
 - 🔒 E5 ROADMAP + sync
 
-### 5.5 Fase 2 — Rekonsiliasi Hutang Supplier (MP §5.C) — **DISETUJUI 2026-09-18** (D15); kolom di migrasi **0014**
-- 🔒 F1 `journal_lines.supplier_id` — **kolomnya sudah ada sejak migrasi 0014** (C2); sisa F1 = `validateJournalInput` menerima `supplierId`, hanya pada baris akun hutang, DELETE supplier menolak bila dirujuk
-- 🔒 F2 `lib/supplier-reconciliation.ts`
-- 🔒 F3 `GET /api/clients/[id]/suppliers/reconciliation`
-- 🔒 F4 UI di tab Supplier + pemilih supplier di form jurnal — ⏸ CP-8
+### 5.5 Fase 2 — **Laporan Pembelian** 🆕 (MP §5.D) — **menunggu D27–D34**
+
+> **Modul baru, perubahan konsep Ricko 2026-09-19.** Pintu masuk tujuan bisnisnya: hutang lahir di sini dan jurnalnya terbentuk otomatis, sehingga akunting tidak menginput dua kali.
+> Header invoice: tanggal · supplier (wajib) · no. invoice vendor · cara bayar Kredit/Tunai · **satu akun COA tujuan, bebas akun apa pun** (persediaan, beban jasa, dll) · akun kas (bila Tunai) · jumlah termin · jatuh tempo akhir (bila Kredit) · PPN opsional terpisah · keterangan. Baris barang = **teks bebas**, tanpa master barang.
+
+- 🔒 M1 Migrasi **0016** (`ADD VALUE` saja: `journal_source` += `pembelian`,`mutasi_kas`; `audit_entity_type` += `purchase_invoice`,`cash_mutation`) + **0017** (`client_accounting_settings`, `purchase_invoices`, `purchase_invoice_lines`, `audit_events += nilai_sebelum/nilai_sesudah`, `master_supplier += bank_nama/bank_rekening/bank_atas_nama`)
+- 🔒 M2 `lib/termin.ts` murni + test — **jadwal termin DITURUNKAN, tidak disimpan**; bagi rata mundur dari jatuh tempo akhir, **sisa sen di cicilan TERAKHIR**, tanggal sebagai string YMD, akhir bulan dikepit
+- 🔒 M3 `lib/purchase.ts` murni + test — `validatePurchaseInvoice`, `computeInvoiceTotals` (sen bulat), `buildPurchaseJournalLines` **atas daftar komponen** (supaya ongkir/diskon kelak jadi elemen baru, bukan pembongkaran)
+- 🔒 M4 Route `GET/POST /api/purchase-invoices`, `GET/PATCH/DELETE /api/purchase-invoices/[id]` — baca `requireInternal`, tulis `requireAkunting`; jurnal draf lahir/berubah/terhapus **di `db.batch` yang sama**; supplier tanpa akun hutang → **409 ke Settings**
+- 🔒 M5 `buildReplacePlan` diperluas (P14) — 5 kolom perujuk `master_coa` baru
+- 🔒 M6 Nav `pembelian` + flag baru **`internalOnly`** + `/pembelian` di `INTERNAL_ONLY_PREFIXES`
+- 🔒 M7 UI `/pembelian` — daftar, form header+baris, pratinjau jadwal termin & jurnal — ⏸ **CP-16**
+- 🔒 M8 ROADMAP + sync
+
+### 5.6 Fase 2 — **Mutasi Kas/Bank** 🆕 (MP §5.E) — **menunggu D35–D38** · **menggantikan MP §6.A**
+
+> Mutasi tiap akun kas (bank, marketplace, kas kecil, kas besar, lainnya). **Daftar akunnya dari COA bertanda `is_kas`** — karena itu 5.4 (E1–E3) wajib selesai lebih dulu. Input manual **atau** unggah CSV rekening koran dengan pemetaan kolom; PDF menyusul.
+> Tiap baris diberi **(a)** alokasi ke invoice hutang (boleh beberapa invoice, boleh sebagian) → jurnal D hutang / K kas, atau **(b)** COA lawan bebas → jurnal D/K lawan vs kas. Baris tanpa keduanya berstatus **"belum dijurnal"** dan tampil jelas.
+
+- 🔒 N1 Migrasi **0018**: `cash_mutation_imports`, `cash_mutations`, `cash_mutation_allocations` (termasuk `termin_urutan integer NULL` — D40)
+- 🔒 N2 `lib/cash-mutation.ts` murni + test — validasi, fingerprint, sisa alokasi & status **turunan**, pembangun jurnal untuk kedua kasus
+- 🔒 N3 `lib/csv/mutasi-kas.ts` murni + test — alias header + pemetaan kolom manual, **tanpa regex** (D22)
+- 🔒 N4 Route daftar/manual/impor(`dryRun`)/alokasi — baca `requireInternal`, tulis `requireAkunting`; batas Σ alokasi ≤ nominal mutasi **dan** ≤ sisa invoice ditegakkan server
+- 🔒 N5 Nav `mutasi-kas` + `INTERNAL_ONLY_PREFIXES` + `buildReplacePlan` diperluas (3 kolom)
+- 🔒 N6 UI `/mutasi-kas` — pemilih akun kas, wizard impor CSV, panel alokasi dengan **pemilih cicilan opsional** (bawaan "Otomatis (FIFO)", pilihan manual diberi tanda) — ⏸ **CP-17**
+- 🔒 N7 ROADMAP + sync
+
+### 5.7 Fase 2 — **Monitoring Hutang** 🆕 (MP §5.F) — **menunggu D39–D40**
+
+> Menu **`/hutang`**, sejajar Jurnal & Buku Besar — **bukan di Settings**. Semua angkanya diturunkan dari invoice + alokasi; tanpa tabel saldo, tanpa kolom status (P3/P4).
+
+- 🔒 U1 `lib/hutang.ts` murni + test — sisa per invoice, **alokasi ke cicilan: FIFO bawaan + penimpaan manual** (berpaku dulu, luberan FIFO, paku yatim jatuh ke FIFO + ditandai), ember umur (belum jatuh tempo · 1–30 · 31–60 · 61–90 · >90), ringkasan per supplier
+- 🔒 U2 Route `GET /api/hutang/aging`, `/suppliers`, `/suppliers/[id]`, `/jatuh-tempo` — `requireInternal`
+- 🔒 U3 Nav `hutang` + `INTERNAL_ONLY_PREFIXES`
+- 🔒 U4 UI `/hutang` — kartu umur hutang, daftar cicilan mendekati jatuh tempo, per supplier + detail, ekspor — ⏸ **CP-18**
+- 🔒 U5 ROADMAP + sync
+
+### 5.8 Fase 2 — Rekonsiliasi Hutang Supplier (MP §5.C) — 🔄 **DIRANCANG ULANG 2026-09-19** (D41)
+
+> **Membatalkan rancangan lama.** Sumber datanya berpindah: sisa hutang per supplier kini datang dari **invoice − alokasi** (Modul 1+2), bukan dari `journal_lines.supplier_id`. Rekonsiliasi = **sisa per supplier vs saldo akun hutang di Neraca** (lewat `lib/financial-agg.ts`, P5).
+
+- 🔒 F1 `journal_lines.supplier_id` — kolomnya sudah ada sejak 0014; **turun prioritas** (D41): kini untuk jurnal **manual** yang menyentuh akun hutang di luar modul pembelian, sebagai penjelas selisih
+- 🔒 F2 `lib/hutang-reconciliation.ts` — ~~`lib/supplier-reconciliation.ts`~~ (tidak jadi dibuat)
+- 🔒 F3 `GET /api/hutang/reconciliation?clientId&asOf` — ~~`/api/clients/[id]/suppliers/reconciliation`~~; `requireInternal`
+- 🔒 F4 UI bagian "Rekonsiliasi" di **`/hutang`** — ~~di tab Supplier~~ (D44) — ⏸ CP-8
 - 🔒 F5 ROADMAP + sync
 
-### 5.6 Fase 4 (dimajukan, D26) — Kunci Periode (MP §7.B) — menunggu D17, D26
+### 5.9 Fase 4 (dimajukan, D26) — Kunci Periode (MP §7.B) — menunggu D17, D26 · **naik prioritas sejak D42**
 - 🔒 K1 `lib/period-lock.ts` (`isDateLocked`)
 - 🔒 K2 Semua route penulis jurnal menolak 409 bila terkunci; `canPost` memakai kunci nyata
 - 🔒 K3 `GET/POST /api/period-locks`, `DELETE` (owner + alasan → events)
 - 🔒 K4 Tab Settings "Pembukuan" — kunci/buka + peringatan — ⏸ CP-13
 - 🔒 K5 ROADMAP + sync
 
-### 5.7 Fase 3 — Impor Bank (MP §6.A) · Marketplace (§6.B) · Kas Kecil (§6.C) — menunggu D20–D23
-- 🔒 G1–G5 Impor mutasi bank: parser alias + pemetaan kolom manual, fingerprint duplikat, aturan `contains`/`startsWith`, jadikan draf jurnal — ⏸ CP-9
+### 5.10 Fase 3 — ~~Impor Bank~~ · Marketplace (MP §6.B) · Kas Kecil (§6.C) — menunggu D20–D23
+- ❌ ~~G1–G5 Impor mutasi bank~~ — **DIBATALKAN 2026-09-19, diserap 5.6 Mutasi Kas/Bank.** Fiturnya sama (CSV, pemetaan kolom, duplikat, jadikan jurnal); Modul 2 menambahkan alokasi ke invoice hutang. Alias header, fingerprint, dan larangan regex (D22) **pindah** ke N3; **aturan pemetaan otomatis `contains`/`startsWith` DITUNDA**, bukan dibatalkan. ⏸ ~~CP-9~~ → pemeriksaannya di CP-17
 - 🔒 H1–H5 Marketplace: settlement bruto/fee/pajak/net, pratinjau jurnal, akun dipilih pengguna (pajak = keputusan akuntansi) — ⏸ CP-10
 - 🔒 I1–I5 Kas kecil imprest: dana tetap, pengeluaran, isi kembali → jurnal, rekap — ⏸ CP-11
 
-### 5.8 Fase 4 — Saldo Awal (MP §7.A) · Laporan dari Jurnal (§7.C) — menunggu D16, D18, D19
+### 5.11 Fase 4 — Saldo Awal (MP §7.A) · Laporan dari Jurnal (§7.C) — menunggu D16, D18, D19
 - 🔒 J1–J3 Saldo awal = jurnal `opening_balance`, tab "Pembukuan" — ⏸ CP-12
 - 🔒 L1 `lib/reports/from-journal.ts` — **aturan tanda per kategori (MP §7.C) + golden test vs fixture ekstraksi** — ⏸ CP-14 review akuntansi
 - 🔒 L2 `resolveReportSource` (jurnal terposting menang, else PDF)
@@ -294,7 +349,7 @@
 - 🔒 L4 Lencana "Dari jurnal/PDF" — ⏸ CP-15
 - 🔒 L5 ROADMAP + sync
 
-### 5.9 Keputusan (rincian & alasan di MP §3)
+### 5.12 Keputusan (rincian & alasan di MP §3)
 | D | Ringkas | Status |
 |---|---|---|
 | D0 | Urutan skema → murni+test → route → UI | ✅ disetujui 2026-09-15 |
@@ -323,11 +378,40 @@
 | D23 | `journal_source` bertambah via ADD VALUE tulis tangan per fase | ⏳ |
 | D24 | Timestamp tabel baru `withTimezone` | ⏳ |
 | D25 | Halaman/tab baru & aksesnya (semua staf) | ⏳ |
-| D26 | Kunci periode dimajukan sebelum Fase 3 | ⏳ |
+| D26 | Kunci periode dimajukan sebelum Fase 3 | ⏳ — **naik prioritas sejak D42** |
+| **D27** | Skema `purchase_invoices` + `purchase_invoice_lines`; **total invoice TIDAK disimpan** (turunan) | ⏳ **BARU 2026-09-19** |
+| **D28** | **`subtotal` per baris DISIMPAN** (pengecualian sadar atas D27) — qty boleh pecahan, jadi `qty × harga` punya pembulatan; rupiah baris itulah faktanya | ✅ **disetujui 2026-09-20** |
+| **D29** | `no_invoice` nullable, unik per (klien, supplier) **hanya bila terisi**; kosong = NULL bukan `''` | ⏳ BARU |
+| **D30** | Invoice **menyimpan akun yang dipakainya** (hutang/PPN/tujuan/kas) sebagai **snapshot** — bukan dibaca ulang dari supplier saat pembayaran | ✅ **disetujui 2026-09-20** |
+| **D31** | Jurnal otomatis lahir **draf**, satu per invoice; invoice diubah/dihapus → jurnalnya ikut, **satu `db.batch`** | ⏳ BARU |
+| **D32** | Jurnal bersumber modul (`pembelian`, `mutasi_kas`) **tidak bisa diubah/dihapus dari `/jurnal`** — koreksinya lewat dokumen asalnya | ⏳ BARU |
+| **D33** | Akun **PPN Masukan = setelan per klien** (`client_accounting_settings`); PPN diisi tapi setelan kosong → **tolak 409 ke Settings** | ⏳ BARU |
+| **D34** | **Jadwal termin DITURUNKAN**: bagi rata mundur dari jatuh tempo akhir, **sisa sen di cicilan TERAKHIR**, tanggal string YMD. Penyesuaian per cicilan disiapkan tempatnya, tidak dibangun sekarang | ⏳ BARU |
+| **D35** | `cash_mutations` + `cash_mutation_imports` + `cash_mutation_allocations` — **menggantikan `bank_imports`/`bank_import_rows`/`bank_mapping_rules`** | ⏳ BARU |
+| **D36** | Mutasi memakai `debit`/`kredit` dengan CHECK yang sama dengan `journal_lines`; untuk akun kas **debit = uang masuk** | ⏳ BARU |
+| **D37** | Satu mutasi boleh dialokasikan ke **beberapa** invoice; **alokasi sebagian** diperbolehkan; sisa & status **diturunkan** | ⏳ BARU |
+| **D38** | Duplikat impor CSV = fingerprint sebagai **PERINGATAN**, bukan unique constraint — dua pembayaran identik sehari itu nyata | ⏳ BARU |
+| **D39** | Menu **`/hutang`** sejajar Jurnal & Buku Besar, **bukan** di Settings; seluruh angkanya turunan | ⏳ BARU |
+| **D40** | **FIFO sebagai bawaan, DAN akunting bisa menimpa pencocokan manual** lewat `cash_mutation_allocations.termin_urutan` (NULL = FIFO, terisi = dipaku ke cicilan ke-N) | ✅ **disetujui 2026-09-20 dengan tambahan penimpaan manual** |
+| **D41** | **F1–F4 dirancang ulang**: rekonsiliasi = sisa per supplier (invoice − alokasi) vs saldo akun hutang di Neraca. `journal_lines.supplier_id` **turun pangkat** jadi penjelas selisih | ✅ **disetujui 2026-09-20** |
+| **D42** | Setelan per klien "posting bisa diedit", **bawaan `FALSE` (posting permanen)**, dinyalakan per klien; setiap perubahan wajib `audit_events` dengan `nilai_sebelum`/`nilai_sesudah`; **kunci periode mengalahkannya**; ketiga mitigasi **wajib menyertai** | ✅ **disetujui 2026-09-20 — bawaan FALSE.** Alasan Ricko: angka yang sudah diserahkan ke klien tidak boleh berubah diam-diam |
+| **D43** | `master_supplier`: **DROP `termin_pembayaran`**, ADD `bank_nama`/`bank_rekening`/`bank_atas_nama` | ⏳ BARU — **satu-satunya migrasi non-aditif** |
+| **D44** | Tab Settings Supplier tetap **data induk saja**; saldo & detail transaksi pindah ke `/hutang` | ⏳ BARU |
+| **D45** | `/pembelian`, `/mutasi-kas`, `/hutang` → **`INTERNAL_ONLY_PREFIXES`** + flag nav baru `internalOnly`; baca `requireInternal`, tulis `requireAkunting`. **Konsekuensi: finance melihat `/hutang` tapi TIDAK `/jurnal` maupun `/buku-besar`** | ✅ **disetujui 2026-09-20** |
 | R1–R11 | Revisi dari spesifikasi ekspor 214 task (MP §3.3): R1 saran AI ≤3 pasangan sebagai daftar; R2 `journal_events` → **`audit_events`** generik (jurnal, COA, kunci periode); R3 kas kecil **jurnal-per-transaksi**, tabel `petty_cash_expenses` dihapus; **R4 dijawab Ricko 2026-09-15: finance boleh LIHAT saja** (baca `requireInternal`, tulis tetap `requireAkunting`; tab masuk `FINANCE_VISIBLE_TABS`, read-only); R5 halaman **`/laporan-keuangan`** + endpoint statements; R6–R11 penyelarasan detail | R4 ✅ · R1–R3, R5–R11 ⏳ menunggu |
 
-### 5.10 Skema baru (ringkas — rincian MP §8)
-`journal_entries`, `journal_lines`, `master_supplier` (F1) · `journal_events`, kolom posting/reversal/`supplier_id`, `master_coa.tipe_akun`+`is_kas` (F2) · `bank_imports`, `bank_import_rows`, `bank_mapping_rules`, `marketplace_settlements`, `petty_cash_funds`, `petty_cash_expenses` (F3) · `period_locks` (F4). Enum: `journal_status`, `journal_source` (+nilai per fase), `account_type`. **Setiap tabel baru yang merujuk `master_coa` wajib ditambahkan ke `buildReplacePlan`** (MP §8.15).
+### 5.13 Skema baru (ringkas — rincian MP §8)
+**Sudah ada (0010–0014, dev):** `journal_entries`, `journal_lines`, `master_supplier`, **`audit_events`** (generik — R2, bukan `journal_events`), kolom posting/reversal/`supplier_id`.
+
+**Fase 2 berikutnya:** `master_coa.tipe_akun`+`is_kas` (0015) · 🆕 `client_accounting_settings`, `purchase_invoices`, `purchase_invoice_lines`, `audit_events.nilai_sebelum/nilai_sesudah`, `master_supplier.bank_*` (0017) · 🆕 `cash_mutations`, `cash_mutation_imports`, `cash_mutation_allocations` (0018) · ⚠️ **DROP `master_supplier.termin_pembayaran` (0019 — satu-satunya migrasi non-aditif)**.
+
+**Fase 3–4:** `period_locks` (0020) · `marketplace_settlements` (0021) · `petty_cash_funds` (0022). ❌ Dibatalkan: `bank_imports`, `bank_import_rows`, `petty_cash_expenses`. ⏸ Ditunda: `bank_mapping_rules`.
+
+**Enum:** `journal_status` · `journal_source` (+`pembelian`,`mutasi_kas` di 0016) · `audit_entity_type` (+`purchase_invoice`,`cash_mutation` di 0016) · `account_type` (0015) · 🆕 `purchase_payment_method` (0017).
+
+**Urutan migrasi mengikat** (MP §8.14): **0016 hanya `ADD VALUE`** dan wajib sebelum 0017/0018 — nilai enum baru tidak boleh dipakai di transaksi yang sama (P8, preseden 0007).
+
+**Setiap tabel baru yang merujuk `master_coa` wajib ditambahkan ke `buildReplacePlan`** (MP §8.15) — perujuknya bertambah dari **2 menjadi 8** akibat perubahan 2026-09-19.
 
 ---
 
@@ -504,6 +588,13 @@
 | 2026-09-18 | **Fase 2 DISETUJUI: D11, D12, D13, D14, D15.** Migrasi Fase 2 jadi **0014** (posting/events/`supplier_id`) dan **0015** (`account_type`) — MP §5.0 menulis 0012/0013 yang sudah terpakai Fase 1; MP §8.14 memang menyatakan nomor mengikuti urutan penerapan nyata. **R2 (`journal_events` → `audit_events` generik) BELUM diputuskan** — Fase 2 memakai **`journal_events` sesuai §8.5** untuk sekarang, dan untung-ruginya R2 dijelaskan di CP-5 supaya Ricko memutuskan di sana | R2 menyentuh bentuk tabel yang akan langsung dipakai C2, jadi memutuskannya belakangan berarti satu migrasi tambahan kalau berubah — itu ditukar dengan tidak mengunci bentuk tabel sebelum untung-ruginya terlihat pada kode nyata |
 | 2026-09-18 | **Lima keputusan Ricko atas konflik Fase 1 ↔ MP §5 — penyimpangan/penambahan yang MENGALAHKAN MP.** **(1) Jurnal balik dari jurnal tanpa nomor bukti → `no_bukti` pembalik juga NULL.** MP C2 menyarankan default `REV-<asli>`; itu pecah kalau asli NULL, dan mengarang penanda berarti membuat nomor bukti palsu yang tidak menunjuk dokumen apa pun. Keterkaitan asli↔pembalik dijaga kolom `reversal_of_id`, bukan konvensi penamaan. **(2) Urutan buku besar = `tanggal, no_bukti NULLS LAST, line_order, id`.** MP C1 hanya menulis tiga kunci pertama; dengan `no_bukti` NULL (Fase 1) urutannya jadi bergantung default DB, dan `id` di ujung membuatnya deterministik saat sisanya seri. Wajib dikunci test bahwa hasilnya stabil ketika ada NULL. **(3) `GET /api/ledger` = `requireAkunting`,** bukan `requireUser` seperti MP C2 — `/buku-besar` staffOnly persis seperti `/jurnal`, jadi alasan yang sudah diterima di A4 berlaku sama. **(4) Rekonsiliasi F3 = `requireInternal` untuk baca** (bukan `requireUser`), dan `requireAkunting` untuk tulis bila kelak ada — konsisten R4. **(5) `tipe_akun`/`is_kas` WAJIB dibawa by kode saat ganti-massal Master COA.** MP E3 tidak menyebutnya, padahal ganti-massal adalah delete-all + insert-all: tanpa ini, tipe akun yang diisi manual HILANG SENYAP setiap Excel diimpor ulang tanpa kolom itu. Diperlakukan seperti perujuk lain di `buildReplacePlan`. **E3 belum selesai tanpa test regresi**: isi `tipe_akun`, ganti Excel tanpa kolom itu, nilainya harus bertahan | Kelimanya lahir dari keputusan Fase 1 yang belum ada saat MP ditulis (NULL `no_bukti`, `lower(nama)`, `requireAkunting` untuk baca jurnal, sel kosong impor tidak menghapus). Pola yang sama di kelimanya: **jangan mengarang nilai, dan jangan membuang data yang tidak diminta siapa pun untuk dibuang** |
 | 2026-09-18 | **C1 selesai — predikat posting/balik di `lib/journal.ts` + `lib/ledger.ts` baru, +38 test.** Ditambahkan ke `journal.ts`: `JOURNAL_EVENTS` (text, bukan enum — D12), `canPost`, `canReverse`, `buildReversalLines`, `defaultReversalNoBukti`. Baru: `lib/ledger.ts` dengan `normalSign`, `compareLedgerLines`, `computeRunningBalance`, `summarizeByAccount` — semuanya murni, seluruh saldo **INTEGER SEN** dan konversi ke rupiah hanya di titik tampil | **Keputusan-2 diterapkan dan dikunci:** urutan baku buku besar `tanggal, no_bukti NULLS LAST, line_order, id`. NULLS LAST ditulis eksplisit karena perbandingan `null` di JS berperilaku beda dari SQL, dan `id` di ujung membuatnya deterministik saat seluruh kunci lain seri. Testnya menguji **permutasi masukan**: hasil urut harus sama untuk urutan masuk mana pun — saldo berjalan yang urutannya berubah antar-query adalah angka BERBEDA untuk data yang sama. **Keputusan-1 diterapkan:** `defaultReversalNoBukti(null)` → `null`, bukan mengarang `REV-null`. **`canPost` menerima `isLocked` sebagai parameter**, bukan memutuskannya sendiri — Fase 2 mengoper `() => false`, dan §7.B menggantinya dengan kunci periode sungguhan tanpa menyentuh fungsinya; ada test yang memastikan tanggal yang dioper ke `isLocked` memang tanggal jurnalnya. **`canReverse` mengabaikan pembalik yang masih DRAF** — pembalik draf belum masuk buku besar, jadi secara akuntansi jurnalnya belum terbalik; "sudah dibalik" tetap diturunkan (P3), bukan disimpan. **Satu perbaikan saat test menemukannya:** `normalSign` semula hanya mengenali awalan `k` (Kredit), sehingga `Credit`/`Cr` yang mungkin tersimpan lewat form baris COA akan **diam-diam membalik saldo satu akun**. Sekarang mengenali awalan `k` MAUPUN `c`; tidak ada akun bersaldo normal debit yang diawali kedua huruf itu, jadi toleransi ini tanpa sisi rugi. `summarizeByAccount` mengembalikan akun bernilai nol juga — daftar yang melewatkannya membuat "memang nol" tidak bisa dibedakan dari "lupa dihitung". Gerbang: tsc bersih · vitest **42 berkas / 998 test** (dari 960) · eslint 0 error / 24 warning · `pnpm build` sukses |
+| 2026-09-18 | **C2 selesai — migrasi 0014 + route posting/pembalikan/buku besar.** `journal_entries` + `posted_at`/`posted_by`/`reversal_of_id` (self-FK **RESTRICT**, bukan cascade), `journal_lines` + `supplier_id`, dan tabel **`audit_events`** generik. `POST /api/journals/[id]/post` (UPDATE menyaring `status='draft'` di WHERE + `returning` supaya yang kalah balapan tidak menimpa `posted_by` milik yang menang) · `POST /api/journals/[id]/reverse` (baris dari `buildReversalLines`, tetap lewat `validateJournalInput`, lahir **draf**, dua event) · `GET /api/ledger` + `/summary`, keduanya `requireAkunting`. POST/PATCH jurnal menulis riwayat **di dalam `db.batch` yang sama**; DELETE memurnikan event di batch yang sama | Tanpa FK untuk `entity_id` polimorfik, satu-satunya pengganti cascade adalah kewajiban kode — jadi ia dijaga test struktural yang **merah kalau purge dilepas dari transaksi** (dibuktikan dengan menyabotasenya: tiga penjaga jatuh). Dibuktikan juga terhadap dev: hapus jurnal saja menyisakan 3 event yatim, hapus sebatch menyisakan 0 |
+| 2026-09-18 | **C3 selesai — nav Buku Besar.** `buku-besar` tepat sesudah `jurnal` (`staffOnly`), `/buku-besar` masuk `ACCOUNTING_ONLY_PREFIXES`, ikon `BookOpenCheck` | Testnya tidak sekadar mengecek daftar: ia menuntut jawaban akses `/buku-besar` **sama persis** dengan `/jurnal` untuk tiap role. Buku besar adalah jurnal yang sama dibaca per akun — gerbang yang lebih longgar di salah satunya membuat yang lebih ketat jadi kosmetik |
+| 2026-09-18 | **C4 selesai — UI posting, jurnal balik, riwayat, dan halaman `/buku-besar`.** Tombol **Posting** dengan konfirmasi "tidak bisa diubah, hanya dibalik"; tombol **Balik** → modal → draf pembalik langsung dibuka; lencana "Dibalik oleh …"/"Pembalik dari …"; panel **Riwayat** di rincian. `/buku-besar`: pemilih akun searchable, rentang tanggal, Saldo Awal (selalu tampil, termasuk saat nol) → saldo berjalan → Saldo Akhir, klik no bukti membuka rincian jurnalnya, tab **Neraca Saldo**. Gerbang: 45 berkas / 1072 test, eslint 24 warning, build sukses | Tombol Balik hilang hanya kalau sudah ada pembalik **terposting** — definisi yang sama persis dengan `canReverse` di server, supaya layar dan server tidak pernah berbeda pendapat. Halaman buku besar tidak menghitung satu angka pun (dijaga test), karena dua tempat yang menghitung saldo berarti dua jawaban yang bisa berbeda |
+| **2026-09-19** | **PERUBAHAN KONSEP RICKO — tiga modul baru masuk Fase 2, satu fitur Fase 3 dibatalkan.** **(1) Laporan Pembelian** (5.5): invoice pembelian per supplier, satu akun COA tujuan bebas, PPN opsional, jadwal termin **turunan**, jurnal draf otomatis. **(2) Mutasi Kas/Bank** (5.6): mutasi tiap akun kas dari COA ber-`is_kas`, manual atau CSV, tiap baris dialokasikan ke invoice hutang **atau** COA lawan bebas. **(3) Monitoring Hutang** (5.7): menu `/hutang`, umur hutang, jatuh tempo per cicilan, per supplier — seluruhnya turunan. **Dibatalkan: G1–G5 Impor Bank (MP §6.A)** beserta `bank_imports`/`bank_import_rows` — diserap 5.6; `bank_mapping_rules` **ditunda**, D22 tetap mengikat. **5.8 Rekonsiliasi dirancang ulang** (D41). Perubahan pada yang sudah jalan: supplier kehilangan `termin_pembayaran` dan mendapat data rekening (D43); setelan per klien **"posting bisa diedit"** (D42). Urutan disetujui: **C5 → E1–E5 → M1–M8 → N1–N7 → U1–U5 → F1–F5**. **D27–D45 belum dijawab; modul baru tidak dimulai sebelum itu** | E1–E5 wajib lebih dulu karena Modul 2 memilih akun kas dari `is_kas`, yang baru lahir di migrasi 0015 — tanpa itu daftar akun kas jadi daftar tulis tangan yang basi diam-diam begitu klien menambah rekening. Impor Bank dan Modul 2 adalah fitur yang sama; membangun keduanya berarti dua tabel mutasi bank dan dua jalur "jadikan jurnal" yang harus dijaga tetap sama selamanya |
+| **2026-09-19** | **Tiga hal dari perubahan konsep yang harganya perlu dinyatakan, bukan ditemukan belakangan.** **(a) D42 "posting bisa diedit" melunakkan P11 dan mengubah arti D13** — jurnal balik berhenti jadi satu-satunya jalur koreksi, dan angka yang sudah diserahkan ke klien bisa berubah tanpa ada yang menyentuhnya. Mitigasinya wajib menyertainya, bukan opsional: `audit_events` dengan `nilai_sebelum`/`nilai_sesudah`, **kunci periode (D26/D17) naik jadi syarat praktis**, dan lencana "diubah setelah posting". Rekomendasi saya: bawaan `false`, bukan `true`. **(b) Migrasi 0019 (DROP `termin_pembayaran`) satu-satunya yang membuang data** — aman hari ini karena `master_supplier` belum pernah ada di produksi, **berbahaya kalau 0015–0018 dirilis lebih dulu** lalu akunting mengisi termin selama beberapa minggu. Catatan rilis: 0019 dalam jendela rilis yang sama. **(c) `buildReplacePlan` bertambah dari 2 jadi 8 perujuk `master_coa`** — satu kolom yang lupa didaftarkan membuat ganti-massal COA memutus FK atau memindahkan angka ke akun yang salah, tanpa satu pun test otomatis merah | Ketiganya lahir dari brief yang sama dan tidak disebut di dalamnya. Menuliskannya di plan lebih murah daripada menemukannya saat data klien sudah ada di dalamnya |
+| **2026-09-20** | **Enam keputusan Ricko atas perubahan konsep, plus empat persetujuan pembatalan.** **D42 — bawaan `FALSE` (posting permanen)**, dinyalakan per klien bila dibutuhkan; ketiga mitigasi (`nilai_sebelum`/`nilai_sesudah`, lencana "diubah setelah posting", kunci periode) **tetap wajib menyertai**. **D30** snapshot akun hutang ke invoice. **D28** subtotal baris disimpan. **D45** finance melihat `/hutang` tanpa `/jurnal` & `/buku-besar`. **D41** rancang ulang F1–F4. Disetujui juga: pembatalan G1–G5 & CP-9, penundaan `bank_mapping_rules`, dan **penomoran CP tidak diubah** | Alasan D42 dicatat apa adanya dari Ricko: **angka yang sudah diserahkan ke klien tidak boleh berubah diam-diam.** Bawaan `false` membuat keadaan aman jadi keadaan bawaan — klien yang setelannya tidak pernah disentuh berperilaku persis seperti sekarang, dan menyalakannya jadi tindakan sadar per klien, bukan sesuatu yang diwarisi |
+| **2026-09-20** | **D40 disetujui DENGAN TAMBAHAN: FIFO tetap bawaan, tapi akunting bisa MENIMPA pencocokan cicilan secara manual saat mengalokasikan pembayaran.** Diwujudkan kolom **`cash_mutation_allocations.termin_urutan integer NULL`** (NULL = ikut FIFO, terisi = dipaku ke cicilan ke-N) — nullable, jadi bawaannya tetap nol input dan penimpaan jadi pengecualian yang **tercatat**. Empat aturan turunannya ditulis di plan dan wajib dikunci test U1: **(1)** alokasi berpaku diterapkan lebih dulu, baru sisanya FIFO — kalau tidak, hasilnya bergantung urutan baca; **(2)** alokasi berpaku yang melebihi cicilan tujuannya **meluber** ke cicilan berikutnya, bukan ditolak; **(3)** paku yang jadi **yatim** (invoice diubah sehingga cicilannya tidak ada lagi) **jatuh kembali ke FIFO dan ditandai** — tidak melempar, dan tidak diam-diam dianggap cicilan terakhir; **(4)** CHECK `termin_urutan >= 1`, batas atasnya lintas-tabel jadi ditegakkan route + test | Tanpa jalan menimpa, umur hutang kita akan salah **dan tidak bisa dibetulkan** ketika supplier menerapkan urutan pencocokan yang berbeda. Dengan kolom nullable, kasus lazimnya tetap nol input sementara kasus yang menyimpang meninggalkan jejak yang bisa dilihat di layar dan di rekonsiliasi |
 | 2026-09-08 | **Basis kode di-sync ke NgodingPakeAI (workspace `a3bbf493-5431-4bef-8065-e48c37e9a752`, repo `rickzasyam/ngitungid`, commit `53972cd`).** 247 ringkasan berkas ditulis agen dalam Bahasa Indonesia ke `.ngodingpakeai/summaries.json` (70 di antaranya ber-section per simbol) lalu diunggah CLI; **kode sumber mentah tidak pernah diunggah** — hanya metadata + ringkasan. Diaudit sebelum ditulis: `.env*` tidak pernah masuk daftar pending (CLI memblokirnya keras); `ROADMAP.md` diringkas **struktural** tanpa nama host DB; `docs/deferred/0006_timestamptz.sql` diringkas sebagai DDL saja. Validasi lokal: JSON sah, 247/247 kunci = daftar pending, semua ringkasan 10–2000 karakter. Server lalu membangun PRD "Mesin Akuntansi & Jurnal Manual" dari ringkasan itu | Untuk 15 berkas `docs/login-design/src/*` yang identik dengan salinan engine, identitas dipastikan dari **ukuran berkas persis sama + catatan ROADMAP**, bukan diff byte (Bash diblokir classifier sepanjang sesi itu; CLI dijalankan Ricko sendiri). **Belum diputuskan:** `.ngodingpakeai/`, `.ngodingpakeaiignore`, `.cursor/`, `AGENTS.md` yang dipasang `init` masih **untracked** — commit atau ignore adalah keputusan Ricko. Dua token (bootstrap & task) sempat lewat transkrip sesi; disarankan di-rotate |
 | 2026-08-14 | **Terrain partikel Three.js DIPORTING ke halaman login — dibundel, bukan CDN.** `three@0.180.0` di-pin exact lewat pnpm; import map jsDelivr prototipe dibuang seluruhnya (CDN pihak ketiga di halaman login = ketergantungan uptime orang lain + permukaan kebocoran data). 20 modul disalin APA ADANYA ke `components/login-terrain/engine/` — geometri, noise, kepadatan, kamera, dan timing tidak disentuh. `DevPanel.js` dibuang dan **tweakpane tidak pernah dipasang**: ia cuma di-`import()` dinamis di balik gerbang `?dev`, jadi menghapusnya menghapus dependensinya. QualityManager + modul interaksi (parallax kursor, ripple) DIPERTAHANKAN — keduanya bagian dari bagaimana prototipe terasa. **Ukuran TERUKUR: +500,0 KB minified / 125,7 KB gzip** (total chunk app 1,64 MB → 2,13 MB), praktis sama dengan perkiraan ~500 KB; `WebGLRenderer` memang menarik hampir seluruh pustaka meski semua import sudah bernama | **WARNA satu-satunya yang berubah.** Lime `#d8ff75`→`#daf163`; latar halaman `#0c0e10`→`#222124` (fogColor + baseColor). Tiga nilai lain adalah STOP GRADIEN, bukan warna merek — dipetakan dengan mempertahankan delta-nya terhadap latar (colorLow `#191d1f`→`#2f3033`, glowColor `#29261f`→`#3f3933`, edgeColor `#07090a`→`#1d1c1e`); memaksa ketiganya jadi `#222124` akan meratakan terrain jadi kotak hitam. Tint atmosferik netral (`#ffffff`, `#cfe0e8`, `#c2d6e2`, `coolTint #c2d4de`) DIBIARKAN — bukan warna palet, cuma pengali near-white. Tidak ada `#c0ff33`/`#1a1a1a`/`#a78bfa` di mana pun, termasuk shader. **Tiga hal yang prototipe tidak punya, ditambahkan**: (1) probe WebGL SEBELUM konstruksi + `webglcontextlost` → render `null`, kisi titik CSS jadi latarnya; tidak pernah kosong, tidak pernah melempar (`new WebGLRenderer()` MELEMPAR di sesi RDP / driver blocklist). (2) Pembongkaran React — `dispose()` sudah ada di lima modul, main.js-nya saja yang tak pernah memanggilnya; ditambah flag `cancelled` supaya StrictMode double-mount tidak menyisakan rAF kedua. (3) `next/dynamic({ssr:false})` — **diverifikasi dari HTML prerender `/login`: chunk three TIDAK direferensikan**, JS awal rute tetap 914,4 KB, jadi form hidup sebelum kanvas dimuat. Jalur `prefers-reduced-motion` (satu frame statis) dipertahankan utuh |
 | 2026-08-13 | **⚠️ DISKREPANSI TOKEN DIKETAHUI (dicatat, SENGAJA tidak diperbaiki): `--color-accent-primary-fg` bernilai `#1a1a1a`, yang ada di daftar warna DEPRECATED.** Token ini dipakai app-wide sebagai warna teks di atas lime (tombol primer di hampir setiap halaman), sementara aturan warna menyatakan near-black harus `#222124`. Keduanya tidak bisa benar sekaligus. Halaman login memakai `var(--color-bg-sidebar)` (#222124) untuk teks di atas lime — mengikuti wordmark sidebar yang memang sudah begitu — sehingga halaman itu patuh tanpa menyentuh token | **Menyeragamkannya adalah commit tersendiri, bukan sisipan.** Mengubah nilai token akan menggeser warna teks pada SETIAP tombol lime di app sekaligus; itu perubahan visual luas yang perlu dilihat langsung, bukan efek samping dari pekerjaan halaman login. Keputusan Ricko 2026-08-13: biarkan token apa adanya, catat di sini supaya sesi berikutnya tidak menemukannya sebagai kejutan dan tidak "merapikannya" diam-diam di tengah pekerjaan lain |
@@ -643,6 +734,10 @@ dipakai jurnal (tombol mati) · **hapus akun hutang `14-0002` yang dipakai suppl
 diblokir**, suppliernya jadi "belum lengkap" · **dua jurnal tanpa nomor bukti** pada klien
 yang sama sama-sama tersimpan, tabel menampilkan "—". Seluruh daftar klik CP-3 & CP-4 lolos.
 
+**Fase 2 — C1–C4 ter-commit 2026-09-18, CP-6 menunggu uji klik.** Migrasi **0014** (posting/`audit_events`/`supplier_id`) diterapkan ke **dev saja**. Yang jadi: predikat posting & jurnal balik, mesin saldo berjalan, route posting/pembalikan/buku besar, nav Buku Besar, dan UI-nya. Gerbang saat ditutup: tsc bersih · vitest **45 berkas / 1072 test** · eslint 0 error / 24 warning · `pnpm build` sukses. **R2 diambil**: riwayat memakai satu tabel `audit_events` generik, bukan `journal_events`.
+
+**🆕 Perubahan konsep 2026-09-19 — Fase 2 bertambah tiga modul.** Laporan Pembelian, Mutasi Kas/Bank, dan Monitoring Hutang (5.5–5.7); rekonsiliasi dirancang ulang (5.8); **Impor Bank Fase 3 dibatalkan** karena diserap Mutasi Kas/Bank. Rinciannya di 5.5–5.8 dan MP §3.4/§3.5. **Belum ada kode untuk ketiganya — D27–D45 belum dijawab.**
+
 **⚠️ Status task vendor NgodingPakeAI — Fase 1 TIDAK bisa 14/14.**
 13 task frontend fase 1 sudah diselesaikan: 12 `complete` (7 Jurnal Umum, 5 Supplier) dan
 1 `failed` — `bangun-halaman-rekonsiliasi-hutang-supplier`, sesuai keputusan D5, karena
@@ -658,7 +753,11 @@ dari CLI selama Fase 1**, meski kodenya sudah ada, hijau, dan terpetakan satu pe
 Rinciannya di baris Decisions 2026-09-16.
 
 ### Next Sprint
-**Sprint berikutnya (2026-09-18): Phase 5 Fase 2 BERJALAN — mulai C1 (MP §5.A), berhenti di CP-5. Rilis Fase 1 ke produksi (checklist di atas) menunggu waktu Ricko. Phase 4 Operational tetap ditunda.**
+**Sprint berikutnya (2026-09-19): dua hal yang menunggu Ricko, bukan menunggu kode.**
+1. **Uji klik CP-6** (posting, jurnal balik, riwayat, `/buku-besar`) — daftarnya ada di laporan CP-6.
+2. **Sisa jawaban D27, D29, D31–D39, D43, D44** (5.12) — tiga modul baru (Pembelian, Mutasi Kas/Bank, Monitoring Hutang) tidak dimulai sebelum itu. Yang paling berkonsekuensi di sisa itu: **D43** (DROP termin supplier — satu-satunya migrasi non-aditif, lihat jebakan rilis di checklist), **D32** (jurnal bersumber modul tidak bisa diubah dari `/jurnal`), **D33** (akun PPN Masukan sebagai setelan klien), **D38** (duplikat impor = peringatan, bukan penolakan).
+
+Sesudah keduanya: **C5 → E1–E5 → M1–M8 → N1–N7 → U1–U5 → F1–F5**. Rilis Fase 1 ke produksi (checklist di atas) menunggu waktu Ricko. Phase 4 Operational tetap ditunda.
 
 Loop inti (upload → OCR → review → mapping → dashboard → analytics) **sudah lepas dari mock sepenuhnya**. Dua item "Next Sprint" lama (1. persist review actions, 2. Financial Data API) **dua-duanya sudah selesai**. Fokus berikutnya bukan fitur baru, tapi **validasi manual end-to-end dengan data nyata** sebelum lanjut.
 
@@ -697,6 +796,12 @@ sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache 
 
 Ditulis 2026-09-16 setelah Fase 1 selesai di dev. **Jangan dibalik urutannya.**
 Setiap langkah punya alasan; yang paling mahal kalau tertukar ditandai.
+
+> **Diperbarui 2026-09-18:** migrasi **0014** (posting, `audit_events`, `journal_lines.supplier_id`) sudah ada di dev dan ikut dalam rilis ini — seluruhnya `CREATE`/`ADD COLUMN` nullable, nol `DROP`.
+>
+> **⚠️ Diperbarui 2026-09-19 — satu jebakan rilis yang baru lahir.** Rencana Fase 2 berikutnya memuat **migrasi 0019 yang MENGHAPUS `master_supplier.termin_pembayaran`** (D43). Hari ini itu tidak berbahaya: kolomnya **belum pernah ada di produksi**. Ia jadi berbahaya kalau **0015–0018 dirilis lebih dulu**, akunting mengisi termin supplier selama beberapa minggu, lalu 0019 menyusul — data itu hilang tanpa jejak di git mana pun.
+>
+> **Aturannya: 0019 diterapkan dalam jendela rilis yang sama dengan 0015–0018, atau ketiganya ditunda bersama.** Jangan pernah merilis 0017 (yang menghentikan pemakaian kolom itu) tanpa 0019 menyusul di rilis yang sama. Kalau jendelanya terlanjur terbuka, simpan dulu `SELECT id, nama, termin_pembayaran FROM master_supplier WHERE termin_pembayaran IS NOT NULL` — nilainya masih berguna sebagai **usulan** `jumlah_termin` pada invoice pertama supplier itu.
 
 ### 0. Cek dulu: DB main ada di migrasi mana
 
