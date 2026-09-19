@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-replace-dialog'
 import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
+import { CoaTypesDialog, type CoaTypesPreview } from '@/components/settings/coa-types-dialog'
 import { SupplierTab } from '@/components/settings/supplier-manager'
 import {
   FileSpreadsheet,
   Upload,
+  Wand2,
   Download,
   ChevronDown,
   ChevronUp,
@@ -37,6 +39,7 @@ import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
 import { CREATABLE_ROLES, ROLE_LABEL, type Role } from '@/lib/roles'
 import { MIN_PASSWORD } from '@/lib/api/password-change'
+import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/coa/account-type'
 import { visibleSettingsTabs, type SettingsTabId } from '@/lib/settings-tabs'
 import { NAMA_MIN, NAMA_MAX, DESKRIPSI_MAX, type LayananRow } from '@/lib/layanan'
 import { defaultMetricVisibility, type MetricId } from '@/lib/analytics/metric-visibility'
@@ -54,6 +57,12 @@ type CoaAccount = {
   kelompok: string
   subKelompok: string
   classCf: string | null
+  /** Fase 2 (E4). Opsional supaya respons lama tetap terbaca tanpa melempar. */
+  tipeAkun?: AccountType | null
+  isKas?: boolean | null
+  /** Turunan dari server — eksplisit ?? turunan. */
+  resolvedType?: AccountType | null
+  resolvedIsKas?: boolean | null
 }
 
 type CoaData = {
@@ -448,6 +457,14 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
   const [pendingDelete, setPendingDelete] = useState<{ account: CoaAccount; impact: CoaImpact } | null>(null)
   const [rowBusy, setRowBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  // Input BERBEDA dari fileRef: keduanya menerima .xlsx tapi tujuannya
+  // berlawanan — yang satu MENGGANTI seluruh Master COA, yang ini hanya
+  // mengisi dua kolom. Satu input yang dipakai bergantian akan membuat berkas
+  // yang dipilih untuk "isi tipe" berakhir di jalur ganti-massal kalau
+  // penandanya pernah salah reset. Dua ref, nol kemungkinan itu.
+  const typesFileRef = useRef<HTMLInputElement>(null)
+  const [typesPending, setTypesPending] = useState<{ file: File; preview: CoaTypesPreview } | null>(null)
+  const [typesBusy, setTypesBusy] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -464,6 +481,66 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
   useEffect(() => {
     load()
   }, [load])
+
+  // ── "Isi tipe dari berkas" (E4) ─────────────────────────────────────
+  // SELALU dryRun dulu, tanpa pengecualian: berbeda dari ganti-massal yang
+  // melewati dialog saat dampaknya nol, di sini dialognya SENDIRI yang
+  // menjelaskan apa yang akan berpindah. Melewatinya berarti menerapkan
+  // perubahan massal tanpa satu layar pun yang menyebut isinya.
+  const handleTypesFile = async (file: File) => {
+    const name = file.name.toLowerCase()
+    if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+      setError('Format file harus .xlsx atau .xls')
+      return
+    }
+    setTypesBusy(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('dryRun', '1')
+      const res = await fetch(`/api/clients/${clientId}/coa/types`, { method: 'POST', body: fd })
+      const payload = (await res.json().catch(() => null)) as
+        | (CoaTypesPreview & { error?: string; details?: string[] })
+        | null
+      if (!res.ok || !payload) {
+        const details = payload?.details
+        setError(details?.length ? details.join(' · ') : (payload?.error ?? 'Gagal membaca tipe akun dari berkas.'))
+        return
+      }
+      setTypesPending({ file, preview: payload })
+    } catch {
+      setError('Gagal menghubungi server.')
+    } finally {
+      setTypesBusy(false)
+    }
+  }
+
+  const commitTypes = async () => {
+    if (!typesPending) return
+    setTypesBusy(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', typesPending.file)
+      const res = await fetch(`/api/clients/${clientId}/coa/types`, { method: 'POST', body: fd })
+      const payload = (await res.json().catch(() => null)) as
+        | { applied?: number; error?: string; details?: string[] }
+        | null
+      if (!res.ok) {
+        const details = payload?.details
+        setError(details?.length ? details.join(' · ') : (payload?.error ?? 'Gagal menyimpan tipe akun.'))
+        return
+      }
+      setTypesPending(null)
+      setWarning(`Tipe akun diperbarui untuk ${payload?.applied ?? 0} akun.`)
+      await load()
+    } catch {
+      setError('Gagal menghubungi server.')
+    } finally {
+      setTypesBusy(false)
+    }
+  }
 
   const handleFile = async (file: File) => {
     const name = file.name.toLowerCase()
@@ -602,6 +679,19 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
           }}
         />
       )}
+      {!readOnly && (
+        <input
+          ref={typesFileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0]
+            if (file) handleTypesFile(file)
+            e.target.value = ''
+          }}
+        />
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1 min-w-0">
@@ -706,6 +796,28 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
               )}
             </button>
           )}
+          {!readOnly && hasCoa && (
+            <button
+              type="button"
+              onClick={() => typesFileRef.current?.click()}
+              disabled={typesBusy}
+              title="Hanya mengisi kolom Tipe Akun & Kas — tidak mengganti Master COA."
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-colors duration-150 hover:bg-(--color-border-subtle) disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
+            >
+              {typesBusy ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Membaca…
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-3.5 h-3.5" />
+                  Isi tipe dari berkas
+                </>
+              )}
+            </button>
+          )}
         </div>
       )}
 
@@ -741,6 +853,16 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
           submitting={uploading}
           onConfirm={() => commitReplace(pending.file)}
           onCancel={() => setPending(null)}
+        />
+      )}
+
+      {!readOnly && typesPending && (
+        <CoaTypesDialog
+          preview={typesPending.preview}
+          fileName={typesPending.file.name}
+          submitting={typesBusy}
+          onConfirm={commitTypes}
+          onCancel={() => setTypesPending(null)}
         />
       )}
 
@@ -803,7 +925,7 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
             <table className="w-full" style={{ fontSize: 12 }}>
               <thead>
                 <tr>
-                  {[...['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Class CF'], ...(readOnly ? [] : ['Aksi'])].map(col => (
+                  {[...['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Class CF', 'Tipe Akun', 'Kas'], ...(readOnly ? [] : ['Aksi'])].map(col => (
                     <th
                       key={col}
                       className="text-left px-4 py-2.5 font-semibold whitespace-nowrap sticky top-0"
@@ -862,6 +984,47 @@ function MasterCoaTab({ clientId, readOnly = false }: { clientId: string; readOn
                             : { background: '#fff7ed', color: '#c2410c' }}
                         >
                           {row.classCf}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                      )}
+                    </td>
+                    {/* ── Tipe Akun (E4) ────────────────────────────────
+                        EKSPLISIT tebal, TURUNAN redup + miring. Pembedaan itu
+                        seluruh gunanya kolom ini: "dipilih akunting" dan
+                        "ditebak sistem" punya kekuatan yang berbeda, dan yang
+                        kedua bisa berubah sendiri kalau sub kelompoknya
+                        dirapikan. Menampilkan keduanya sama rata akan membuat
+                        tebakan terbaca seperti keputusan. */}
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      {row.tipeAkun ? (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold"
+                          style={{ background: 'color-mix(in srgb, var(--color-accent-secondary) 28%, white)', color: 'var(--color-text-primary)' }}
+                          title="Tipe dipilih manual — dipakai apa adanya oleh laporan."
+                        >
+                          {ACCOUNT_TYPE_LABEL[row.tipeAkun]}
+                        </span>
+                      ) : row.resolvedType ? (
+                        <span
+                          className="text-[10.5px] italic"
+                          style={{ color: 'var(--color-text-muted)' }}
+                          title="Diturunkan dari kelompok & sub kelompok — berubah sendiri kalau keduanya diubah."
+                        >
+                          {ACCOUNT_TYPE_LABEL[row.resolvedType]}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      {row.isKas ? (
+                        <span className="text-[10.5px] font-semibold" style={{ color: 'var(--color-text-primary)' }} title="Ditandai manual.">
+                          Ya
+                        </span>
+                      ) : row.resolvedIsKas ? (
+                        <span className="text-[10.5px] italic" style={{ color: 'var(--color-text-muted)' }} title="Dikenali otomatis dari nama & sub kelompoknya.">
+                          Ya
                         </span>
                       ) : (
                         <span style={{ color: 'var(--color-text-muted)' }}>—</span>

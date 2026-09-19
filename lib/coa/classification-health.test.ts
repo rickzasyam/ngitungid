@@ -100,3 +100,52 @@ describe('classificationWarnings', () => {
     }
   })
 })
+
+// ══ PERINGATAN TIPE AKUN EKSPLISIT ≠ TURUNAN (E4) ════════════════════════
+// Bukan galat — akunting berhak menimpa tebakan sistem, dan itulah gunanya
+// kolom eksplisit. Yang layak diperingatkan adalah pertentangan yang tidak ada
+// yang melihat: akun ditandai revenue, lalu impor COA berikutnya memindahkan
+// sub kelompoknya ke Beban. Nilai eksplisitnya tetap menang diam-diam, dan
+// laporan berubah tanpa ada yang menyentuh akun itu.
+describe('classificationWarnings — tipe akun', () => {
+  const dasar = { kelompok: 'Laba Rugi', subKelompok: 'Fixed Cost', classCf: null }
+
+  it('memperingatkan saat eksplisit bertentangan dengan turunan', () => {
+    const w = classificationWarnings({ ...dasar, tipeAkun: 'revenue', posisi: 'Debit', nama: 'Sewa' })
+    const tipe = w.filter(x => x.field === 'tipeAkun')
+    expect(tipe).toHaveLength(1)
+    // Pesannya menyebut KEDUA sisi — tanpa itu pembacanya tidak tahu apa yang
+    // seharusnya, hanya bahwa ada yang salah.
+    expect(tipe[0].message).toContain('Pendapatan')
+    expect(tipe[0].message).toContain('Beban')
+  })
+
+  it('diam saat eksplisit sama dengan turunan', () => {
+    const w = classificationWarnings({ ...dasar, tipeAkun: 'expense', posisi: 'Debit', nama: 'Sewa' })
+    expect(w.filter(x => x.field === 'tipeAkun')).toEqual([])
+  })
+
+  it('diam saat tipe tidak diisi — null berarti "ikut turunan", bukan konflik', () => {
+    const w = classificationWarnings({ ...dasar, tipeAkun: null, posisi: 'Debit', nama: 'Sewa' })
+    expect(w.filter(x => x.field === 'tipeAkun')).toEqual([])
+  })
+
+  it('diam saat turunannya TIDAK BISA ditentukan — tidak ada yang bisa dibandingkan', () => {
+    // Sub kelompok yang tak dikenali sudah punya peringatannya sendiri; menambah
+    // "tipe bertentangan" di atasnya cuma kebisingan untuk satu masalah.
+    const w = classificationWarnings({
+      kelompok: 'Neraca',
+      subKelompok: 'Entah',
+      classCf: null,
+      tipeAkun: 'asset',
+      posisi: 'Debit',
+      nama: 'X',
+    })
+    expect(w.filter(x => x.field === 'tipeAkun')).toEqual([])
+  })
+
+  it('pemanggil LAMA (tanpa tipeAkun) berperilaku persis seperti sebelumnya', () => {
+    const lama = classificationWarnings({ kelompok: 'Laba Rugi', subKelompok: 'Fixed Cost', classCf: null })
+    expect(lama.filter(x => x.field === 'tipeAkun')).toEqual([])
+  })
+})

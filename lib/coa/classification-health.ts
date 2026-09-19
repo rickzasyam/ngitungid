@@ -1,4 +1,9 @@
 import { classifyPnl, classifyBs } from '@/lib/financial-agg'
+import {
+  ACCOUNT_TYPE_LABEL,
+  deriveAccountType,
+  type AccountType,
+} from './account-type'
 
 // Apakah kombinasi klasifikasi sebuah akun BENAR-BENAR terhitung di agregasi?
 //
@@ -34,7 +39,7 @@ export function cashflowBucketOf(classCf: string | null): 'operating' | 'investi
 }
 
 export interface ClassificationWarning {
-  field: 'kelompok' | 'subKelompok' | 'classCf'
+  field: 'kelompok' | 'subKelompok' | 'classCf' | 'tipeAkun'
   message: string
 }
 
@@ -46,6 +51,10 @@ export function classificationWarnings(input: {
   kelompok: string
   subKelompok: string
   classCf: string | null
+  /** Fase 2 (E3/E4). Opsional supaya pemanggil lama tetap sah apa adanya. */
+  tipeAkun?: AccountType | null
+  posisi?: string
+  nama?: string
 }): ClassificationWarning[] {
   const out: ClassificationWarning[] = []
   const target = aggregationTargetOf(input.kelompok)
@@ -82,6 +91,31 @@ export function classificationWarnings(input: {
       field: 'classCf',
       message: `Class CF "${input.classCf}" tidak dikenali sebagai Operating/Investing/Funding — akun ini tidak akan terhitung di Arus Kas.`,
     })
+  }
+
+  // ── Tipe akun eksplisit yang BERTENTANGAN dengan turunannya (E4) ──────
+  //
+  // Bukan galat: akunting berhak menimpa tebakan sistem, dan itulah gunanya
+  // kolom eksplisit. Yang layak diperingatkan adalah pertentangan yang tidak
+  // ada yang melihat — mis. akun ditandai `revenue`, lalu impor COA berikutnya
+  // memindahkan sub kelompoknya ke Beban. Nilai eksplisitnya tetap menang
+  // diam-diam, dan laporan berubah tanpa ada yang menyentuh akun itu.
+  //
+  // Hanya diperiksa kalau tipenya BENAR-BENAR diisi: null berarti "ikut
+  // turunan", dan dua nilai yang memang sama tidak pernah bisa bertentangan.
+  if (input.tipeAkun) {
+    const turunan = deriveAccountType({
+      nama: input.nama ?? '',
+      posisi: input.posisi ?? '',
+      kelompok: input.kelompok,
+      subKelompok: input.subKelompok,
+    })
+    if (turunan !== null && turunan !== input.tipeAkun) {
+      out.push({
+        field: 'tipeAkun',
+        message: `Tipe Akun diisi "${ACCOUNT_TYPE_LABEL[input.tipeAkun]}", tapi kelompok & sub kelompoknya menunjuk "${ACCOUNT_TYPE_LABEL[turunan]}". Yang dipakai laporan adalah yang diisi — pastikan itu memang disengaja.`,
+      })
+    }
   }
 
   return out

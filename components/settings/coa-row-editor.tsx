@@ -5,6 +5,14 @@ import { AlertTriangle, Info, Loader2, Plus } from 'lucide-react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect } from '@/components/ui/styled-select'
 import { classificationWarnings } from '@/lib/coa/classification-health'
+import {
+  ACCOUNT_TYPES,
+  ACCOUNT_TYPE_LABEL,
+  deriveAccountType,
+  deriveIsKas,
+  isAccountType,
+  type AccountType,
+} from '@/lib/coa/account-type'
 import type { CoaImpact } from './coa-replace-dialog'
 import { TANPA_NO_BUKTI } from '@/lib/journal'
 
@@ -16,6 +24,11 @@ export interface CoaAccountRow {
   kelompok: string
   subKelompok: string
   classCf: string | null
+  /** Fase 2 (E4). Opsional supaya respons lama tetap terbaca. */
+  tipeAkun?: AccountType | null
+  isKas?: boolean | null
+  resolvedType?: AccountType | null
+  resolvedIsKas?: boolean | null
 }
 
 const NEW_VALUE = '__new__'
@@ -154,6 +167,8 @@ export function CoaRowForm({
   const [kelompok, setKelompok] = useState(editing?.kelompok ?? '')
   const [subKelompok, setSubKelompok] = useState(editing?.subKelompok ?? '')
   const [classCf, setClassCf] = useState(editing?.classCf ?? '')
+  const [tipeAkun, setTipeAkun] = useState<string>(editing?.tipeAkun ?? '')
+  const [isKas, setIsKas] = useState<boolean>(editing?.isKas === true)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const cancelRef = useRef<HTMLButtonElement>(null)
@@ -170,13 +185,17 @@ export function CoaRowForm({
   }, [onCancel, saving])
 
   // Field mana yang sudah BENAR-BENAR dipilih penggunanya.
-  const [touched, setTouched] = useState<Record<'kelompok' | 'subKelompok' | 'classCf', boolean>>({
+  type WarnField = 'kelompok' | 'subKelompok' | 'classCf' | 'tipeAkun'
+  const [touched, setTouched] = useState<Record<WarnField, boolean>>({
     kelompok: false,
     subKelompok: false,
     classCf: false,
+    // Tipe akun yang SUDAH terisi saat form dibuka berarti keputusan yang
+    // pernah diambil seseorang — pertentangannya layak terlihat langsung,
+    // tanpa menunggu field-nya disentuh lagi.
+    tipeAkun: editing?.tipeAkun != null,
   })
-  const touch = (f: 'kelompok' | 'subKelompok' | 'classCf') =>
-    setTouched(prev => (prev[f] ? prev : { ...prev, [f]: true }))
+  const touch = (f: WarnField) => setTouched(prev => (prev[f] ? prev : { ...prev, [f]: true }))
 
   // Peringatan dihitung dari fungsi klasifikasi ASLI (classifyPnl/classifyBs +
   // ambang classCf), bukan daftar hardcoded — kalau aturan klasifikasi berubah,
@@ -187,14 +206,33 @@ export function CoaRowForm({
   // yang muncul sebelum pengguna melakukan apa pun melatih orang mengabaikannya,
   // sehingga peringatan yang benar-benar penting ikut tidak dibaca. Field wajib
   // yang dibiarkan kosong tetap tertangkap validasi biasa saat submit.
+  // Turunan dihitung dari isi form SAAT INI, bukan dari baris tersimpan: saat
+  // pengguna mengganti sub kelompok, label "— otomatis: … —" harus ikut berubah
+  // sebelum ia menyimpan. Kalau tidak, ia memilih berdasarkan tebakan yang
+  // sudah basi.
+  const turunanTipe = useMemo(
+    () => deriveAccountType({ nama, posisi, kelompok, subKelompok }),
+    [nama, posisi, kelompok, subKelompok]
+  )
+  const turunanKas = useMemo(
+    () => deriveIsKas({ nama, posisi, kelompok, subKelompok }),
+    [nama, posisi, kelompok, subKelompok]
+  )
+  const otomatisLabel = turunanTipe
+    ? `— otomatis: ${ACCOUNT_TYPE_LABEL[turunanTipe]} —`
+    : '— otomatis: belum bisa ditentukan —'
+
   const warnings = useMemo(
     () =>
       classificationWarnings({
         kelompok,
         subKelompok,
         classCf: classCf === '' ? null : classCf,
+        tipeAkun: isAccountType(tipeAkun) ? tipeAkun : null,
+        posisi,
+        nama,
       }).filter(w => touched[w.field]),
-    [kelompok, subKelompok, classCf, touched]
+    [kelompok, subKelompok, classCf, tipeAkun, posisi, nama, touched]
   )
 
   const kodeChanged = editing !== null && kode.trim() !== editing.kode
@@ -209,7 +247,17 @@ export function CoaRowForm({
       const res = await fetch(url, {
         method: editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kode, nama, posisi, kelompok, subKelompok, classCf }),
+        body: JSON.stringify({
+          kode,
+          nama,
+          posisi,
+          kelompok,
+          subKelompok,
+          classCf,
+          // '' berarti "ikut turunan" → null, bukan string kosong.
+          tipeAkun: isAccountType(tipeAkun) ? tipeAkun : null,
+          isKas,
+        }),
       })
       const payload = (await res.json().catch(() => null)) as { error?: string; details?: string[] } | null
       if (!res.ok) {
@@ -305,6 +353,58 @@ export function CoaRowForm({
           <LockedSelect label="Kelompok" value={kelompok} options={kelompokOpts} onChange={v => { touch('kelompok'); setKelompok(v) }} required />
           <LockedSelect label="Sub Kelompok" value={subKelompok} options={subOpts} onChange={v => { touch('subKelompok'); setSubKelompok(v) }} required />
           <LockedSelect label="Class CF" value={classCf} options={cfOpts} onChange={v => { touch('classCf'); setClassCf(v) }} allowEmpty hint="Kosongkan kalau akun ini tidak muncul di Arus Kas." />
+
+          {/* ── Tipe Akun (E4) ────────────────────────────────────────
+              Placeholder-nya MENUNJUKKAN turunannya, bukan sekadar "pilih":
+              pilihan bawaan di sini adalah "biarkan sistem yang menentukan",
+              dan pengguna berhak tahu apa yang akan dipakai kalau ia tidak
+              memilih apa pun. */}
+          <label className="block">
+            <span className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>
+              Tipe Akun
+            </span>
+            <div className="mt-1">
+              <StyledSelect
+                ariaLabel="Tipe Akun"
+                value={tipeAkun}
+                placeholder={otomatisLabel}
+                options={[
+                  { value: '', label: otomatisLabel, kind: 'placeholder' as const },
+                  ...ACCOUNT_TYPES.map(t => ({ value: t, label: ACCOUNT_TYPE_LABEL[t] })),
+                ]}
+                onChange={v => { touch('tipeAkun'); setTipeAkun(v) }}
+              />
+            </div>
+            <span className="block text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              Kosongkan supaya mengikuti kelompok &amp; sub kelompok. Isi hanya kalau akun ini
+              memang menyimpang dari turunannya.
+            </span>
+          </label>
+
+          {/* ── Kas? ──────────────────────────────────────────────────
+              Checkbox NATIVE: ia sudah membawa peran, keadaan, dan navigasi
+              keyboard tanpa satu baris pun atribut aria. Dibungkus <label>
+              supaya seluruh barisnya jadi area klik (target sentuh ≥ 32px,
+              CLAUDE.md). */}
+          <div>
+            <label className="inline-flex items-center gap-2 cursor-pointer" style={{ minHeight: 32 }}>
+              <input
+                type="checkbox"
+                checked={isKas}
+                onChange={e => setIsKas(e.target.checked)}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ width: 16, height: 16, accentColor: 'var(--color-accent-primary)' }}
+              />
+              <span className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                Akun kas/bank
+              </span>
+            </label>
+            <span className="block text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              {turunanKas
+                ? 'Sudah dikenali otomatis dari nama & sub kelompoknya — centang ini hanya menegaskannya.'
+                : 'Centang kalau akun ini sumber mutasi kas (bank, kas kecil, kas marketplace).'}
+            </span>
+          </div>
 
           {warnings.length > 0 && (
             <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
