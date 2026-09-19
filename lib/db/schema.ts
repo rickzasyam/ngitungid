@@ -108,6 +108,27 @@ export const auditEntityTypeEnum = pgEnum('audit_entity_type', [
   'supplier',
 ])
 
+// account_type: golongan akun dalam persamaan akuntansi (D14).
+//
+// ══ HANYA SATU KOLOM BARU, BUKAN TIGA ═════════════════════════════════════
+// PRD "Master COA Bertipe" menyiratkan tiga kolom baru: tipe akun, normal
+// balance, dan klasifikasi arus kas. DUA di antaranya SUDAH ADA di master_coa
+// sejak migrasi pertama: `posisi` (Debit/Kredit) adalah normal balance, dan
+// `class_cf` (Operating/Investing/Funding) adalah klasifikasi arus kas.
+// Menambahkannya lagi berarti dua kolom untuk satu fakta — dan begitu keduanya
+// bisa berbeda, tidak ada aturan yang bisa memutuskan mana yang benar.
+//
+// Nilainya lima dan tertutup: persamaan akuntansi tidak bertambah golongan.
+// Karena itu enum, bukan text — beda dari `audit_events.event` yang daftarnya
+// memang tumbuh tiap fase.
+export const accountTypeEnum = pgEnum('account_type', [
+  'asset',
+  'liability',
+  'equity',
+  'revenue',
+  'expense',
+])
+
 // ── clients ──────────────────────────────────────────────────
 // logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
 // .source_pdf. Alasannya sama: file-nya kecil (logo klien lazimnya < 200KB,
@@ -142,12 +163,34 @@ export const masterCoa = pgTable(
     kelompok: text('kelompok').notNull(), // 'Laba Rugi' | 'Neraca'
     subKelompok: text('sub_kelompok').notNull(), // 'Aktiva Lancar', 'Fixed Cost', dst
     classCf: text('class_cf'), // 'Operating' | 'Investing' | 'Funding', nullable
+    // ── Fase 2, migrasi 0015 (D14) ─────────────────────────────
+    // NULLABLE dengan sengaja: null berarti "belum diisi manusia", dan tipenya
+    // DITURUNKAN dari kelompok/sub kelompok (lib/coa/account-type.ts). Kalau
+    // kolom ini NOT NULL dengan default, seluruh COA yang sudah ada akan
+    // mengaku punya tipe eksplisit yang tidak pernah dipilih siapa pun — dan
+    // perbedaan antara "dipilih akunting" dan "ditebak sistem" hilang selamanya.
+    // Itu perbedaan yang justru ingin ditampilkan di layar (E4: eksplisit tebal,
+    // turunan redup) dan diperingatkan bila keduanya bertentangan.
+    tipeAkun: accountTypeEnum('tipe_akun'),
+    // Akun kas/bank. NOT NULL default false — beda dari tipeAkun, karena ini
+    // pertanyaan ya/tidak yang jawabannya "tidak" untuk hampir semua akun, dan
+    // turunannya (aktiva lancar + nama memuat kas/bank) sudah cukup baik
+    // sebagai isian awal. Dipakai impor mutasi kas (§5.E) dan arus kas metode
+    // langsung (§7.C) untuk mengenali akun kas tanpa menebak dari namanya.
+    isKas: boolean('is_kas').notNull().default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
     unique('master_coa_client_kode_unique').on(table.clientId, table.kode),
     index('master_coa_client_id_idx').on(table.clientId),
+    // Daftar akun kas ditanya per klien tiap kali halaman mutasi kas dibuka.
+    // Parsial: yang dicari selalu `is_kas = true`, dan akun kas segelintir dari
+    // ratusan baris COA — index penuh akan memuat mayoritas baris yang tidak
+    // pernah ikut dalam jawabannya.
+    index('master_coa_client_is_kas_idx')
+      .on(table.clientId)
+      .where(sql`${table.isKas}`),
   ]
 )
 
