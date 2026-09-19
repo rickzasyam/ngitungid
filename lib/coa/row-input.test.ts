@@ -10,11 +10,14 @@ const valid = {
   classCf: 'Operating',
 }
 
+/** Bentuk tersimpan = `valid` + kolom Fase 2 pada nilai "belum disetel". */
+const validTersimpan = { ...valid, tipeAkun: null, isKas: false }
+
 describe('parseCoaRowInput — validasi', () => {
   it('input lengkap diterima', () => {
     const r = parseCoaRowInput(valid)
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.value).toEqual(valid)
+    if (r.ok) expect(r.value).toEqual(validTersimpan)
   })
 
   it.each(['kode', 'nama', 'posisi', 'kelompok', 'subKelompok'])(
@@ -54,7 +57,7 @@ describe('parseCoaRowInput — trim & normalisasi', () => {
       classCf: '  Operating  ',
     })
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.value).toEqual(valid)
+    if (r.ok) expect(r.value).toEqual(validTersimpan)
   })
 
   it('trim classCf penting: "Operating " vs "Operating" akan memecah pengelompokan', () => {

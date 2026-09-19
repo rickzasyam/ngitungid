@@ -1,6 +1,8 @@
 // Validasi + normalisasi satu baris Master COA (create & edit manual).
 // Murni, tanpa I/O, supaya bisa diuji tanpa DB dan dipakai kedua route.
 
+import { isAccountType, type AccountType } from './account-type'
+
 export interface CoaRowInput {
   kode: string
   nama: string
@@ -8,6 +10,9 @@ export interface CoaRowInput {
   kelompok: string
   subKelompok: string
   classCf: string | null
+  /** Fase 2 (E3). null = biarkan diturunkan; bukan "tidak punya tipe". */
+  tipeAkun: AccountType | null
+  isKas: boolean
 }
 
 const REQUIRED: (keyof Omit<CoaRowInput, 'classCf'>)[] = [
@@ -66,6 +71,14 @@ export function parseCoaRowInput(body: unknown): ParseResult {
     // classCf opsional: string kosong dianggap "tidak diisi" (null), sejalan
     // dengan parser Excel dan kolomnya yang nullable.
     classCf: text('classCf') === '' ? null : text('classCf'),
+    // tipeAkun opsional: kosong/absen → null, artinya "ikut turunan".
+    // Nilai TERISI yang tidak dikenali ditolak di bawah, tidak diam-diam
+    // dijadikan null — salah ketik yang lolos sebagai "tidak diisi" tidak
+    // pernah terlihat oleh siapa pun.
+    tipeAkun: isAccountType(b.tipeAkun) ? b.tipeAkun : null,
+    // isKas hanya menerima boolean sejati. Kolomnya NOT NULL, jadi tidak ada
+    // keadaan "belum diisi" yang perlu diwakili.
+    isKas: b.isKas === true,
   }
 
   for (const f of REQUIRED) {
@@ -75,6 +88,14 @@ export function parseCoaRowInput(body: unknown): ParseResult {
 
   if (value.posisi !== '' && value.posisi !== 'Debit' && value.posisi !== 'Kredit') {
     errors.push('Posisi harus "Debit" atau "Kredit".')
+  }
+
+  // Terisi tapi bukan tipe yang sah → galat, bukan diam-diam null.
+  if (b.tipeAkun !== undefined && b.tipeAkun !== null && b.tipeAkun !== '' && !isAccountType(b.tipeAkun)) {
+    errors.push('Tipe Akun tidak dikenali.')
+  }
+  if (b.isKas !== undefined && typeof b.isKas !== 'boolean') {
+    errors.push('Kolom Kas harus true atau false.')
   }
 
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value }

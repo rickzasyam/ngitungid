@@ -18,6 +18,12 @@ import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { buildReplacePlan, historyToReinsert } from '@/lib/coa/replace-plan'
 import { TANPA_NO_BUKTI } from '@/lib/journal'
+import {
+  carryAccountTypes,
+  isAccountType,
+  resolveAccountType,
+  resolveIsKas,
+} from '@/lib/coa/account-type'
 
 // xlsx parsing + neon-http butuh Node runtime (bukan edge).
 export const runtime = 'nodejs'
@@ -34,6 +40,8 @@ const coaColumns = {
   kelompok: masterCoa.kelompok,
   subKelompok: masterCoa.subKelompok,
   classCf: masterCoa.classCf,
+  tipeAkun: masterCoa.tipeAkun,
+  isKas: masterCoa.isKas,
 }
 
 // GET /api/clients/[id]/coa — READ Master COA. Dipakai Settings (tab Master COA,
@@ -41,7 +49,7 @@ const coaColumns = {
 // 'user' (klien) boleh melihat COA KLIEN-NYA SENDIRI (scoping canAccessClientData
 // di bawah); staf boleh klien mana pun. IMPORT/tulis = POST di bawah, tetap
 // requireAkunting — jangan ikut kebuka.
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await requireUser()
   if ('error' in g) return g.error
 
@@ -60,11 +68,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .where(eq(masterCoa.clientId, id))
     .orderBy(asc(masterCoa.kode))
 
+  // `updatedAt` dihitung dari SELURUH baris, sebelum penyaringan apa pun:
+  // ia menjawab "kapan Master COA klien ini terakhir berubah", bukan "kapan
+  // baris yang kebetulan lolos filter berubah".
   const updatedAt = rows.reduce<Date | null>(
     (latest, r) => (!latest || r.updatedAt > latest ? r.updatedAt : latest),
     null
   )
-  const accounts = rows.map(({ updatedAt: _omit, ...rest }) => rest)
+
+  // ── Penyaring opsional (R8) ─────────────────────────────────────────
+  // `?tipe=liability` untuk pemilih akun hutang, `?kas=1` untuk pemilih akun
+  // kas (§5.E). Disaring di JS, bukan SQL, karena keduanya bekerja atas nilai
+  // yang DITURUNKAN (`resolvedType`/`resolvedIsKas`) — akun yang tipenya belum
+  // diisi manusia tetap harus ikut kalau turunannya cocok, dan turunan itu
+  // hidup di lib/coa/account-type.ts, bukan di database.
+  const url = new URL(req.url)
+  const tipeFilter = url.searchParams.get('tipe')
+  if (tipeFilter !== null && !isAccountType(tipeFilter)) {
+    return NextResponse.json({ error: 'Parameter tipe tidak dikenali.' }, { status: 400 })
+  }
+  const kasParam = url.searchParams.get('kas')
+  const kasFilter = kasParam === '1' || kasParam === 'true'
+
+  const accounts = rows
+    .map(({ updatedAt: _omit, ...rest }) => ({
+      ...rest,
+      resolvedType: resolveAccountType(rest),
+      resolvedIsKas: resolveIsKas(rest),
+    }))
+    .filter(a => (tipeFilter === null || a.resolvedType === tipeFilter) && (!kasFilter || a.resolvedIsKas))
 
   return NextResponse.json({ count: accounts.length, updatedAt, accounts })
 }
@@ -123,22 +155,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
-  // Id di-generate DI SINI, bukan oleh defaultRandom() di DB. Itu yang membuat
-  // seluruh operasi muat dalam satu db.batch(): peta kode→id baru sudah diketahui
-  // sebelum statement pertama dikirim, jadi statement re-link tidak perlu
-  // menunggu hasil INSERT. neon-http tidak punya transaksi interaktif —
-  // db.batch() adalah SATU transaksi HTTP (sudah diverifikasi: statement yang
-  // sukses ikut rollback kalau ada statement lain yang gagal).
-  const values = rows.map(r => ({ id: randomUUID(), clientId: id, ...r }))
-  const newKodeToId = new Map(values.map(v => [v.kode, v.id]))
-
   // ── Baca SEMUA yang dibutuhkan sebelum apa pun ditulis ──────────────
+  // Dibaca SEBELUM `values` disusun, karena `tipe_akun` & `is_kas` lama harus
+  // ikut dibawa ke baris baru (lihat carryAccountTypes di bawah).
   const oldAccounts = await db
-    .select({ id: masterCoa.id, kode: masterCoa.kode })
+    .select({
+      id: masterCoa.id,
+      kode: masterCoa.kode,
+      tipeAkun: masterCoa.tipeAkun,
+      isKas: masterCoa.isKas,
+    })
     .from(masterCoa)
     .where(eq(masterCoa.clientId, id))
 
   const oldIds = oldAccounts.map(a => a.id)
+
+  // ══ TIPE AKUN & PENANDA KAS DIBAWA DARI YANG LAMA, BY KODE ══════════
+  // Keputusan Ricko 2026-09-18, dan ia menutup kehilangan data yang senyap:
+  // kedua kolom itu diisi MANUAL lewat layar, sementara berkas Excel klien
+  // lazimnya tidak memuat kolomnya sama sekali. Tanpa ini, setiap impor ulang
+  // COA — yang dilakukan rutin — menghapus seluruh tipe akun yang sudah
+  // disetel, tanpa satu pun galat. Sel yang KOSONG tidak menimpa; hanya nilai
+  // yang benar-benar diisi berkas yang menang.
+  const carried = carryAccountTypes(oldAccounts, rows)
+
+  // Id di-generate DI SINI, bukan oleh defaultRandom() di DB. Itu yang membuat
+  // seluruh operasi muat dalam satu db.batch(): peta kode→id baru sudah
+  // diketahui sebelum statement pertama dikirim, jadi statement re-link tidak
+  // perlu menunggu hasil INSERT. neon-http tidak punya transaksi interaktif —
+  // db.batch() adalah SATU transaksi HTTP (sudah diverifikasi: statement yang
+  // sukses ikut rollback kalau ada statement lain yang gagal).
+  const values = carried.map(r => ({
+    id: randomUUID(),
+    clientId: id,
+    ...r,
+    // Kolomnya NOT NULL; carryAccountTypes sudah menjamin non-null, dan ini
+    // penjaga terakhir supaya bentuknya cocok dengan skema.
+    isKas: r.isKas ?? false,
+  }))
+  const newKodeToId = new Map(values.map(v => [v.kode, v.id]))
 
   const [lines, history, reportRows] = await Promise.all([
     oldIds.length === 0

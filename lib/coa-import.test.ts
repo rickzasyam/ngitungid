@@ -30,6 +30,10 @@ describe('parseCoaWorkbook — happy path', () => {
         kelompok: 'Neraca',
         subKelompok: 'Aktiva Lancar',
         classCf: 'Operating',
+        // Kolom opsional Fase 2 — berkas ini tidak memuatnya, jadi null
+        // ("tidak diisi"), bukan nilai bawaan.
+        tipeAkun: null,
+        isKas: null,
       },
     ])
   })
@@ -158,5 +162,108 @@ describe('parseCoaWorkbook — validasi all-or-nothing', () => {
     const r = parseCoaWorkbook(bogus)
     expect(r.rows).toEqual([])
     expect(r.errors).toHaveLength(1)
+  })
+})
+
+// ── Kolom opsional Fase 2 (E3) ──────────────────────────────────────────
+const HEADER_TIPE = [...HEADER, 'Tipe Akun', 'Kas?']
+
+describe('kolom Tipe Akun & Kas? (opsional)', () => {
+  it('dibaca kalau ada, dalam ejaan enum maupun Indonesia', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({
+        Sheet1: [
+          HEADER_TIPE,
+          ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', 'Operating', 'Aset', 'Ya'],
+          ['2-1000', 'Hutang Usaha', 'K', 'Neraca', 'Hutang Lancar', '', 'liability', 'tidak'],
+        ],
+      })
+    )
+    expect(r.errors).toEqual([])
+    expect(r.rows[0]).toMatchObject({ tipeAkun: 'asset', isKas: true })
+    expect(r.rows[1]).toMatchObject({ tipeAkun: 'liability', isKas: false })
+  })
+
+  // Berkas klien lazimnya TIDAK punya kolom ini — itu keadaan normal, bukan
+  // galat, dan null-nya yang membuat carryAccountTypes tahu harus mewariskan.
+  it('kolomnya tidak ada sama sekali → null, bukan galat', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({ Sheet1: [HEADER, ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', '']] })
+    )
+    expect(r.errors).toEqual([])
+    expect(r.rows[0]).toMatchObject({ tipeAkun: null, isKas: null })
+  })
+
+  it('sel kosong → null, bukan nilai bawaan', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({ Sheet1: [HEADER_TIPE, ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', '', '', '']] })
+    )
+    expect(r.errors).toEqual([])
+    expect(r.rows[0]).toMatchObject({ tipeAkun: null, isKas: null })
+  })
+
+  // Salah ketik yang diam-diam dibaca sebagai "tidak diisi" tidak pernah
+  // terlihat siapa pun sampai laporannya salah.
+  it('nilai terisi yang tidak dikenali = GALAT yang menyebut barisnya', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({
+        Sheet1: [HEADER_TIPE, ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', '', 'aktivas', '']],
+      })
+    )
+    expect(r.errors.join(' ')).toContain('Tipe Akun')
+    expect(r.errors.join(' ')).toContain('aktivas')
+    expect(r.rows).toEqual([])
+  })
+
+  it('Kas? yang tidak dikenali juga galat, dengan petunjuk isiannya', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({
+        Sheet1: [HEADER_TIPE, ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', '', '', 'mungkin']],
+      })
+    )
+    expect(r.errors.join(' ')).toContain('ya/tidak')
+    expect(r.rows).toEqual([])
+  })
+
+  it('alias header lain dikenali', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({
+        Sheet1: [
+          ['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Account Type', 'Is Cash'],
+          ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', 'asset', 'true'],
+        ],
+      })
+    )
+    expect(r.errors).toEqual([])
+    expect(r.rows[0]).toMatchObject({ tipeAkun: 'asset', isKas: true })
+  })
+
+  // 'Tipe' dan 'Kas' telanjang SENGAJA tidak jadi alias: di sheet akuntansi
+  // keduanya jauh lebih mungkin kolom lain (tipe transaksi, nominal saldo kas).
+  it('header "Tipe" dan "Kas" telanjang TIDAK menyerobot kolom lain', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({
+        Sheet1: [
+          ['Kode', 'Nama Akun', 'Posisi', 'Kelompok', 'Sub Kelompok', 'Tipe', 'Kas'],
+          ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', 'apa saja', '1.500.000'],
+        ],
+      })
+    )
+    expect(r.errors).toEqual([])
+    expect(r.rows[0]).toMatchObject({ tipeAkun: null, isKas: null })
+  })
+
+  it('baris yang HANYA berisi tipe (tanpa kode/nama) dilewati, bukan jadi lima galat', () => {
+    const r = parseCoaWorkbook(
+      makeWorkbook({
+        Sheet1: [
+          HEADER_TIPE,
+          ['1-1000', 'Kas', 'D', 'Neraca', 'Aktiva Lancar', '', 'Aset', 'Ya'],
+          ['', '', '', '', '', '', '', ''],
+        ],
+      })
+    )
+    expect(r.errors).toEqual([])
+    expect(r.rows).toHaveLength(1)
   })
 })

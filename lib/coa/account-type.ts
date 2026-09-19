@@ -208,3 +208,97 @@ export function explicitVsDerivedDiff<T extends CoaTypeInput>(rows: readonly T[]
   }
   return out
 }
+
+// ── Pembaca sel: dipakai importer Excel DAN route "isi tipe dari berkas" ──
+
+/** Ejaan Indonesia → tipe kanonik. Inggris dikenali lewat nilai enumnya. */
+const TIPE_ALIAS: Record<string, AccountType> = {
+  aset: 'asset',
+  aktiva: 'asset',
+  harta: 'asset',
+  liabilitas: 'liability',
+  kewajiban: 'liability',
+  hutang: 'liability',
+  utang: 'liability',
+  ekuitas: 'equity',
+  modal: 'equity',
+  pendapatan: 'revenue',
+  penjualan: 'revenue',
+  beban: 'expense',
+  biaya: 'expense',
+}
+
+/**
+ * Sel "Tipe Akun" → tipe kanonik.
+ *
+ * `null` untuk sel KOSONG (artinya "tidak diisi"), `undefined` untuk nilai
+ * yang terisi tapi **tidak dikenali**. Dua keadaan itu sengaja dibedakan:
+ * kosong berarti biarkan apa adanya, tidak dikenali berarti ada salah ketik
+ * yang harus dilaporkan ke pengguna. Kalau keduanya dijadikan `null`, salah
+ * ketik akan lolos sebagai "tidak diisi" dan tidak ada yang tahu.
+ */
+export function parseTipeAkunCell(raw: unknown): AccountType | null | undefined {
+  const s = norm(typeof raw === 'string' ? raw : raw == null ? '' : String(raw))
+  if (s === '') return null
+  if (isAccountType(s)) return s
+  return TIPE_ALIAS[s]
+}
+
+const KAS_YA = new Set(['ya', 'y', 'true', '1', 'yes', 'kas', 'v', 'x', '✓'])
+const KAS_TIDAK = new Set(['tidak', 't', 'false', '0', 'no', 'bukan', '-'])
+
+/**
+ * Sel "Kas?" → boolean. `null` untuk sel kosong, `undefined` untuk nilai yang
+ * terisi tapi tidak dikenali — alasan yang sama dengan parseTipeAkunCell.
+ *
+ * `'x'` dan `'v'` ikut dianggap YA: pemberian tanda centang dengan huruf itu
+ * lazim di spreadsheet buatan tangan, dan membacanya sebagai "tidak dikenali"
+ * akan menolak berkas yang maksudnya jelas.
+ */
+export function parseKasCell(raw: unknown): boolean | null | undefined {
+  if (typeof raw === 'boolean') return raw
+  const s = norm(typeof raw === 'string' ? raw : raw == null ? '' : String(raw))
+  if (s === '') return null
+  if (KAS_YA.has(s)) return true
+  if (KAS_TIDAK.has(s)) return false
+  return undefined
+}
+
+export interface CarryRow {
+  kode: string
+  tipeAkun?: AccountType | null
+  isKas?: boolean | null
+}
+
+/**
+ * Bawa `tipe_akun` & `is_kas` LAMA ke baris baru saat GANTI-MASSAL Master COA,
+ * dicocokkan **by kode**.
+ *
+ * ══ KENAPA INI WAJIB, DAN KENAPA IA MUDAH TERLEWAT ═══════════════════════
+ * Ganti-massal adalah DELETE-all + INSERT-all. Kolom `tipe_akun` dan `is_kas`
+ * diisi MANUAL lewat layar, dan berkas Excel klien lazimnya **tidak memuat
+ * kolom itu sama sekali**. Tanpa fungsi ini, setiap impor ulang COA — yang
+ * dilakukan rutin — menghapus seluruh tipe akun yang sudah disetel, diam-diam,
+ * tanpa satu pun galat. Keputusan Ricko 2026-09-18 menjadikannya wajib.
+ *
+ * Aturannya sama dengan impor supplier: **sel kosong TIDAK menghapus.** Nilai
+ * baru menang hanya kalau berkasnya benar-benar mengisinya.
+ */
+export function carryAccountTypes<T extends CarryRow>(
+  lama: readonly CarryRow[],
+  baru: readonly T[]
+): T[] {
+  const byKode = new Map(lama.map(r => [r.kode, r]))
+  return baru.map(row => {
+    const old = byKode.get(row.kode)
+    if (!old) return row
+    return {
+      ...row,
+      tipeAkun: row.tipeAkun ?? old.tipeAkun ?? null,
+      // `false` dari berkas TIDAK bisa dibedakan dari "tidak diisi" — parser
+      // mengembalikan null untuk sel kosong, jadi di sini yang null-lah yang
+      // mewarisi. `false` eksplisit tetap menang atas `true` lama.
+      isKas: row.isKas ?? old.isKas ?? false,
+    }
+  })
+}

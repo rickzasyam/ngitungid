@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest'
 import {
   ACCOUNT_TYPES,
   ACCOUNT_TYPE_LABEL,
+  carryAccountTypes,
   cashflowClassOf,
   deriveAccountType,
   deriveIsKas,
   explicitVsDerivedDiff,
   isAccountType,
   normalBalanceOf,
+  parseKasCell,
+  parseTipeAkunCell,
   resolveAccountType,
   resolveIsKas,
   type CoaTypeInput,
@@ -231,5 +234,99 @@ describe('explicitVsDerivedDiff', () => {
   it('baris tanpa tipe eksplisit tidak pernah muncul — perbedaan butuh dua sisi', () => {
     const rows = [akun({ nama: 'X', kelompok: 'Judul', subKelompok: '-' })]
     expect(explicitVsDerivedDiff(rows)).toEqual([])
+  })
+})
+
+describe('parseTipeAkunCell', () => {
+  it('menerima nilai enum maupun ejaan Indonesia', () => {
+    expect(parseTipeAkunCell('asset')).toBe('asset')
+    expect(parseTipeAkunCell('Aset')).toBe('asset')
+    expect(parseTipeAkunCell('AKTIVA')).toBe('asset')
+    expect(parseTipeAkunCell('liabilitas')).toBe('liability')
+    expect(parseTipeAkunCell('Hutang')).toBe('liability')
+    expect(parseTipeAkunCell('Ekuitas')).toBe('equity')
+    expect(parseTipeAkunCell('Modal')).toBe('equity')
+    expect(parseTipeAkunCell('Pendapatan')).toBe('revenue')
+    expect(parseTipeAkunCell('Beban')).toBe('expense')
+    expect(parseTipeAkunCell('  Biaya  ')).toBe('expense')
+  })
+
+  // Perbedaan null vs undefined di sini BUKAN detail: kosong berarti "biarkan
+  // apa adanya", tidak dikenali berarti ada salah ketik yang harus dilaporkan.
+  // Menjadikan keduanya null membuat salah ketik lolos tanpa ada yang tahu.
+  it('kosong → null, tidak dikenali → undefined', () => {
+    for (const kosong of ['', '   ', null, undefined]) {
+      expect(parseTipeAkunCell(kosong), String(kosong)).toBeNull()
+    }
+    for (const asing of ['aktivas', 'liabilities', 'xyz', '??']) {
+      expect(parseTipeAkunCell(asing), asing).toBeUndefined()
+    }
+  })
+})
+
+describe('parseKasCell', () => {
+  it('ya/tidak dalam beberapa ejaan, termasuk tanda centang tangan', () => {
+    for (const ya of ['ya', 'Y', 'true', '1', 'yes', 'x', 'v', true]) {
+      expect(parseKasCell(ya), String(ya)).toBe(true)
+    }
+    for (const tidak of ['tidak', 'T', 'false', '0', 'no', 'bukan', '-', false]) {
+      expect(parseKasCell(tidak), String(tidak)).toBe(false)
+    }
+  })
+
+  it('kosong → null, tidak dikenali → undefined', () => {
+    expect(parseKasCell('')).toBeNull()
+    expect(parseKasCell(null)).toBeNull()
+    expect(parseKasCell('mungkin')).toBeUndefined()
+  })
+})
+
+// ══ PENJAGA BERDIRI: GANTI-MASSAL TIDAK MENGHAPUS TIPE AKUN ══════════════
+// Keputusan Ricko 2026-09-18. Kedua kolom diisi MANUAL lewat layar, sementara
+// berkas Excel klien lazimnya tidak memuatnya. Tanpa carryAccountTypes, setiap
+// impor ulang COA — yang dilakukan rutin — menghapus seluruh tipe akun yang
+// sudah disetel, diam-diam, tanpa satu pun galat.
+describe('carryAccountTypes — regresi kehilangan senyap', () => {
+  const lama = [
+    { kode: '1101', tipeAkun: 'asset' as const, isKas: true },
+    { kode: '2101', tipeAkun: 'liability' as const, isKas: false },
+  ]
+
+  it('berkas TANPA kolom tipe: nilai lama bertahan seluruhnya', () => {
+    const baru = [
+      { kode: '1101', nama: 'Bank BCA', tipeAkun: null, isKas: null },
+      { kode: '2101', nama: 'Hutang Usaha', tipeAkun: null, isKas: null },
+    ]
+    expect(carryAccountTypes(lama, baru)).toEqual([
+      { kode: '1101', nama: 'Bank BCA', tipeAkun: 'asset', isKas: true },
+      { kode: '2101', nama: 'Hutang Usaha', tipeAkun: 'liability', isKas: false },
+    ])
+  })
+
+  it('berkas YANG mengisi kolomnya menang atas nilai lama', () => {
+    const baru = [{ kode: '1101', tipeAkun: 'expense' as const, isKas: false }]
+    expect(carryAccountTypes(lama, baru)[0]).toMatchObject({ tipeAkun: 'expense', isKas: false })
+  })
+
+  it('kode baru yang belum pernah ada tidak mewarisi apa pun', () => {
+    const baru = [{ kode: '9999', tipeAkun: null, isKas: null }]
+    expect(carryAccountTypes(lama, baru)).toEqual([{ kode: '9999', tipeAkun: null, isKas: null }])
+  })
+
+  it('kode yang HILANG dari berkas baru memang ikut hilang — itu memang ganti-massal', () => {
+    const baru = [{ kode: '1101', tipeAkun: null, isKas: null }]
+    expect(carryAccountTypes(lama, baru).map(r => r.kode)).toEqual(['1101'])
+  })
+
+  it('isKas tidak pernah null di keluaran — kolomnya NOT NULL', () => {
+    const baru = [{ kode: '9999', nama: 'Akun Baru', tipeAkun: null, isKas: null }]
+    const hasil = carryAccountTypes([{ kode: '9999' }], baru)
+    expect(hasil[0].isKas).toBe(false)
+  })
+
+  it('baris masukan tidak dimutasi', () => {
+    const baru = [{ kode: '1101', tipeAkun: null, isKas: null }]
+    carryAccountTypes(lama, baru)
+    expect(baru[0]).toEqual({ kode: '1101', tipeAkun: null, isKas: null })
   })
 })

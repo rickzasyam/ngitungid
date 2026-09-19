@@ -19,11 +19,11 @@ import { parseCoaWorkbook } from './coa-import'
 //   - subKelompok dengan spasi ganda di tengah? TIDAK — importer men-trim sel,
 //     jadi nilai berspasi-ujung memang tidak bisa round-trip. Lihat test khusus.
 const FIXTURE: CoaExportRow[] = [
-  { kode: '0001',    nama: 'Kas Kecil',                     posisi: 'Debit',  kelompok: 'Neraca',    subKelompok: 'Aktiva Lancar',        classCf: 'Operating' },
-  { kode: '1101',    nama: 'Bank BCA',                      posisi: 'Debit',  kelompok: 'Neraca',    subKelompok: 'Aktiva Lancar',        classCf: 'Operating' },
+  { kode: '0001',    nama: 'Kas Kecil',                     posisi: 'Debit',  kelompok: 'Neraca',    subKelompok: 'Aktiva Lancar',        classCf: 'Operating', tipeAkun: 'asset', isKas: true },
+  { kode: '1101',    nama: 'Bank BCA',                      posisi: 'Debit',  kelompok: 'Neraca',    subKelompok: 'Aktiva Lancar',        classCf: 'Operating', tipeAkun: null, isKas: true },
   { kode: '24-0001', nama: 'Biaya Gaji Karyawan',           posisi: 'Debit',  kelompok: 'Laba Rugi', subKelompok: 'Fixed Cost',           classCf: 'Operating' },
   { kode: '24-0002', nama: 'Pendapatan Jasa & Konsultasi',  posisi: 'Kredit', kelompok: 'Laba Rugi', subKelompok: 'Pendapatan',           classCf: null },
-  { kode: '31-0001', nama: 'Modal Disetor',                 posisi: 'Kredit', kelompok: 'Neraca',    subKelompok: 'Modal',                classCf: 'Funding' },
+  { kode: '31-0001', nama: 'Modal Disetor',                 posisi: 'Kredit', kelompok: 'Neraca',    subKelompok: 'Modal',                classCf: 'Funding', tipeAkun: 'equity', isKas: false },
   { kode: '15-0001', nama: 'Mesin, Peralatan, dan Inventaris', posisi: 'Debit', kelompok: 'Neraca',  subKelompok: 'Aktiva Tidak Berwujud', classCf: 'Investing' },
   { kode: '99-0000', nama: 'Pindah Buku',                   posisi: '-',      kelompok: '-',         subKelompok: '-',                    classCf: null },
 ]
@@ -52,6 +52,16 @@ describe('round-trip export → import (kontrak inti fitur ini)', () => {
         kelompok: r.kelompok,
         subKelompok: r.subKelompok,
         classCf: r.classCf,
+        // Tipe akun round-trip penuh: ditulis sebagai label Indonesia ('Aset'),
+        // dibaca balik jadi nilai enumnya lewat TIPE_ALIAS.
+        tipeAkun: r.tipeAkun ?? null,
+        // ASIMETRIS DAN DISENGAJA: `false` ditulis sebagai sel KOSONG, jadi ia
+        // kembali sebagai `null` ("tidak diisi"), bukan `false`. Itulah yang
+        // membuat impor ulang tidak menimpa penanda kas yang sudah disetel
+        // lewat layar — aturan sel-kosong-tidak-menghapus. Menulis 'Tidak'
+        // akan memutus sifat itu, dan test ini yang jatuh kalau seseorang
+        // "merapikannya".
+        isKas: r.isKas === true ? true : null,
       }))
     )
   })
@@ -178,6 +188,8 @@ describe('alias header "COA" tetap diterima', () => {
       kelompok: 'Laba Rugi',
       subKelompok: 'Fixed Cost',
       classCf: 'Operating',
+      tipeAkun: null,
+      isKas: null,
     })
   })
 })

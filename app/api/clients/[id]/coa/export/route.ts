@@ -53,6 +53,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       kelompok: masterCoa.kelompok,
       subKelompok: masterCoa.subKelompok,
       classCf: masterCoa.classCf,
+      // Fase 2: ikut diekspor supaya cadangan benar-benar memuat SELURUH isi
+      // Master COA. Tanpa keduanya, memulihkan dari cadangan diam-diam
+      // menghapus tipe akun yang sudah disetel manual.
+      tipeAkun: masterCoa.tipeAkun,
+      isKas: masterCoa.isKas,
     })
     .from(masterCoa)
     .where(eq(masterCoa.clientId, id))

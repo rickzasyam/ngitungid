@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/coa/account-type'
 
 // Export Master COA ke .xlsx. Pasangan langsung dari lib/coa-import.ts, dan
 // SENGAJA dibentuk mengikuti apa yang parser itu terima — bukan format yang
@@ -42,6 +43,9 @@ export interface CoaExportRow {
   kelompok: string
   subKelompok: string
   classCf: string | null
+  /** Kolom Fase 2. Opsional supaya pemanggil lama tetap sah. */
+  tipeAkun?: AccountType | null
+  isKas?: boolean | null
 }
 
 /** Urutan & ejaan kolom. Setiap label di sini HARUS ada di HEADER_ALIASES. */
@@ -52,6 +56,8 @@ export const COA_EXPORT_HEADERS = [
   'Kelompok',
   'Sub Kelompok',
   'Class CF',
+  'Tipe Akun',
+  'Kas?',
 ] as const
 
 /** Cocok dengan COA_SHEET_NAME_RE di importer, jadi sheet ini menang telak
@@ -67,6 +73,16 @@ function toCells(r: CoaExportRow): string[] {
     String(r.kelompok),
     String(r.subKelompok),
     r.classCf ?? '', // null → sel kosong → importer mengembalikannya jadi null
+    // Tipe akun ditulis sebagai LABEL Indonesia ('Aset', 'Liabilitas', …),
+    // bukan nilai enumnya. Berkas ini dibaca manusia sebelum jadi cadangan, dan
+    // importer mengenali kedua bentuk lewat TIPE_ALIAS — jadi round-trip tetap
+    // utuh tanpa memaksa pembacanya mengerti istilah basis data.
+    r.tipeAkun ? ACCOUNT_TYPE_LABEL[r.tipeAkun] : '',
+    // 'Ya' saja; TIDAK ditulis 'Tidak' untuk yang false. Sel kosong berarti
+    // "tidak diisi", dan itulah yang membuat impor ulang tidak menimpa penanda
+    // kas yang mungkin sudah disetel lewat layar (aturan sel-kosong-tidak-
+    // menghapus, sama dengan impor supplier).
+    r.isKas ? 'Ya' : '',
   ]
 }
 
@@ -77,7 +93,16 @@ export function buildCoaWorkbook(rows: CoaExportRow[]): ArrayBuffer {
 
   // Lebar kolom sekadar keterbacaan saat dibuka manusia — tidak mempengaruhi
   // parsing sama sekali.
-  sheet['!cols'] = [{ wch: 14 }, { wch: 44 }, { wch: 10 }, { wch: 14 }, { wch: 24 }, { wch: 14 }]
+  sheet['!cols'] = [
+    { wch: 14 },
+    { wch: 44 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 24 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 8 },
+  ]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, sheet, COA_EXPORT_SHEET_NAME)

@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { parseKasCell, parseTipeAkunCell, type AccountType } from '@/lib/coa/account-type'
 
 // Parser Master COA dari file Excel (.xlsx/.xls). Semua logika SheetJS
 // diisolasi di sini supaya route handler tetap tipis & modul ini bisa
@@ -11,6 +12,9 @@ export interface ParsedCoaRow {
   kelompok: string
   subKelompok: string
   classCf: string | null
+  /** Kolom OPSIONAL (E3). null = tidak diisi berkas → jangan menimpa yang ada. */
+  tipeAkun: AccountType | null
+  isKas: boolean | null
 }
 
 export interface CoaParseResult {
@@ -33,7 +37,7 @@ export interface CoaParseResult {
   ambiguousKode?: string[]
 }
 
-type Field = 'kode' | 'nama' | 'posisi' | 'kelompok' | 'subKelompok' | 'classCf'
+type Field = 'kode' | 'nama' | 'posisi' | 'kelompok' | 'subKelompok' | 'classCf' | 'tipeAkun' | 'isKas'
 
 // Field wajib ada isinya per baris (classCf boleh kosong → null).
 const REQUIRED_FIELDS: Field[] = ['kode', 'nama', 'posisi', 'kelompok', 'subKelompok']
@@ -45,6 +49,8 @@ const FIELD_LABEL: Record<Field, string> = {
   kelompok: 'Kelompok',
   subKelompok: 'Sub Kelompok',
   classCf: 'Class CF',
+  tipeAkun: 'Tipe Akun',
+  isKas: 'Kas?',
 }
 
 // Alias header (sudah dinormalisasi) → field skema. Toleran terhadap variasi
@@ -87,6 +93,24 @@ const HEADER_ALIASES: Record<string, Field> = {
   'cash flow class': 'classCf',
   'arus kas': 'classCf',
   'cf': 'classCf',
+  // ── Kolom opsional Fase 2 (E3) ──────────────────────────────
+  // 'tipe' sendirian SENGAJA TIDAK didaftarkan: ia terlalu umum dan akan
+  // menyerobot kolom lain yang berjudul "Tipe" di template klien (mis. tipe
+  // transaksi). Alias di sini semuanya menyebut kata 'akun' atau berbahasa
+  // Inggris yang tak ambigu.
+  'tipe akun': 'tipeAkun',
+  'tipeakun': 'tipeAkun',
+  'jenis akun': 'tipeAkun',
+  'golongan akun': 'tipeAkun',
+  'account type': 'tipeAkun',
+  // 'kas' TELANJANG juga tidak didaftarkan: di sheet akuntansi ia jauh lebih
+  // mungkin kolom nominal saldo kas daripada penanda ya/tidak.
+  'kas?': 'isKas',
+  'akun kas': 'isKas',
+  'is kas': 'isKas',
+  'iskas': 'isKas',
+  'is cash': 'isKas',
+  'cash account': 'isKas',
 }
 
 const MAX_ERRORS = 25
@@ -228,10 +252,22 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
       kelompok: pick(row, 'kelompok'),
       subKelompok: pick(row, 'subKelompok'),
       classCf: pick(row, 'classCf'),
+      tipeAkun: pick(row, 'tipeAkun'),
+      isKas: pick(row, 'isKas'),
     }
 
     // Baris kosong total → lewati diam-diam (baris trailing yang wajar).
-    if (REQUIRED_FIELDS.every(f => values[f] === '') && values.classCf === '') continue
+    // Kolom opsional Fase 2 ikut diperiksa: baris yang HANYA berisi "Tipe Akun"
+    // tanpa kode/nama bukan baris data, dan melewatinya lebih baik daripada
+    // melaporkannya sebagai lima kolom wajib yang kosong.
+    if (
+      REQUIRED_FIELDS.every(f => values[f] === '') &&
+      values.classCf === '' &&
+      values.tipeAkun === '' &&
+      values.isKas === ''
+    ) {
+      continue
+    }
 
     const missing = REQUIRED_FIELDS.filter(f => values[f] === '')
     if (missing.length > 0) {
@@ -256,6 +292,25 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
     }
     seenKode.add(kode)
 
+    // Kolom opsional: sel kosong → null (jangan menimpa nilai yang sudah ada),
+    // nilai TERISI tapi tidak dikenali → galat yang menyebut barisnya. Salah
+    // ketik yang diam-diam dibaca sebagai "tidak diisi" adalah kegagalan yang
+    // tidak pernah terlihat sampai laporannya salah.
+    const tipeAkun = parseTipeAkunCell(values.tipeAkun)
+    if (tipeAkun === undefined) {
+      if (errors.length < MAX_ERRORS) {
+        errors.push(`Baris ${excelRow}: Tipe Akun "${values.tipeAkun}" tidak dikenali.`)
+      }
+      continue
+    }
+    const isKas = parseKasCell(values.isKas)
+    if (isKas === undefined) {
+      if (errors.length < MAX_ERRORS) {
+        errors.push(`Baris ${excelRow}: kolom Kas? "${values.isKas}" tidak dikenali (isi ya/tidak).`)
+      }
+      continue
+    }
+
     rows.push({
       kode,
       nama: values.nama,
@@ -263,6 +318,8 @@ export function parseCoaWorkbook(data: ArrayBuffer): CoaParseResult {
       kelompok: values.kelompok,
       subKelompok: values.subKelompok,
       classCf: values.classCf === '' ? null : values.classCf,
+      tipeAkun,
+      isKas,
     })
   }
 
