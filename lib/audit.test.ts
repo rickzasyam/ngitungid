@@ -1,10 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { AUDIT_ENTITY_TYPES, isAuditEntityType, requiresEntityId } from './audit'
+import {
+  AUDIT_ENTITY_TYPES,
+  isAuditEntityType,
+  requiresEntityId,
+  riwayatBertahanSetelahDihapus,
+} from './audit'
 import { JOURNAL_EVENTS } from './journal'
 
 describe('AUDIT_ENTITY_TYPES', () => {
-  it('memuat tepat empat entitas yang disepakati R2', () => {
-    expect([...AUDIT_ENTITY_TYPES]).toEqual(['journal', 'master_coa', 'period_lock', 'supplier'])
+  it('empat entitas R2 plus dua yang lahir bersama modul pembelian & mutasi kas', () => {
+    expect([...AUDIT_ENTITY_TYPES]).toEqual([
+      'journal',
+      'master_coa',
+      'period_lock',
+      'supplier',
+      'purchase_invoice',
+      'cash_mutation',
+    ])
+  })
+
+  // Urutan di lib HARUS mengikuti urutan fisik enum di Postgres: empat nilai
+  // asli dari CREATE TYPE 0014, lalu dua yang di-ADD VALUE di 0016. Menyusunnya
+  // ulang di sini membuat perbandingan dengan migrasi jadi tidak berarti.
+  it('dua entitas baru berada DI UJUNG, sesuai urutan ADD VALUE', () => {
+    expect(AUDIT_ENTITY_TYPES.slice(-2)).toEqual(['purchase_invoice', 'cash_mutation'])
   })
 
   it('isAuditEntityType menolak yang tidak terdaftar, termasuk ejaan Indonesianya', () => {
@@ -15,6 +34,18 @@ describe('AUDIT_ENTITY_TYPES', () => {
       expect(isAuditEntityType(buruk), String(buruk)).toBe(false)
     }
     for (const baik of AUDIT_ENTITY_TYPES) expect(isAuditEntityType(baik), baik).toBe(true)
+  })
+})
+
+describe('riwayat yang bertahan setelah barisnya dihapus', () => {
+  // Aturan umumnya: event dihapus bersama entitasnya (pengganti FK cascade).
+  // purchase_invoice adalah pengecualian yang diminta tersurat oleh brief —
+  // penghapusan invoice harus tercatat lengkap dengan isinya.
+  it('hanya purchase_invoice', () => {
+    expect(riwayatBertahanSetelahDihapus('purchase_invoice')).toBe(true)
+    for (const t of ['journal', 'master_coa', 'period_lock', 'supplier', 'cash_mutation'] as const) {
+      expect(riwayatBertahanSetelahDihapus(t), t).toBe(false)
+    }
   })
 })
 

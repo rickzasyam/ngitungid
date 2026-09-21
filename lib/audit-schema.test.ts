@@ -29,10 +29,21 @@ describe('entity_type adalah ENUM, bukan text', () => {
     // Dua daftar untuk satu himpunan: yang di lib dipakai TypeScript, yang di DB
     // dipakai Postgres. Kalau salah satu bertambah sendirian, jalur tulisnya
     // gagal pada runtime — di jalan yang hanya dilewati fitur baru.
+    //
+    // Nilainya datang dari DUA migrasi: CREATE TYPE di 0014, lalu ADD VALUE di
+    // 0016 (P8 — nilai baru tidak boleh dipakai di transaksi yang sama). Yang
+    // dibandingkan adalah gabungannya, URUTANNYA IKUT, karena urutan di lib
+    // harus mengikuti urutan fisik enum di Postgres.
     const m = MIGRASI.match(/CREATE TYPE "public"\."audit_entity_type" AS ENUM\(([^)]*)\)/)
     expect(m, 'CREATE TYPE audit_entity_type ada di migrasi').not.toBeNull()
-    const nilai = m![1].split(',').map(s => s.trim().replace(/^'|'$/g, ''))
-    expect(nilai).toEqual([...AUDIT_ENTITY_TYPES])
+    const awal = m![1].split(',').map(s => s.trim().replace(/^'|'$/g, ''))
+
+    const M0016 = read('lib', 'db', 'migrations', '0016_enum_values.sql')
+    const ditambah = [...M0016.matchAll(/ALTER TYPE "public"\."audit_entity_type" ADD VALUE '([a-z_]+)'/g)].map(
+      x => x[1]
+    )
+
+    expect([...awal, ...ditambah]).toEqual([...AUDIT_ENTITY_TYPES])
   })
 })
 

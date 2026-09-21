@@ -23,6 +23,9 @@ export type AuditEventInput = {
   /** null kalau usernya tidak bisa diresolusi — kolomnya ON DELETE set null. */
   userId: string | null
   catatan?: string | null
+  /** Keadaan sebelum/sesudah (D42). jsonb — data, bukan prosa. */
+  nilaiSebelum?: unknown
+  nilaiSesudah?: unknown
 }
 
 /** Satu baris riwayat, siap dimasukkan ke db.batch milik pemanggil. */
@@ -34,6 +37,8 @@ export function recordAuditEvent(v: AuditEventInput): BatchItem<'pg'> {
     event: v.event,
     userId: v.userId,
     catatan: v.catatan ?? null,
+    nilaiSebelum: v.nilaiSebelum ?? null,
+    nilaiSesudah: v.nilaiSesudah ?? null,
   })
 }
 

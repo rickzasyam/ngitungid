@@ -18,7 +18,15 @@
 // entitas — JOURNAL_EVENTS di lib/journal.ts, dan seterusnya. Modul ini hanya
 // mengurus hal yang berlaku bagi SEMUA entitas.
 
-export const AUDIT_ENTITY_TYPES = ['journal', 'master_coa', 'period_lock', 'supplier'] as const
+export const AUDIT_ENTITY_TYPES = [
+  'journal',
+  'master_coa',
+  'period_lock',
+  'supplier',
+  // Ditambah migrasi 0016 bersama modul pembelian & mutasi kas.
+  'purchase_invoice',
+  'cash_mutation',
+] as const
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number]
 
 export function isAuditEntityType(v: unknown): v is AuditEntityType {
@@ -39,6 +47,22 @@ export function isAuditEntityType(v: unknown): v is AuditEntityType {
  * seperti itu: setiap event jurnal lahir dari satu jurnal tertentu.
  */
 const ENTITY_ID_REQUIRED: readonly AuditEntityType[] = ['journal']
+
+/**
+ * Entitas yang riwayatnya HIDUP LEBIH LAMA dari barisnya.
+ *
+ * Aturan umum: event dihapus bersama entitasnya, di db.batch yang sama —
+ * pengganti FK cascade yang tidak bisa ada untuk kolom polimorfik.
+ * `purchase_invoice` adalah PENGECUALIAN yang diminta tersurat oleh brief:
+ * penghapusan invoice harus tercatat lengkap dengan isinya sebelum dihapus.
+ * Konsekuensinya `entity_id`-nya menunjuk baris yang sudah tidak ada — sah,
+ * karena CHECK hanya mewajibkan entity_id untuk entitas 'journal'.
+ */
+const RIWAYAT_ABADI: readonly AuditEntityType[] = ['purchase_invoice']
+
+export function riwayatBertahanSetelahDihapus(entityType: AuditEntityType): boolean {
+  return RIWAYAT_ABADI.includes(entityType)
+}
 
 export function requiresEntityId(entityType: AuditEntityType): boolean {
   return ENTITY_ID_REQUIRED.includes(entityType)
