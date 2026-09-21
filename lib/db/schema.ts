@@ -9,6 +9,7 @@ import {
   boolean,
   date,
   timestamp,
+  jsonb,
   unique,
   uniqueIndex,
   index,
@@ -84,13 +85,23 @@ export const jenisKontrakEnum = pgEnum('jenis_kontrak', ['reguler', 'project'])
 // tanpa alasan untuk nilai yang sudah pasti datang.
 export const journalStatusEnum = pgEnum('journal_status', ['draft', 'posted'])
 
-// journal_source: dari mana jurnal lahir. Fase 1 cuma 'manual'. Nilai berikutnya
-// ('import_bank', 'marketplace', 'kas_kecil', 'opening_balance') ditambahkan
-// per fase lewat ALTER TYPE ... ADD VALUE TULIS TANGAN — preseden 0003/0007.
-// JANGAN biarkan drizzle-kit me-recreate enum ini: untuk perubahan enum ia
+// journal_source: dari mana jurnal lahir. 'manual' sejak 0010; 'pembelian' &
+// 'mutasi_kas' ditambah 0016. Nilai berikutnya ('marketplace', 'kas_kecil',
+// 'opening_balance') menyusul per fase lewat ALTER TYPE ... ADD VALUE —
+// preseden 0003/0007.
+//
+// ══ ADD VALUE SELALU BERKAS MIGRASI TERSENDIRI (P8) ══════════════════════
+// Nilai enum yang baru di-ADD TIDAK BOLEH dipakai di transaksi yang sama.
+// Menggabungkannya dengan DDL yang memakainya membuat migrasi gagal DI TENGAH,
+// setelah sebagian objek terlanjur dibuat — dan drizzle tidak punya rollback
+// otomatis untuk itu. Karena itu 0016 berisi ADD VALUE saja, dan 0017 yang
+// memakainya menyusul terpisah.
+//
+// JANGAN pula biarkan drizzle-kit me-recreate enum ini: untuk perubahan enum ia
 // membuat kolom jadi text → DROP TYPE → CREATE TYPE → cast balik, yang pasti
-// gagal di database yang sudah ada isinya.
-export const journalSourceEnum = pgEnum('journal_source', ['manual'])
+// gagal di database yang sudah ada isinya. Hasil 0016 sudah diperiksa: ia
+// benar-benar memancarkan empat ALTER TYPE ... ADD VALUE, bukan recreate.
+export const journalSourceEnum = pgEnum('journal_source', ['manual', 'pembelian', 'mutasi_kas'])
 
 // audit_entity_type: entitas mana yang diriwayatkan sebuah baris audit_events.
 //
@@ -106,6 +117,9 @@ export const auditEntityTypeEnum = pgEnum('audit_entity_type', [
   'master_coa',
   'period_lock',
   'supplier',
+  // Ditambah migrasi 0016 (ADD VALUE tulis tangan, berkas tersendiri — P8).
+  'purchase_invoice',
+  'cash_mutation',
 ])
 
 // account_type: golongan akun dalam persamaan akuntansi (D14).
@@ -128,6 +142,11 @@ export const accountTypeEnum = pgEnum('account_type', [
   'revenue',
   'expense',
 ])
+
+// purchase_payment_method: cara bayar invoice pembelian (D27).
+// CREATE TYPE baru — boleh dipakai di migrasi yang sama dengan tabelnya, beda
+// dari ADD VALUE ke enum yang sudah ada (P8).
+export const purchasePaymentMethodEnum = pgEnum('purchase_payment_method', ['kredit', 'tunai'])
 
 // ── clients ──────────────────────────────────────────────────
 // logo disimpan sebagai bytea DI DALAM DB, sama seperti financial_reports
@@ -664,7 +683,18 @@ export const masterSupplier = pgTable(
     nama: text('nama').notNull(),
     kontak: text('kontak'),
     npwp: text('npwp'),
+    // ⚠️ DIHAPUS di migrasi 0019 (D43) — termin melekat pada INVOICE, bukan pada
+    // rekanan: supplier yang sama bisa memberi 3× untuk satu invoice dan tunai
+    // untuk yang lain. Dipertahankan di sini sampai 0019 diterapkan, dan sudah
+    // TIDAK DIPAKAI jalur mana pun sejak modul pembelian ada.
     terminPembayaran: integer('termin_pembayaran'),
+    // ── Data rekening, migrasi 0017 (D43) ──────────────────────
+    // `bank_rekening` TEXT, bukan angka: nomor rekening bisa berawalan nol dan
+    // bukan sesuatu yang pernah dihitung. Menyimpannya sebagai angka membuang
+    // nol depan secara permanen, dan baru ketahuan saat transfer gagal.
+    bankNama: text('bank_nama'),
+    bankRekening: text('bank_rekening'),
+    bankAtasNama: text('bank_atas_nama'),
     akunHutangDefaultId: uuid('akun_hutang_default_id').references(() => masterCoa.id, {
       onDelete: 'set null',
     }),
@@ -734,6 +764,19 @@ export const auditEvents = pgTable(
     event: text('event').notNull(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     catatan: text('catatan'),
+    // ── Migrasi 0017 (D42) ─────────────────────────────────────
+    // Keadaan SEBELUM dan SESUDAH sebuah perubahan, sebagai jsonb.
+    //
+    // Bukan menumpang `catatan`: itu prosa untuk dibaca manusia, sementara ini
+    // DATA — ia dibandingkan, ditampilkan sebagai diff, dan kelak dicari.
+    // Menaruh JSON di kolom prosa memaksa setiap pembaca menebak mana yang
+    // prosa dan mana yang bukan.
+    //
+    // Wajib terisi saat jurnal TERPOSTING diubah (sakelar "posting bisa
+    // diedit"), karena di situlah riwayat menjadi satu-satunya bukti bahwa
+    // angka yang sudah dilaporkan pernah berbeda.
+    nilaiSebelum: jsonb('nilai_sebelum'),
+    nilaiSesudah: jsonb('nilai_sesudah'),
     at: timestamp('at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -743,6 +786,157 @@ export const auditEvents = pgTable(
     check(
       'audit_events_entity_id_check',
       sql`${table.entityType} <> 'journal' OR ${table.entityId} IS NOT NULL`
+    ),
+  ]
+)
+
+// ── client_accounting_settings (0017) ────────────────────────
+// Setelan pembukuan PER KLIEN. Baris dibuat LAZILY — mayoritas klien tidak akan
+// pernah punya barisnya.
+//
+// ══ KETIADAAN BARIS BERARTI NILAI BAWAAN, DAN ITU HARUS SAMA PERSIS ═══════
+// Karena barisnya lazy, "belum pernah disetel" adalah keadaan yang PALING
+// SERING dibaca — bukan kasus pinggiran. Predikat pembacanya wajib berbentuk
+// `settings?.postingBisaDiedit === true`; bentuk `?? true` akan membalik
+// keputusan D42 untuk hampir semua klien sekaligus, dan tidak ada yang akan
+// menyadarinya sampai ada jurnal terposting yang berubah. Dikunci test
+// tiga-keadaan di lib/accounting-settings.test.ts.
+export const clientAccountingSettings = pgTable('client_accounting_settings', {
+  // client_id SEKALIGUS primary key: satu klien tepat satu baris setelan.
+  // Tanpa itu, dua baris untuk klien yang sama bisa hidup bersamaan dan yang
+  // dibaca jadi urusan urutan.
+  clientId: uuid('client_id')
+    .primaryKey()
+    .references(() => clients.id, { onDelete: 'cascade' }),
+  // Akun PPN Masukan (D33). SET NULL, bukan restrict: ia pengisi awal formulir,
+  // dan invoice sudah men-snapshot akun yang benar-benar dipakainya (D30).
+  akunPpnMasukanId: uuid('akun_ppn_masukan_id').references(() => masterCoa.id, {
+    onDelete: 'set null',
+  }),
+  // D42, bawaan FALSE — keputusan Ricko 2026-09-20: angka yang sudah diserahkan
+  // ke klien tidak boleh berubah diam-diam. Dinyalakan per klien bila memang
+  // dibutuhkan, dan kunci periode tetap mengalahkannya.
+  postingBisaDiedit: boolean('posting_bisa_diedit').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// ── purchase_invoices (0017) ─────────────────────────────────
+// Invoice pembelian dari supplier — pintu masuk hutang usaha (D27).
+//
+// ══ TIDAK ADA KOLOM total, sisa, MAUPUN status ═══════════════════════════
+// Ketiganya diturunkan: total = Σ subtotal baris + ppn, sisa = total − Σ
+// alokasi pembayaran, status = fungsi dari keduanya. Total tersimpan adalah
+// sumber kebenaran kedua yang kalah begitu ada satu jalur tulis yang lupa
+// memperbaruinya — alasan yang sama persis dengan D11 menolak tabel saldo.
+//
+// ══ AKUN DI-SNAPSHOT, BUKAN DIBACA ULANG (D30) ═══════════════════════════
+// akun_hutang_id / akun_ppn_masukan_id / akun_tujuan_id / akun_kas_id direkam
+// saat invoice DIBUAT. Kalau supplier mengganti akun hutang defaultnya setelah
+// ada invoice, jurnal pembayaran akan men-DEBIT akun yang berbeda dari yang
+// di-KREDIT invoice — selisihnya mengendap permanen di dua akun dan tidak
+// pernah melempar galat. Ini yang paling mahal kalau salah.
+export const purchaseInvoices = pgTable(
+  'purchase_invoices',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    supplierId: uuid('supplier_id')
+      .notNull()
+      .references(() => masterSupplier.id, { onDelete: 'restrict' }),
+    tanggal: date('tanggal').notNull(),
+    // NULLABLE, dan kosong disimpan sebagai NULL — bukan '' (D29). Pelajaran
+    // `no_bukti` Fase 1 diulang persis: '' adalah satu nilai konkret, jadi
+    // invoice KEDUA tanpa nomor akan bentrok dengan yang pertama di batasan
+    // unik. NULL tidak pernah bentrok dengan NULL di Postgres.
+    noInvoice: text('no_invoice'),
+    caraBayar: purchasePaymentMethodEnum('cara_bayar').notNull(),
+    // SATU akun tujuan per invoice, BEBAS akun apa pun — persediaan bahan baku,
+    // persediaan barang jadi, beban jasa. Sengaja tidak dibatasi ke akun
+    // persediaan: yang dibeli UMKM tidak selalu barang.
+    akunTujuanId: uuid('akun_tujuan_id')
+      .notNull()
+      .references(() => masterCoa.id, { onDelete: 'restrict' }),
+    akunKasId: uuid('akun_kas_id').references(() => masterCoa.id, { onDelete: 'restrict' }),
+    akunHutangId: uuid('akun_hutang_id').references(() => masterCoa.id, { onDelete: 'restrict' }),
+    akunPpnMasukanId: uuid('akun_ppn_masukan_id').references(() => masterCoa.id, {
+      onDelete: 'restrict',
+    }),
+    ppn: numeric('ppn', { precision: 18, scale: 2 }).notNull().default('0'),
+    jumlahTermin: integer('jumlah_termin').notNull().default(1),
+    jatuhTempoAkhir: date('jatuh_tempo_akhir'),
+    keterangan: text('keterangan'),
+    // Jurnal draf otomatis (D31). SET NULL supaya menghapus jurnalnya lewat
+    // jalur lain tidak ikut menghapus invoicenya — tapi jalur yang sah memang
+    // menghapus keduanya bersamaan, di db.batch yang sama.
+    journalId: uuid('journal_id').references(() => journalEntries.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Unik HANYA bila no_invoice terisi — NULL tidak pernah bentrok (D29).
+    unique('purchase_invoices_supplier_no_invoice_unique').on(
+      table.clientId,
+      table.supplierId,
+      table.noInvoice
+    ),
+    index('purchase_invoices_client_tanggal_idx').on(table.clientId, table.tanggal),
+    index('purchase_invoices_supplier_idx').on(table.supplierId),
+    // Untuk pencarian MUNDUR dari jurnal ke invoicenya (D32, tombol "Koreksi di
+    // Pembelian"). Arah tautannya memang terbalik dari arah FK, dan index ini
+    // yang membuatnya murah — bukan kolom balik di journal_entries, yang akan
+    // jadi kolom polimorfik kedua tanpa FK.
+    index('purchase_invoices_journal_idx').on(table.journalId),
+    // Jaring terakhir di DB, cermin validatePurchaseInvoice. Kredit wajib punya
+    // akun hutang & jatuh tempo; tunai wajib punya akun kas; PPN > 0 wajib
+    // punya akun PPN Masukan (D33 — menolak lebih baik daripada menebak, karena
+    // akun PPN yang salah baru ketahuan saat SPT).
+    check(
+      'purchase_invoices_cara_bayar_check',
+      sql`(${table.caraBayar} <> 'kredit' OR (${table.akunHutangId} IS NOT NULL AND ${table.jatuhTempoAkhir} IS NOT NULL))
+        AND (${table.caraBayar} <> 'tunai' OR ${table.akunKasId} IS NOT NULL)`
+    ),
+    check(
+      'purchase_invoices_ppn_check',
+      sql`${table.ppn} >= 0 AND (${table.ppn} = 0 OR ${table.akunPpnMasukanId} IS NOT NULL)`
+    ),
+    check('purchase_invoices_termin_check', sql`${table.jumlahTermin} >= 1`),
+  ]
+)
+
+// ── purchase_invoice_lines (0017) ────────────────────────────
+// Baris barang. TEKS BEBAS — tidak ada master barang, dan menambahkannya
+// diam-diam berarti membangun modul inventori setengah jadi (§12).
+//
+// ══ subtotal DISIMPAN, dan itu pengecualian sadar (D28) ══════════════════
+// Alasannya aritmetika: qty boleh pecahan (2,5 kg), jadi `qty × harga_satuan`
+// punya pembulatan yang hasilnya bergantung urutan operasi. RUPIAH BARIS itulah
+// faktanya; qty dan harga adalah keterangan. Jurnal dibangun dari `subtotal`,
+// tidak pernah dari perkalian ulang.
+export const purchaseInvoiceLines = pgTable(
+  'purchase_invoice_lines',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => purchaseInvoices.id, { onDelete: 'cascade' }),
+    namaBarang: text('nama_barang').notNull(),
+    qty: numeric('qty', { precision: 18, scale: 4 }).notNull(),
+    satuan: text('satuan'),
+    hargaSatuan: numeric('harga_satuan', { precision: 18, scale: 2 }).notNull(),
+    subtotal: numeric('subtotal', { precision: 18, scale: 2 }).notNull(),
+    lineOrder: integer('line_order').notNull(),
+  },
+  (table) => [
+    index('purchase_invoice_lines_invoice_idx').on(table.invoiceId),
+    check(
+      'purchase_invoice_lines_nominal_check',
+      sql`${table.qty} > 0 AND ${table.hargaSatuan} >= 0 AND ${table.subtotal} >= 0`
     ),
   ]
 )
@@ -854,6 +1048,67 @@ export const journalLinesRelations = relations(journalLines, ({ one }) => ({
 // audit_events hanya punya relasi ke client & user. entity_id SENGAJA tidak
 // punya relasi: ia polimorfik, dan relasi drizzle butuh satu tabel tujuan yang
 // pasti — tidak ada yang bisa ditulis di sini tanpa berbohong.
+export const clientAccountingSettingsRelations = relations(
+  clientAccountingSettings,
+  ({ one }) => ({
+    client: one(clients, {
+      fields: [clientAccountingSettings.clientId],
+      references: [clients.id],
+    }),
+    akunPpnMasukan: one(masterCoa, {
+      fields: [clientAccountingSettings.akunPpnMasukanId],
+      references: [masterCoa.id],
+    }),
+  })
+)
+
+export const purchaseInvoicesRelations = relations(purchaseInvoices, ({ one, many }) => ({
+  client: one(clients, { fields: [purchaseInvoices.clientId], references: [clients.id] }),
+  supplier: one(masterSupplier, {
+    fields: [purchaseInvoices.supplierId],
+    references: [masterSupplier.id],
+  }),
+  // Empat relasi ke master_coa dari tabel yang sama → relationName wajib,
+  // kalau tidak drizzle tidak bisa memutuskan yang mana yang dimaksud.
+  akunTujuan: one(masterCoa, {
+    fields: [purchaseInvoices.akunTujuanId],
+    references: [masterCoa.id],
+    relationName: 'invoiceAkunTujuan',
+  }),
+  akunKas: one(masterCoa, {
+    fields: [purchaseInvoices.akunKasId],
+    references: [masterCoa.id],
+    relationName: 'invoiceAkunKas',
+  }),
+  akunHutang: one(masterCoa, {
+    fields: [purchaseInvoices.akunHutangId],
+    references: [masterCoa.id],
+    relationName: 'invoiceAkunHutang',
+  }),
+  akunPpnMasukan: one(masterCoa, {
+    fields: [purchaseInvoices.akunPpnMasukanId],
+    references: [masterCoa.id],
+    relationName: 'invoiceAkunPpn',
+  }),
+  journal: one(journalEntries, {
+    fields: [purchaseInvoices.journalId],
+    references: [journalEntries.id],
+  }),
+  createdByUser: one(users, {
+    fields: [purchaseInvoices.createdBy],
+    references: [users.id],
+    relationName: 'invoiceCreatedBy',
+  }),
+  lines: many(purchaseInvoiceLines),
+}))
+
+export const purchaseInvoiceLinesRelations = relations(purchaseInvoiceLines, ({ one }) => ({
+  invoice: one(purchaseInvoices, {
+    fields: [purchaseInvoiceLines.invoiceId],
+    references: [purchaseInvoices.id],
+  }),
+}))
+
 export const auditEventsRelations = relations(auditEvents, ({ one }) => ({
   client: one(clients, { fields: [auditEvents.clientId], references: [clients.id] }),
   user: one(users, { fields: [auditEvents.userId], references: [users.id] }),

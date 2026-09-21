@@ -113,6 +113,20 @@
       "when": 1789841366913,
       "tag": "0015_coa_account_type",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789957837262,
+      "tag": "0016_enum_values",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789958015568,
+      "tag": "0017_pembelian",
+      "breakpoints": true
     }
   ]
 }
