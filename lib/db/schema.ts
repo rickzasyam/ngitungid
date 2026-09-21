@@ -941,6 +941,149 @@ export const purchaseInvoiceLines = pgTable(
   ]
 )
 
+
+// ── cash_mutation_imports (0018) ─────────────────────────────
+// Satu baris per BERKAS rekening koran yang diimpor. Gunanya bukan audit
+// belaka: tanpa induk impor, satu berkas yang salah kolom hanya bisa dibereskan
+// baris demi baris, dan tidak ada cara menjawab "baris ini datang dari mana".
+export const cashMutationImports = pgTable(
+  'cash_mutation_imports',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    // RESTRICT: berkas impor mencatat rekening mana yang dibaca. Kalau akunnya
+    // boleh hilang, asal-usul mutasinya ikut hilang.
+    akunKasId: uuid('akun_kas_id')
+      .notNull()
+      .references(() => masterCoa.id, { onDelete: 'restrict' }),
+    namaBerkas: text('nama_berkas').notNull(),
+    jumlahBaris: integer('jumlah_baris').notNull(),
+    diimporOleh: uuid('diimpor_oleh')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('cash_mutation_imports_client_idx').on(table.clientId, table.createdAt)]
+)
+
+// ── cash_mutations (0018) ────────────────────────────────────
+// Satu baris rekening koran / satu mutasi kas.
+//
+// ══ TIDAK ADA KOLOM status MAUPUN sisa ═══════════════════════════════════
+// Keduanya DITURUNKAN dari alokasinya (D37, P3): "belum dijurnal" berarti
+// belum ada alokasi dan belum ada akun lawan, "sebagian" berarti Σ alokasi
+// kurang dari nominalnya. Status tersimpan adalah sumber kebenaran kedua yang
+// kalah begitu ada satu jalur tulis yang lupa memperbaruinya — dan yang tampil
+// di layar itulah yang akan dipercaya.
+//
+// ══ debit = UANG MASUK, untuk akun kas (D36) ═════════════════════════════
+// CHECK-nya SAMA PERSIS dengan journal_lines: tepat satu sisi terisi, keduanya
+// tidak negatif. Bentuk yang sama di dua tabel bukan kebetulan — jurnal mutasi
+// dibangun langsung dari sisi ini, dan aturan yang berbeda akan membuat mutasi
+// yang sah menghasilkan jurnal yang ditolak.
+//
+// ══ fingerprint TIDAK UNIK, dan itu keputusan (D38) ══════════════════════
+// Dua pembayaran identik pada hari yang sama adalah hal nyata. Batasan unik di
+// sini akan MENOLAK transaksi yang benar-benar terjadi; yang dibutuhkan adalah
+// peringatan yang bisa diabaikan akunting, bukan penolakan.
+export const cashMutations = pgTable(
+  'cash_mutations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    akunKasId: uuid('akun_kas_id')
+      .notNull()
+      .references(() => masterCoa.id, { onDelete: 'restrict' }),
+    tanggal: date('tanggal').notNull(),
+    keterangan: text('keterangan'),
+    debit: numeric('debit', { precision: 18, scale: 2 }).notNull().default('0'),
+    kredit: numeric('kredit', { precision: 18, scale: 2 }).notNull().default('0'),
+    // Saldo berjalan dari rekening koran. INFORMATIF — tidak pernah dipakai
+    // menghitung apa pun; saldo yang berlaku tetap datang dari buku besar.
+    saldo: numeric('saldo', { precision: 18, scale: 2 }),
+    fingerprint: text('fingerprint').notNull(),
+    // Baris manual = NULL. SET NULL supaya menghapus catatan impor tidak ikut
+    // menghapus mutasi yang sudah dijurnal.
+    importId: uuid('import_id').references(() => cashMutationImports.id, { onDelete: 'set null' }),
+    akunLawanId: uuid('akun_lawan_id').references(() => masterCoa.id, { onDelete: 'set null' }),
+    journalId: uuid('journal_id').references(() => journalEntries.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('cash_mutations_client_tanggal_idx').on(table.clientId, table.tanggal),
+    index('cash_mutations_akun_tanggal_idx').on(table.akunKasId, table.tanggal),
+    // Untuk mencari dugaan duplikat saat impor — bukan untuk menolaknya.
+    index('cash_mutations_fingerprint_idx').on(table.fingerprint),
+    // Pencarian MUNDUR dari jurnal ke mutasinya (D32, tombol "Koreksi di Mutasi
+    // Kas"), pola yang sama dengan purchase_invoices_journal_idx.
+    index('cash_mutations_journal_idx').on(table.journalId),
+    check(
+      'cash_mutations_debit_kredit_check',
+      sql`${table.debit} >= 0 AND ${table.kredit} >= 0 AND ((${table.debit} = 0) <> (${table.kredit} = 0))`
+    ),
+  ]
+)
+
+// ── cash_mutation_allocations (0018) ─────────────────────────
+// Berapa dari satu mutasi yang dipakai membayar invoice mana. Satu mutasi boleh
+// menunjuk beberapa invoice, dan alokasi sebagian boleh (D37).
+//
+// ══ termin_urutan: NULL = FIFO, terisi = DIPAKU (D40) ════════════════════
+// Nullable dengan sengaja, sehingga kasus lazimnya tetap NOL INPUT dan
+// penimpaan manual jadi pengecualian yang TERCATAT — bukan bentuk baku yang
+// harus diisi setiap kali. Aturan penerapannya (berpaku dulu, luberan FIFO,
+// paku yatim jatuh ke FIFO dan ditandai) hidup di lib/hutang.ts (U1), bukan di
+// sini: ia aturan yang bisa diuji, bukan batasan kolom.
+//
+// ══ TIGA BATAS YANG TIDAK BISA JADI CHECK ════════════════════════════════
+// "Σ alokasi ≤ nominal mutasi", "Σ alokasi ≤ sisa invoice", dan "termin_urutan
+// ≤ jumlah_termin invoice" ketiganya lintas-baris atau lintas-tabel. Ditegakkan
+// di route dan dikunci test baca-sumber (P15) — dicatat di sini supaya tidak
+// ada yang menyangka CHECK di bawah sudah menjaga semuanya.
+export const cashMutationAllocations = pgTable(
+  'cash_mutation_allocations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    mutationId: uuid('mutation_id')
+      .notNull()
+      .references(() => cashMutations.id, { onDelete: 'cascade' }),
+    // RESTRICT, bukan cascade: menghapus invoice yang sudah dibayar harus
+    // berhenti di sini, bukan diam-diam menghapus bukti pembayarannya.
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => purchaseInvoices.id, { onDelete: 'restrict' }),
+    nominal: numeric('nominal', { precision: 18, scale: 2 }).notNull(),
+    terminUrutan: integer('termin_urutan'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    // Satu mutasi menunjuk satu invoice PALING BANYAK sekali. Dua baris untuk
+    // pasangan yang sama akan membuat "sisa invoice" bergantung urutan baca.
+    unique('cash_mutation_allocations_mutation_invoice_unique').on(
+      table.mutationId,
+      table.invoiceId
+    ),
+    index('cash_mutation_allocations_invoice_idx').on(table.invoiceId),
+    index('cash_mutation_allocations_mutation_idx').on(table.mutationId),
+    check('cash_mutation_allocations_nominal_check', sql`${table.nominal} > 0`),
+    check(
+      'cash_mutation_allocations_termin_check',
+      sql`${table.terminUrutan} IS NULL OR ${table.terminUrutan} >= 1`
+    ),
+  ]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
@@ -1061,6 +1204,49 @@ export const clientAccountingSettingsRelations = relations(
     }),
   })
 )
+
+export const cashMutationImportsRelations = relations(cashMutationImports, ({ one, many }) => ({
+  client: one(clients, { fields: [cashMutationImports.clientId], references: [clients.id] }),
+  akunKas: one(masterCoa, {
+    fields: [cashMutationImports.akunKasId],
+    references: [masterCoa.id],
+  }),
+  mutations: many(cashMutations),
+}))
+
+export const cashMutationsRelations = relations(cashMutations, ({ one, many }) => ({
+  client: one(clients, { fields: [cashMutations.clientId], references: [clients.id] }),
+  akunKas: one(masterCoa, {
+    fields: [cashMutations.akunKasId],
+    references: [masterCoa.id],
+    relationName: 'mutasiAkunKas',
+  }),
+  akunLawan: one(masterCoa, {
+    fields: [cashMutations.akunLawanId],
+    references: [masterCoa.id],
+    relationName: 'mutasiAkunLawan',
+  }),
+  import: one(cashMutationImports, {
+    fields: [cashMutations.importId],
+    references: [cashMutationImports.id],
+  }),
+  journal: one(journalEntries, {
+    fields: [cashMutations.journalId],
+    references: [journalEntries.id],
+  }),
+  allocations: many(cashMutationAllocations),
+}))
+
+export const cashMutationAllocationsRelations = relations(cashMutationAllocations, ({ one }) => ({
+  mutation: one(cashMutations, {
+    fields: [cashMutationAllocations.mutationId],
+    references: [cashMutations.id],
+  }),
+  invoice: one(purchaseInvoices, {
+    fields: [cashMutationAllocations.invoiceId],
+    references: [purchaseInvoices.id],
+  }),
+}))
 
 export const purchaseInvoicesRelations = relations(purchaseInvoices, ({ one, many }) => ({
   client: one(clients, { fields: [purchaseInvoices.clientId], references: [clients.id] }),

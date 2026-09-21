@@ -127,6 +127,13 @@
       "when": 1789958015568,
       "tag": "0017_pembelian",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789987994582,
+      "tag": "0018_mutasi_kas",
+      "breakpoints": true
     }
   ]
 }
