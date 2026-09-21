@@ -41,7 +41,13 @@ export const ACCOUNTING_ONLY_PREFIXES = [
  * PERTAMA dibuat. Setiap prefix baru di sini WAJIB dicek terhadap tujuan
  * pantulan useRequireClient.
  */
-export const INTERNAL_ONLY_PREFIXES = ['/admin-overview'] as const
+export const INTERNAL_ONLY_PREFIXES = [
+  '/admin-overview',
+  // Modul pembelian (D45): finance MELIHAT kewajiban klien dan mengunduhnya,
+  // menulis tetap milik akunting (requireAkunting di API). Klien tidak melihat
+  // sama sekali — isInternal menutupnya, bukan requireUser.
+  '/pembelian',
+] as const
 
 /**
  * Prefix KONTRAK — bentuk KETIGA, dan sengaja tidak dilipat ke dua daftar di

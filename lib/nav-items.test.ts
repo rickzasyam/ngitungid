@@ -14,7 +14,7 @@ const ids = (role: Role | null | undefined, sessionLoading = false): NavItemId[]
 describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
   it('owner: semuanya', () => {
     expect(ids('owner')).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -23,21 +23,37 @@ describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
     // Akunting membukukan pekerjaan klien; katalog & kontrak komersial bukan
     // urusannya. Ini satu-satunya item yang staf kehilangan tapi klien punya.
     expect(ids('akunting')).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'laporan',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'laporan',
       'coa-mapping', 'operational', 'settings',
     ])
   })
 
   it('finance: tanpa surface kerja akunting, DENGAN Kontrak', () => {
-    expect(ids('finance')).toEqual(['dashboard', 'analytics', 'laporan', 'kontrak', 'settings'])
+    // Pembelian ikut: ia internalOnly, dan finance adalah orang dalam (D45).
+    expect(ids('finance')).toEqual([
+      'dashboard',
+      'analytics',
+      'pembelian',
+      'laporan',
+      'kontrak',
+      'settings',
+    ])
   })
 
-  it('user (klien): sama dengan finance', () => {
+  it('user (klien): seperti finance, TANPA Pembelian', () => {
     expect(ids('user')).toEqual(['dashboard', 'analytics', 'laporan', 'kontrak', 'settings'])
   })
 
-  it('finance & user melihat daftar yang identik', () => {
-    expect(ids('finance')).toEqual(ids('user'))
+  // Dulu keduanya identik. Sejak Pembelian memakai sumbu internalOnly (D45),
+  // finance melihat satu item yang tidak dilihat klien — dan itu satu-satunya
+  // bedanya. Test ini menyebut perbedaannya, bukan sekadar berhenti menuntut
+  // kesamaan: kalau kelak ada item internalOnly kedua yang bocor ke klien,
+  // selisihnya muncul di sini.
+  it('finance = user PLUS Pembelian, tidak lebih', () => {
+    const finance = ids('finance')
+    const user = ids('user')
+    expect(finance.filter(i => !user.includes(i))).toEqual(['pembelian'])
+    expect(user.filter(i => !finance.includes(i))).toEqual([])
   })
 })
 
@@ -76,7 +92,7 @@ describe('sessionLoading — semua item tampil, apa pun role-nya', () => {
 
   it('daftar penuhnya persis NAV_ITEMS, urutan apa adanya', () => {
     expect(ids(null, true)).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -99,8 +115,8 @@ describe('daftar berubah setelah sesi resolve — kapsul wajib mengukur ulang', 
     // dan 2 → 3 saat Buku Besar menyusul (keduanya staffOnly, jadi finance
     // tidak melihatnya setelah settle) — konsekuensi tidak mengukur ulang
     // justru makin kelihatan tiap kali surface akunting bertambah.
-    expect(ids('finance', true).indexOf('kontrak')).toBe(6)
-    expect(ids('finance', false).indexOf('kontrak')).toBe(3)
+    expect(ids('finance', true).indexOf('kontrak')).toBe(7)
+    expect(ids('finance', false).indexOf('kontrak')).toBe(4)
   })
 
   it('finance: indeks lama melampaui daftar baru — kapsul jatuh di luar', () => {
@@ -125,7 +141,9 @@ describe('daftar berubah setelah sesi resolve — kapsul wajib mengukur ulang', 
 
   it('navKey stabil untuk daftar yang sama (tidak memicu ukur-ulang palsu)', () => {
     expect(navKey(navItemsForRole('finance'))).toBe(navKey(navItemsForRole('finance')))
-    expect(navKey(navItemsForRole('finance'))).toBe('dashboard|analytics|laporan|kontrak|settings')
+    expect(navKey(navItemsForRole('finance'))).toBe(
+      'dashboard|analytics|pembelian|laporan|kontrak|settings'
+    )
   })
 })
 
@@ -201,5 +219,48 @@ describe('Buku Besar', () => {
       const list = ids(role)
       expect(list.includes('buku-besar'), role).toBe(list.includes('jurnal'))
     }
+  })
+})
+
+// ══ PEMBELIAN — SUMBU KETIGA: internalOnly ═══════════════════════════════
+// Bukan pelonggaran staffOnly. Yang membedakan keduanya cuma finance, dan
+// perbedaan itu keputusan (D45): finance melihat kewajiban klien, bukan
+// pembukuannya.
+describe('Pembelian', () => {
+  it.each(['owner', 'akunting'] as const)('%s: Pembelian tepat sesudah Buku Besar', role => {
+    const list = ids(role)
+    expect(list.indexOf('pembelian')).toBe(list.indexOf('buku-besar') + 1)
+  })
+
+  it('finance MELIHAT Pembelian, tapi tidak Jurnal maupun Buku Besar', () => {
+    const list = ids('finance')
+    expect(list).toContain('pembelian')
+    expect(list).not.toContain('jurnal')
+    expect(list).not.toContain('buku-besar')
+  })
+
+  it('klien tidak melihat Pembelian sama sekali', () => {
+    expect(ids('user')).not.toContain('pembelian')
+  })
+
+  it('bertanda internalOnly saja — bukan staffOnly, bukan contractOnly', () => {
+    const p = NAV_ITEMS.find(i => i.id === 'pembelian')!
+    expect(p.internalOnly).toBe(true)
+    expect(p.staffOnly).toBeUndefined()
+    expect(p.contractOnly).toBeUndefined()
+    expect(p.comingSoon).toBeUndefined()
+  })
+
+  // canDoAccounting ⊂ isInternal, jadi item yang bertanda KEDUANYA akan ambigu:
+  // urutan pemeriksaan yang terbalik diam-diam membuka surface akunting untuk
+  // finance. Selama tidak ada item seperti itu, ambiguitasnya tidak pernah
+  // sempat lahir — dan test inilah yang menjaganya tetap begitu.
+  it('tidak ada item yang staffOnly DAN internalOnly sekaligus', () => {
+    for (const i of NAV_ITEMS) expect(!!(i.staffOnly && i.internalOnly), i.id).toBe(false)
+  })
+
+  it('sumbu internalOnly hanya dipakai item yang memang dilihat finance', () => {
+    const internal = NAV_ITEMS.filter(i => i.internalOnly).map(i => i.id)
+    for (const id of internal) expect(ids('finance'), id).toContain(id)
   })
 })

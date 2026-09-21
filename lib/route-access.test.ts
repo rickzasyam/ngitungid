@@ -313,3 +313,34 @@ describe('/buku-besar — gerbang yang sama dengan /jurnal', () => {
     expect(isPathAllowedForRole('user', '/buku-besaran')).toBe(true)
   })
 })
+
+// /pembelian memakai gerbang KETIGA: internalOnly. Finance boleh masuk,
+// klien tidak. Berbeda dari /jurnal & /buku-besar yang menutup finance juga.
+describe('/pembelian — surface orang dalam, bukan surface akunting', () => {
+  it('terdaftar di INTERNAL_ONLY_PREFIXES, BUKAN di ACCOUNTING_ONLY', () => {
+    expect([...INTERNAL_ONLY_PREFIXES]).toContain('/pembelian')
+    expect([...ACCOUNTING_ONLY_PREFIXES]).not.toContain('/pembelian')
+  })
+
+  it.each(['owner', 'akunting', 'finance'] as const)('%s boleh membuka /pembelian', role => {
+    expect(isPathAllowedForRole(role, '/pembelian')).toBe(true)
+  })
+
+  it('klien ditolak', () => {
+    expect(isPathAllowedForRole('user', '/pembelian')).toBe(false)
+  })
+
+  // Perbedaan ini keputusan (D45), bukan kebetulan: finance melihat kewajiban
+  // klien, bukan pembukuannya. Kalau suatu saat dianggap salah, yang berubah
+  // adalah A4 — dan test ini yang akan menunjukkannya.
+  it('finance boleh /pembelian tapi TIDAK /jurnal maupun /buku-besar', () => {
+    expect(isPathAllowedForRole('finance', '/pembelian')).toBe(true)
+    expect(isPathAllowedForRole('finance', '/jurnal')).toBe(false)
+    expect(isPathAllowedForRole('finance', '/buku-besar')).toBe(false)
+  })
+
+  it('sub-path ikut, nama mirip tidak', () => {
+    expect(isPathAllowedForRole('user', '/pembelian/abc')).toBe(false)
+    expect(isPathAllowedForRole('user', '/pembeliannya')).toBe(true)
+  })
+})

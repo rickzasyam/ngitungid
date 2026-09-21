@@ -15,7 +15,7 @@
 // lucide-react dan berhenti bisa diuji sebagai data biasa; sidebar.tsx yang
 // memetakan id → ikon.
 
-import { canDoAccounting, canViewContracts, type Role } from '@/lib/roles'
+import { canDoAccounting, canViewContracts, isInternal, type Role } from '@/lib/roles'
 
 export type NavItemId =
   | 'dashboard'
@@ -23,6 +23,7 @@ export type NavItemId =
   | 'upload'
   | 'jurnal'
   | 'buku-besar'
+  | 'pembelian'
   | 'laporan'
   | 'kontrak'
   | 'coa-mapping'
@@ -39,6 +40,20 @@ export interface NavItem {
   /** Surface KOMERSIAL — digerbangi canViewContracts (owner + finance + klien,
    *  TANPA akunting). Sumbu yang berbeda dari staffOnly, bukan turunannya. */
   contractOnly?: boolean
+  /**
+   * Surface ORANG DALAM — digerbangi isInternal (owner + akunting + finance).
+   *
+   * Sumbu KETIGA, dan sengaja bukan pelonggaran staffOnly: yang membedakannya
+   * cuma finance. Modul pembelian, mutasi kas, dan hutang memakai ini karena
+   * finance perlu MELIHAT kewajiban klien dan mengunduhnya, sementara menulis
+   * tetap milik akunting (ditegakkan requireAkunting di API, D45).
+   *
+   * Konsekuensi yang perlu disadari: finance melihat /pembelian dan /hutang
+   * tapi TIDAK /jurnal maupun /buku-besar — keduanya staffOnly. Itu koheren
+   * (finance melihat kewajiban, bukan pembukuannya), tapi ia keputusan, bukan
+   * kebetulan.
+   */
+  internalOnly?: boolean
 }
 
 /**
@@ -58,6 +73,11 @@ export interface NavItem {
  * Laporan akan menyarankan ia laporan periodik hasil olahan, padahal ia
  * pembacaan langsung buku — dan orang yang mencarinya akan mencarinya di
  * sebelah Jurnal.
+ *
+ * Pembelian menyusul sesudah Buku Besar: ia pintu masuk DATA seperti Upload
+ * dan Jurnal, dan menaruhnya di sana menjaga ketiga pintu itu berdampingan.
+ * Ia yang pertama memakai sumbu internalOnly, jadi jaraknya ke item sebelumnya
+ * BERUBAH untuk finance — yang mengukur posisi item wajib mengukur ulang.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -65,6 +85,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'upload', label: 'Upload', staffOnly: true },
   { id: 'jurnal', label: 'Jurnal', staffOnly: true },
   { id: 'buku-besar', label: 'Buku Besar', staffOnly: true },
+  { id: 'pembelian', label: 'Pembelian', internalOnly: true },
   { id: 'laporan', label: 'Laporan' },
   { id: 'kontrak', label: 'Kontrak', contractOnly: true },
   { id: 'coa-mapping', label: 'COA Mapping', staffOnly: true },
@@ -97,7 +118,11 @@ export function navItemsForRole(
     // contractOnly diperiksa DULU: sumbunya beda dari staffOnly, dan item yang
     // suatu saat punya keduanya harus tunduk pada yang lebih spesifik.
     if (item.contractOnly) return canViewContracts(role)
+    // staffOnly SEBELUM internalOnly: canDoAccounting ⊂ isInternal, jadi item
+    // yang (keliru) bertanda keduanya harus tunduk pada yang lebih KETAT.
+    // Urutan terbalik akan diam-diam membuka surface akunting untuk finance.
     if (item.staffOnly) return canDoAccounting(role)
+    if (item.internalOnly) return isInternal(role)
     return true
   })
 }
