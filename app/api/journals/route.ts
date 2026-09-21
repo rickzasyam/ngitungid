@@ -100,8 +100,12 @@ export async function GET(req: Request) {
       // Dokumen asal untuk jurnal bersumber modul (D32). Pencarian MUNDUR:
       // purchase_invoices.journal_id menunjuk ke jurnal, bukan sebaliknya.
       // Index purchase_invoices_journal_idx yang membuatnya murah.
-      sumberDokumenId: sql<string | null>`(
-        select pi.id from purchase_invoices pi where pi.journal_id = ${journalEntries.id} limit 1
+      // coalesce, bukan CASE atas `sumber`: sebuah jurnal hanya bisa lahir dari
+      // SATU dokumen, jadi paling banyak satu subquery yang mengembalikan baris.
+      // Keduanya memakai index (journal_id) tabel masing-masing.
+      sumberDokumenId: sql<string | null>`coalesce(
+        (select pi.id from purchase_invoices pi where pi.journal_id = ${journalEntries.id} limit 1),
+        (select cm.id from cash_mutations cm where cm.journal_id = ${journalEntries.id} limit 1)
       )`,
       // Mitigasi (c) D42: lencana "diubah setelah posting". Diturunkan dari
       // riwayat — ada event 'updated' SESUDAH event 'posted' terakhir. Tidak

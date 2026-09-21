@@ -15,6 +15,7 @@ import {
   isSumberModul,
   SUMBER_MODUL,
   SUMBER_MODUL_LABEL,
+  sumberDokumenHref,
   canPost,
   canReverse,
   buildReversalLines,
@@ -717,5 +718,37 @@ describe('canEditJournal sadar sumber (D32)', () => {
     expect(canEditJournal('posted')).toBe(false)
     expect(canEditJournal('draft', null)).toBe(true)
     expect(canEditJournal('draft', undefined)).toBe(true)
+  })
+})
+
+
+// ══ TAUTAN "KOREKSI DI …" (D32, N6) ══════════════════════════════════════
+// Bentuk lamanya menulis `/pembelian?invoice=` langsung di JSX /jurnal. Begitu
+// sumber kedua lahir, tombolnya diam-diam menunjuk halaman PEMBELIAN dengan id
+// MUTASI — halaman yang benar-benar ada, tidak melempar galat apa pun, dan
+// menampilkan "tidak ditemukan" untuk dokumen yang sebenarnya ada.
+describe('sumberDokumenHref', () => {
+  it('setiap sumber modul punya halamannya sendiri', () => {
+    expect(sumberDokumenHref('pembelian', 'inv-1')).toBe('/pembelian?invoice=inv-1')
+    expect(sumberDokumenHref('mutasi_kas', 'mut-1')).toBe('/mutasi-kas?mutasi=mut-1')
+  })
+
+  it('SETIAP anggota SUMBER_MODUL punya tautan — tidak ada yang tertinggal', () => {
+    // Penjaga untuk sumber ketiga kelak: menambahkannya ke SUMBER_MODUL tanpa
+    // memberinya halaman membuat test ini merah, bukan membuat tombol mati.
+    for (const m of SUMBER_MODUL) {
+      expect(sumberDokumenHref(m, 'x'), m).not.toBeNull()
+    }
+  })
+
+  it('jurnal manual tidak punya dokumen asal', () => {
+    expect(sumberDokumenHref('manual', 'x')).toBeNull()
+    expect(sumberDokumenHref(null, 'x')).toBeNull()
+    expect(sumberDokumenHref(undefined, 'x')).toBeNull()
+  })
+
+  it('dokumen yang tidak ditemukan → null, bukan tautan ke halaman kosong', () => {
+    expect(sumberDokumenHref('pembelian', null)).toBeNull()
+    expect(sumberDokumenHref('mutasi_kas', '')).toBeNull()
   })
 })

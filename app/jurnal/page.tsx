@@ -40,6 +40,7 @@ import {
   isSumberModul,
   JOURNAL_STATUS_LABEL,
   SUMBER_MODUL_LABEL,
+  sumberDokumenHref,
   TANPA_NO_BUKTI,
   type JournalStatus,
 } from '@/lib/journal'
@@ -709,7 +710,7 @@ export default function JurnalPage() {
                                       diberi tahu ke mana harus pergi. */}
                                   {dariModul && r.sumberDokumenId && (
                                     <Link
-                                      href={`/pembelian?invoice=${r.sumberDokumenId}`}
+                                      href={sumberDokumenHref(r.sumber, r.sumberDokumenId) ?? '#'}
                                       aria-label={`Koreksi jurnal ${r.noBukti ?? TANPA_NO_BUKTI} di ${SUMBER_MODUL_LABEL[r.sumber] ?? 'dokumen asalnya'}`}
                                       className="inline-flex items-center gap-1 rounded-full font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                                       style={{ ...aksiBtn, background: 'white', border: '1px solid #e5e7eb', color: 'var(--color-text-muted)', textDecoration: 'none' }}

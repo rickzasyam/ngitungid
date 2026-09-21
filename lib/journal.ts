@@ -483,6 +483,29 @@ export function isSumberModul(sumber: string | null | undefined): boolean {
 }
 
 /**
+ * Halaman dokumen asal per sumber — dipakai tombol "Koreksi di …" (D32).
+ *
+ * Hidup di sini, bukan di halaman /jurnal, karena alasan yang sama dengan
+ * SUMBER_MODUL_LABEL: sumber baru wajib lewat SATU tempat. Bentuk lamanya
+ * menulis `/pembelian?invoice=` langsung di JSX, dan tombol untuk sumber kedua
+ * akan diam-diam menunjuk halaman pembelian dengan id mutasi.
+ */
+const SUMBER_MODUL_PATH: Record<string, (id: string) => string> = {
+  pembelian: id => `/pembelian?invoice=${id}`,
+  mutasi_kas: id => `/mutasi-kas?mutasi=${id}`,
+}
+
+/** null = sumbernya bukan modul, atau dokumennya tidak ditemukan. */
+export function sumberDokumenHref(
+  sumber: string | null | undefined,
+  dokumenId: string | null | undefined
+): string | null {
+  if (!isSumberModul(sumber) || !dokumenId) return null
+  const bangun = SUMBER_MODUL_PATH[sumber as string]
+  return bangun ? bangun(dokumenId) : null
+}
+
+/**
  * Boleh diubah / dihapus DARI /jurnal?
  *
  * Dua syarat, dan keduanya menutup jalan yang berbeda:

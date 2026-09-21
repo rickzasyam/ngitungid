@@ -20,6 +20,7 @@ const ALLOC = read('app', 'api', 'cash-mutations', '[id]', 'allocations', 'route
 const ALLOC_DEL = read('app', 'api', 'cash-mutations', '[id]', 'allocations', '[allocId]', 'route.ts')
 const IMPORT = read('app', 'api', 'cash-mutations', 'import', 'route.ts')
 const QUERIES = read('lib', 'api', 'cash-mutation-queries.ts')
+const LIST_JURNAL = read('app', 'api', 'journals', 'route.ts')
 
 const handler = (src: string, method: string): string => {
   const start = src.indexOf(`export async function ${method}(`)
@@ -312,5 +313,77 @@ describe('bentuk respons daftar', () => {
 
   it('Σ alokasi dijumlahkan di Postgres sebagai text, bukan float JS (P1)', () => {
     expect(QUERIES).toContain('::numeric(18,2)::text')
+  })
+})
+
+
+// ══ UI /mutasi-kas (N6) ══════════════════════════════════════════════════
+// Struktural, bukan render: yang dijaga adalah janji-janji yang mudah hilang
+// dalam satu polish pass — angka yang tidak dihitung ulang di browser, status
+// "belum dijurnal" yang menonjol, dan tautan D32 yang tidak di-hardcode.
+describe('halaman /mutasi-kas', () => {
+  const PAGE = read('app', 'mutasi-kas', 'page.tsx')
+  const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
+  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const JURNAL = read('app', 'jurnal', 'page.tsx')
+
+  it('daftar akun kas datang dari ?kas=1, bukan disaring di browser', () => {
+    // Penanda kas adalah aturan server (eksplisit ?? turunan). Menyalinnya ke
+    // browser berarti dua definisi "akun kas" yang bisa menyimpang.
+    expect(PAGE).toContain('/coa?kas=1')
+  })
+
+  it('sisa & status DIPAKAI apa adanya dari server, tidak dihitung ulang', () => {
+    expect(PAGE).toContain('r.sisa')
+    expect(PAGE).toContain('r.status')
+    // Tidak ada penjumlahan alokasi di halaman ini.
+    expect(PAGE).not.toContain('allocationRemaining(')
+    expect(PAGE).not.toContain('mutationStatus(')
+  })
+
+  it('"belum dijurnal" memakai warna KRITIS, bukan abu-abu netral', () => {
+    // Permintaan eksplisit Ricko: baris yang belum dijurnal tidak boleh
+    // terlihat sama dengan yang sudah selesai.
+    const i = PAGE.indexOf("'belum dijurnal'")
+    expect(i).toBeGreaterThan(-1)
+    expect(PAGE.slice(i, i + 200)).toContain('--color-accent-critical')
+  })
+
+  it('jumlah baris "belum dijurnal" ikut tampil di header', () => {
+    expect(PAGE).toContain("r.status === 'belum dijurnal'")
+  })
+
+  it('panel alokasi menampilkan sisa TANPA disembunyikan di balik penutup', () => {
+    expect(PANEL).toContain('Belum dialokasikan')
+    // Sisa negatif ditampilkan apa adanya — tidak dikepit Math.max.
+    expect(PANEL).not.toContain('Math.max(0')
+    expect(PANEL).toContain('sisaAngka < 0')
+  })
+
+  it('pemilih cicilan bawaannya Otomatis (FIFO), dan penimpaan diberi tanda', () => {
+    expect(PANEL).toContain('Otomatis (FIFO)')
+    expect(PANEL).toContain('terminUrutan === null')
+    expect(PANEL).toContain('Dipaku manual')
+  })
+
+  it('wizard impor: pratinjau dulu, commit terkunci sampai ada pratinjau', () => {
+    expect(WIZARD).toContain("fd.append('dryRun', '1')")
+    expect(WIZARD).toContain('disabled={!file || busy || !pratinjau}')
+  })
+
+  it('wizard impor menandai duplikat DAN mengatakan ia tetap tersimpan (D38)', () => {
+    expect(WIZARD).toContain('duplikatDiDatabase')
+    expect(WIZARD).toContain('tetap akan tersimpan')
+  })
+
+  it('tautan "Koreksi di …" memakai satu sumber, bukan path yang di-hardcode', () => {
+    expect(JURNAL).toContain('sumberDokumenHref(r.sumber, r.sumberDokumenId)')
+    // Bentuk lamanya akan menunjuk halaman pembelian dengan id mutasi.
+    expect(JURNAL).not.toContain('/pembelian?invoice=${')
+  })
+
+  it('dokumen asal dicari di KEDUA tabel, bukan hanya invoice', () => {
+    expect(LIST_JURNAL).toContain('from purchase_invoices pi')
+    expect(LIST_JURNAL).toContain('from cash_mutations cm')
   })
 })
