@@ -670,13 +670,19 @@ describe('regresi: perujuk baru tidak mengubah perilaku lama', () => {
     expect(plan.invoiceRelinkedCount).toBe(0)
     expect(plan.invoiceBlocked).toEqual([])
     expect(plan.settingUnlinkedCount).toBe(0)
+    expect(plan.mutationRelinkedCount).toBe(0)
+    expect(plan.mutationBlocked).toEqual([])
   })
 
-  it('bentuk kembaliannya bertambah dua, sisanya tidak berubah', () => {
+  it('bentuk kembaliannya PERSIS ini — tambahan baru wajib lewat sini', () => {
+    // Daftar dikunci PERSIS, bukan "mengandung": perujuk baru yang ditambahkan
+    // tanpa memperbarui test ini akan lolos tanpa satu pun test merah, dan
+    // itulah bentuk kegagalan yang §12 sebut sebagai risiko tertinggi kedua.
     const hasil = buildReplacePlan(dasar)
     expect(Object.keys(hasil).sort()).toEqual([
       'invoiceRelinks',
       'journalRelinks',
+      'mutationRelinks',
       'plan',
       'relinks',
       'settingRelinks',
@@ -836,5 +842,136 @@ describe('setelan pembukuan: BOLEH diputus, beda dari invoice', () => {
     })
     expect(plan.settingUnlinkedCount).toBe(0)
     expect(settingRelinks).toEqual([])
+  })
+})
+
+
+// ══ MUTASI KAS: TIGA KOLOM, SEMUANYA MEMBLOKIR (N5) ══════════════════════
+// Test regresi per KOLOM. Syarat Ricko untuk perluasan buildReplacePlan:
+// kolom yang ketinggalan tidak boleh lolos tanpa satu test pun merah — jadi
+// tiap kolom punya pasangan test sendiri (tersambung bila kodenya ada,
+// memblokir bila hilang), bukan satu test yang mewakili semuanya.
+describe('mutasi kas: disambung by kode, DIBLOKIR bila hilang', () => {
+  const dasar = {
+    oldAccounts: [
+      { id: 'old-kas', kode: '1-1100' },
+      { id: 'old-lawan', kode: '6-2000' },
+    ],
+    newKodeToId: new Map([
+      ['1-1100', 'new-kas'],
+      ['6-2000', 'new-lawan'],
+    ]),
+    ambiguousKode: [],
+    lines: [],
+    history: [],
+    reports: [],
+  }
+
+  const KOLOM = [
+    { kolom: 'kas' as const, akun: 'old-kas', label: '2026-09-21 · TRF BRI' },
+    { kolom: 'lawan' as const, akun: 'old-lawan', label: '2026-09-21 · TRF BRI' },
+    { kolom: 'impor-kas' as const, akun: 'old-kas', label: 'rekening-koran.csv' },
+  ]
+
+  for (const { kolom, akun, label } of KOLOM) {
+    it(`kolom "${kolom}": tersambung ke id baru saat kodenya masih ada`, () => {
+      const { plan, mutationRelinks } = buildReplacePlan({
+        ...dasar,
+        mutationAccounts: [{ mutationId: 'm-1', label, kolom, masterCoaId: akun }],
+      })
+      expect(plan.mutationBlocked).toEqual([])
+      expect(plan.mutationRelinkedCount).toBe(1)
+      expect(mutationRelinks).toEqual([
+        { mutationId: 'm-1', kolom, newMasterCoaId: akun === 'old-kas' ? 'new-kas' : 'new-lawan' },
+      ])
+    })
+
+    it(`kolom "${kolom}": MEMBLOKIR saat kodenya hilang di berkas baru`, () => {
+      const { plan, mutationRelinks } = buildReplacePlan({
+        ...dasar,
+        newKodeToId: new Map(),
+        mutationAccounts: [{ mutationId: 'm-1', label, kolom, masterCoaId: akun }],
+      })
+      expect(plan.mutationRelinkedCount).toBe(0)
+      expect(mutationRelinks).toEqual([])
+      expect(plan.mutationBlocked).toHaveLength(1)
+      expect(plan.mutationBlocked[0]).toMatchObject({ mutationId: 'm-1', kolom })
+      // Kode lamanya ikut supaya pesannya bisa menyebut akun mana.
+      expect(plan.mutationBlocked[0].kode).toBe(akun === 'old-kas' ? '1-1100' : '6-2000')
+    })
+  }
+
+  it('akun_lawan_id yang NULLABLE tetap memblokir — bukan diputus jadi null', () => {
+    // Keputusan yang dicatat di MP §8.15: nullability BUKAN penentunya. Mutasi
+    // yang punya akun lawan selalu punya jurnal yang dibangun dari akun itu,
+    // jadi memutusnya membuat mutasinya bercerita berbeda dari jurnalnya.
+    const { plan, mutationRelinks } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map([['1-1100', 'new-kas']]),
+      mutationAccounts: [
+        { mutationId: 'm-1', label: 'x', kolom: 'lawan', masterCoaId: 'old-lawan' },
+      ],
+    })
+    expect(plan.mutationBlocked).toHaveLength(1)
+    // TIDAK ada relink ber-null: kalau suatu saat kebijakannya berubah jadi
+    // set-null, test ini yang merah lebih dulu.
+    expect(mutationRelinks.every(r => r.newMasterCoaId !== null)).toBe(true)
+  })
+
+  it('kode AMBIGU diperlakukan sama dengan hilang', () => {
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      ambiguousKode: ['1-1100'],
+      mutationAccounts: [
+        { mutationId: 'm-1', label: 'x', kolom: 'kas', masterCoaId: 'old-kas' },
+      ],
+    })
+    expect(plan.mutationBlocked).toHaveLength(1)
+  })
+
+  it('satu mutasi dengan DUA kolom bermasalah dilaporkan sebagai dua baris', () => {
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map(),
+      mutationAccounts: [
+        { mutationId: 'm-1', label: 'x', kolom: 'kas', masterCoaId: 'old-kas' },
+        { mutationId: 'm-1', label: 'x', kolom: 'lawan', masterCoaId: 'old-lawan' },
+      ],
+    })
+    expect(plan.mutationBlocked).toHaveLength(2)
+    expect(plan.mutationBlocked.map(b => b.kolom).sort()).toEqual(['kas', 'lawan'])
+  })
+
+  it('baris identik berulang TIDAK menggandakan pesannya', () => {
+    const satu = { mutationId: 'm-1', label: 'x', kolom: 'kas' as const, masterCoaId: 'old-kas' }
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map(),
+      mutationAccounts: [satu, satu, satu],
+    })
+    expect(plan.mutationBlocked).toHaveLength(1)
+  })
+
+  it('akun yang TIDAK berpindah id tidak menghasilkan relink', () => {
+    // Relink adalah tulisan; menulis id yang sama dengan yang sudah ada adalah
+    // baris UPDATE yang tidak mengubah apa pun.
+    const { plan, mutationRelinks } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map([['1-1100', 'old-kas']]),
+      mutationAccounts: [
+        { mutationId: 'm-1', label: 'x', kolom: 'kas', masterCoaId: 'old-kas' },
+      ],
+    })
+    expect(plan.mutationRelinkedCount).toBe(1)
+    expect(mutationRelinks).toEqual([])
+  })
+
+  it('tanpa mutationAccounts, perilakunya PERSIS seperti sebelum N5', () => {
+    const a = buildReplacePlan(dasar)
+    const b = buildReplacePlan({ ...dasar, mutationAccounts: [] })
+    expect(b.plan).toEqual(a.plan)
+    expect(b.mutationRelinks).toEqual([])
+    expect(a.plan.mutationRelinkedCount).toBe(0)
+    expect(a.plan.mutationBlocked).toEqual([])
   })
 })

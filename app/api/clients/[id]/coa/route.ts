@@ -4,6 +4,8 @@ import { asc, eq, inArray, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
+  cashMutationImports,
+  cashMutations,
   clientAccountingSettings,
   clients,
   coaMappingHistory,
@@ -289,6 +291,57 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }))
   )
 
+  // ── Mutasi kas: TIGA kolom akun, semuanya memblokir (N5) ────────────
+  // Alasan per kolom ada di AffectedMutationAccount. Labelnya dibuat supaya
+  // pesan blokir bisa menyebut MUTASI MANA — "ada jurnal yang memakai akun ini"
+  // tidak memberi tahu apa pun tentang baris rekening koran yang harus
+  // dibereskan.
+  const mutationRows =
+    oldIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: cashMutations.id,
+            tanggal: cashMutations.tanggal,
+            keterangan: cashMutations.keterangan,
+            akunKasId: cashMutations.akunKasId,
+            akunLawanId: cashMutations.akunLawanId,
+          })
+          .from(cashMutations)
+          .where(eq(cashMutations.clientId, id))
+
+  const importRows =
+    oldIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: cashMutationImports.id,
+            namaBerkas: cashMutationImports.namaBerkas,
+            akunKasId: cashMutationImports.akunKasId,
+          })
+          .from(cashMutationImports)
+          .where(eq(cashMutationImports.clientId, id))
+
+  const mutationAccounts = [
+    ...mutationRows.flatMap(m => {
+      const label = `${m.tanggal}${m.keterangan ? ` · ${m.keterangan}` : ''}`
+      return (
+        [
+          ['kas', m.akunKasId],
+          ['lawan', m.akunLawanId],
+        ] as const
+      )
+        .filter((pair): pair is readonly ['kas' | 'lawan', string] => pair[1] !== null)
+        .map(([kolom, masterCoaId]) => ({ mutationId: m.id, label, kolom, masterCoaId }))
+    }),
+    ...importRows.map(i => ({
+      mutationId: i.id,
+      label: i.namaBerkas,
+      kolom: 'impor-kas' as const,
+      masterCoaId: i.akunKasId,
+    })),
+  ]
+
   const settingRows =
     oldIds.length === 0
       ? []
@@ -300,17 +353,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .from(clientAccountingSettings)
           .where(eq(clientAccountingSettings.clientId, id))
 
-  const { plan, relinks, journalRelinks, invoiceRelinks, settingRelinks } = buildReplacePlan({
-    oldAccounts,
-    newKodeToId,
-    ambiguousKode: ambiguousKode ?? [],
-    lines,
-    history,
-    reports: reportRows,
-    journalLines: journalRows,
-    invoiceAccounts,
-    accountingSettings: settingRows,
-  })
+  const { plan, relinks, journalRelinks, invoiceRelinks, settingRelinks, mutationRelinks } =
+    buildReplacePlan({
+      oldAccounts,
+      newKodeToId,
+      ambiguousKode: ambiguousKode ?? [],
+      lines,
+      history,
+      reports: reportRows,
+      journalLines: journalRows,
+      invoiceAccounts,
+      accountingSettings: settingRows,
+      mutationAccounts,
+    })
 
   if (dryRun) {
     // TETAP 200 walau ada yang memblokir: layar konfirmasi butuh `impact` untuk
@@ -374,6 +429,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
+  // ── Blokir: mutasi kas menahan akun yang kodenya hilang (N5) ────────
+  //
+  // Ketiga kolomnya memblokir, termasuk `akun_lawan_id` yang nullable —
+  // alasannya ditulis di AffectedMutationAccount. Ditolak di sini supaya
+  // pesannya menyebut BARIS MANA; tanpa ini, kasus yang sama tetap ditolak,
+  // tapi lewat blokir jurnal yang tidak memberi tahu apa pun tentang rekening
+  // koran yang harus dibereskan.
+  if (plan.mutationBlocked.length > 0) {
+    const labelKolom: Record<string, string> = {
+      kas: 'akun kas',
+      lawan: 'akun lawan',
+      'impor-kas': 'akun kas berkas impor',
+    }
+    return NextResponse.json(
+      {
+        error: 'Master COA tidak bisa diganti: ada akun terpakai mutasi kas yang hilang di file baru.',
+        details: plan.mutationBlocked.map(
+          b =>
+            `Mutasi ${b.label ?? '(tanpa keterangan)'} memakai ${labelKolom[b.kolom] ?? b.kolom} ${b.kode}, yang tidak ada di file baru.`
+        ),
+        impact: plan,
+      },
+      { status: 409 }
+    )
+  }
+
   // ── Tulis: satu batch, urutan wajib dijaga ──────────────────────────
   const now = new Date()
   const statements: BatchItem<'pg'>[] = []
@@ -400,7 +481,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Invoice ikut menentukan jalurnya: keempat kolom akunnya juga FK RESTRICT,
   // jadi DELETE master_coa akan ditolak selama sebuah invoice masih menunjuk
   // ke sana — persis masalah yang sama dengan baris jurnal.
-  if (journalRows.length === 0 && invoiceAccounts.length === 0) {
+  if (journalRows.length === 0 && invoiceAccounts.length === 0 && mutationAccounts.length === 0) {
     // Jalur lama, tidak berubah sedikit pun: hapus dulu, lalu sisipkan.
     statements.push(db.delete(masterCoa).where(eq(masterCoa.clientId, id)))
     if (values.length > 0) statements.push(db.insert(masterCoa).values(values))
@@ -471,6 +552,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           set ${target} = v.akun_id
           from (values ${tuples}) as v(id, akun_id)
           where pi.id = v.id
+        `)
+      )
+    }
+
+    // Mutasi disambung ulang per KOLOM, pola yang sama dengan invoice: satu
+    // UPDATE per kolom, bukan per baris. Kolom 'impor-kas' menyasar tabel yang
+    // BERBEDA (cash_mutation_imports), jadi ia punya cabangnya sendiri.
+    for (const kolom of ['kas', 'lawan'] as const) {
+      const sekolom = mutationRelinks.filter(r => r.kolom === kolom)
+      if (sekolom.length === 0) continue
+      const tuples = sql.join(
+        sekolom.map(r => sql`(${r.mutationId}::uuid, ${r.newMasterCoaId}::uuid)`),
+        sql`, `
+      )
+      const target = kolom === 'kas' ? sql`akun_kas_id` : sql`akun_lawan_id`
+      statements.push(
+        db.execute(sql`
+          update ${cashMutations} as cm
+          set ${target} = v.akun_id
+          from (values ${tuples}) as v(id, akun_id)
+          where cm.id = v.id
+        `)
+      )
+    }
+
+    const imporRelinks = mutationRelinks.filter(r => r.kolom === 'impor-kas')
+    if (imporRelinks.length > 0) {
+      const tuples = sql.join(
+        imporRelinks.map(r => sql`(${r.mutationId}::uuid, ${r.newMasterCoaId}::uuid)`),
+        sql`, `
+      )
+      statements.push(
+        db.execute(sql`
+          update ${cashMutationImports} as ci
+          set akun_kas_id = v.akun_id
+          from (values ${tuples}) as v(id, akun_id)
+          where ci.id = v.id
         `)
       )
     }

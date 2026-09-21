@@ -47,6 +47,10 @@ export const INTERNAL_ONLY_PREFIXES = [
   // menulis tetap milik akunting (requireAkunting di API). Klien tidak melihat
   // sama sekali — isInternal menutupnya, bukan requireUser.
   '/pembelian',
+  // Mutasi Kas/Bank (N5) — sumbu yang sama dengan Pembelian: finance melihat
+  // arus kas klien dan mengunduhnya, tapi API-nya tetap requireAkunting untuk
+  // setiap tulisan. Menyembunyikan menu BUKAN kontrol keamanan.
+  '/mutasi-kas',
 ] as const
 
 /**

@@ -96,6 +96,50 @@ export interface AffectedInvoiceAccount {
   masterCoaId: string
 }
 
+/**
+ * Kolom akun yang dirujuk modul Mutasi Kas/Bank (N5). TIGA kolom:
+ * `cash_mutations.akun_kas_id` (NOT NULL), `cash_mutations.akun_lawan_id`
+ * (nullable), dan `cash_mutation_imports.akun_kas_id` (NOT NULL).
+ *
+ * ══ KETIGANYA MEMBLOKIR — TERMASUK YANG NULLABLE ════════════════════════
+ * Aturan yang ditulis di MP §8.15 sesudah keputusan Ricko 2026-09-21: yang
+ * menentukan blokir-vs-set-null BUKAN nullability kolomnya, melainkan (1) ada
+ * tidaknya aturan yang membuat NULL tidak sah, dan (2) apakah barisnya mencatat
+ * sesuatu yang SUDAH TERJADI.
+ *
+ * - `akun_kas_id` (mutasi & impor): NOT NULL, dan ia menyatakan rekening mana
+ *   yang bergerak. Tidak ada nilai pengganti yang benar.
+ * - `akun_lawan_id`: nullable, tapi mutasi yang punya akun lawan SELALU punya
+ *   jurnal yang dibangun dari akun itu (syncMutationJournal). Memutusnya jadi
+ *   null membuat mutasinya bercerita berbeda dari jurnalnya sendiri — dan
+ *   `journal_lines.master_coa_id` yang NOT NULL sudah memblokir kasus yang sama
+ *   lewat jalur lain. Memblokirnya di sini TIDAK menambah satu pun kasus yang
+ *   tadinya lolos; yang ia tambahkan adalah pesan yang menyebut MUTASI MANA,
+ *   alih-alih "ada jurnal yang memakai akun ini".
+ */
+export interface AffectedMutationAccount {
+  /** Id mutasi, atau id baris impor untuk kolom 'impor-kas'. */
+  mutationId: string
+  /** Tanggal + keterangan singkat, atau nama berkas — untuk dibaca manusia. */
+  label: string | null
+  kolom: 'kas' | 'lawan' | 'impor-kas'
+  masterCoaId: string
+}
+
+/** Mutasi (atau impor) yang menghalangi penggantian. */
+export interface BlockedMutation {
+  mutationId: string
+  label: string | null
+  kolom: 'kas' | 'lawan' | 'impor-kas'
+  kode: string
+}
+
+export interface MutationRelink {
+  mutationId: string
+  kolom: 'kas' | 'lawan' | 'impor-kas'
+  newMasterCoaId: string
+}
+
 /** Setelan pembukuan klien yang merujuk Master COA (akun PPN Masukan). */
 export interface AffectedAccountingSetting {
   clientId: string
@@ -203,6 +247,13 @@ export interface ReplacePlan {
   invoiceBlocked: BlockedInvoice[]
   /** Setelan klien yang akun PPN Masukan-nya diputus jadi null. */
   settingUnlinkedCount: number
+  /** Kolom akun mutasi kas yang bisa disambung ke id baru (N5). */
+  mutationRelinkedCount: number
+  /**
+   * Mutasi kas / baris impor yang MENGHALANGI penggantian. Tidak kosong =
+   * route wajib menolak 409 sebelum menulis apa pun.
+   */
+  mutationBlocked: BlockedMutation[]
 }
 
 /** Baris ini akan disambung ke id baru, atau diputus (null). */
@@ -241,6 +292,7 @@ export interface PlanInput {
   suppliers?: AffectedSupplier[]
   invoiceAccounts?: AffectedInvoiceAccount[]
   accountingSettings?: AffectedAccountingSetting[]
+  mutationAccounts?: AffectedMutationAccount[]
 }
 
 /**
@@ -256,6 +308,7 @@ export function buildReplacePlan(input: PlanInput): {
   supplierRelinks: SupplierRelink[]
   invoiceRelinks: InvoiceRelink[]
   settingRelinks: SettingRelink[]
+  mutationRelinks: MutationRelink[]
 } {
   const { oldAccounts, newKodeToId, ambiguousKode, lines, history, reports } = input
 
@@ -485,6 +538,36 @@ export function buildReplacePlan(input: PlanInput): {
     return a.kolom === b.kolom ? a.kode.localeCompare(b.kode) : a.kolom.localeCompare(b.kolom)
   })
 
+  // ── cash_mutations & cash_mutation_imports: TIGA kolom, memblokir (N5) ──
+  // Lihat catatan panjang di AffectedMutationAccount untuk alasan per kolom.
+  const mutationRelinks: MutationRelink[] = []
+  const mutationBlocked: BlockedMutation[] = []
+  const mutationBlockedSeen = new Set<string>()
+  let mutationRelinkedCount = 0
+
+  for (const ma of input.mutationAccounts ?? []) {
+    const target = resolve(ma.masterCoaId)
+    if (target) {
+      mutationRelinkedCount++
+      if (target !== ma.masterCoaId) {
+        mutationRelinks.push({ mutationId: ma.mutationId, kolom: ma.kolom, newMasterCoaId: target })
+      }
+      continue
+    }
+    const kode = oldIdToKode.get(ma.masterCoaId) ?? '(tidak diketahui)'
+    const key = `${ma.mutationId} ${ma.kolom} ${kode}`
+    if (mutationBlockedSeen.has(key)) continue
+    mutationBlockedSeen.add(key)
+    mutationBlocked.push({ mutationId: ma.mutationId, label: ma.label, kolom: ma.kolom, kode })
+  }
+
+  mutationBlocked.sort((a, b) => {
+    const ka = a.label ?? ''
+    const kb = b.label ?? ''
+    if (ka !== kb) return ka.localeCompare(kb)
+    return a.kolom === b.kolom ? a.kode.localeCompare(b.kode) : a.kolom.localeCompare(b.kolom)
+  })
+
   // ── client_accounting_settings.akun_ppn_masukan_id: BOLEH diputus ────
   // Berbeda dari invoice: ini pengisi awal formulir, bukan bagian dari sebuah
   // pencatatan. Invoice yang sudah ada tetap memegang akun PPN-nya sendiri
@@ -522,12 +605,15 @@ export function buildReplacePlan(input: PlanInput): {
       invoiceRelinkedCount,
       invoiceBlocked,
       settingUnlinkedCount,
+      mutationRelinkedCount,
+      mutationBlocked,
     },
     relinks,
     journalRelinks,
     supplierRelinks,
     invoiceRelinks,
     settingRelinks,
+    mutationRelinks,
   }
 }
 

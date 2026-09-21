@@ -24,6 +24,7 @@ export type NavItemId =
   | 'jurnal'
   | 'buku-besar'
   | 'pembelian'
+  | 'mutasi-kas'
   | 'laporan'
   | 'kontrak'
   | 'coa-mapping'
@@ -86,6 +87,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'jurnal', label: 'Jurnal', staffOnly: true },
   { id: 'buku-besar', label: 'Buku Besar', staffOnly: true },
   { id: 'pembelian', label: 'Pembelian', internalOnly: true },
+  { id: 'mutasi-kas', label: 'Mutasi Kas', internalOnly: true },
   { id: 'laporan', label: 'Laporan' },
   { id: 'kontrak', label: 'Kontrak', contractOnly: true },
   { id: 'coa-mapping', label: 'COA Mapping', staffOnly: true },

@@ -285,9 +285,19 @@ describe('GET /coa membawa tipe turunan dan penyaring opsional (R8)', () => {
 describe('replace-all sadar invoice pembelian & setelan klien', () => {
   const body = handler(REPLACE, 'POST')
 
-  it('keempat kolom akun invoice dibaca dan dioper ke planner', () => {
+  it('keempat kolom akun invoice dibaca dan MASUK ke daftar yang dioper', () => {
     for (const kolom of ['akunTujuanId', 'akunKasId', 'akunHutangId', 'akunPpnMasukanId']) {
       expect(body, kolom).toContain(`purchaseInvoices.${kolom}`)
+    }
+    // Sama dengan penjaga mutasi di bawah: kolom yang dibaca tapi lupa masuk
+    // ke `invoiceAccounts` tidak tertangkap oleh pemeriksaan SELECT saja.
+    for (const pasangan of [
+      "['tujuan', inv.akunTujuanId]",
+      "['kas', inv.akunKasId]",
+      "['hutang', inv.akunHutangId]",
+      "['ppn', inv.akunPpnMasukanId]",
+    ]) {
+      expect(body, pasangan).toContain(pasangan)
     }
     expect(body).toContain('invoiceAccounts,')
   })
@@ -324,5 +334,52 @@ describe('replace-all sadar invoice pembelian & setelan klien', () => {
   it('setelan klien DIPUTUS jadi null, bukan memblokir', () => {
     expect(body).toContain('for (const r of settingRelinks)')
     expect(body).toContain('akunPpnMasukanId: r.newAkunPpnMasukanId')
+  })
+})
+
+
+// ══ PENJAGA BERDIRI: PERUJUK master_coa DARI MODUL MUTASI KAS (N5) ═══════
+// Sama mendesaknya dengan M5, dan dengan satu bentuk kegagalan tambahan:
+// ketiga kolom di bawah adalah FK RESTRICT, jadi kolom yang lupa didaftarkan
+// membuat ganti-massal GAGAL DI DATABASE dengan galat yang tidak menyebut satu
+// baris pun — bukan salah angka, melainkan buntu yang tidak bisa dijelaskan.
+describe('replace-all sadar mutasi kas', () => {
+  const body = handler(REPLACE, 'POST')
+
+  it('ketiga kolom perujuk dibaca dan MASUK ke daftar yang dioper', () => {
+    // Diperiksa pada TITIK PENYUSUNAN daftarnya, bukan pada SELECT-nya.
+    // Membaca kolom di query tapi lupa memasukkannya ke `mutationAccounts`
+    // adalah persis bentuk kegagalan yang diminta Ricko supaya membuat test
+    // merah — dan bentuk `toContain('cashMutations.akunLawanId')` saja TIDAK
+    // menangkapnya, karena string itu tetap ada di SELECT.
+    expect(body).toContain("['kas', m.akunKasId]")
+    expect(body).toContain("['lawan', m.akunLawanId]")
+    expect(body).toContain('masterCoaId: i.akunKasId')
+    expect(body).toContain('mutationAccounts,')
+  })
+
+  it('mutasi yang terblokir menolak 409 SEBELUM satu statement pun dikirim', () => {
+    const blokir = body.indexOf('plan.mutationBlocked.length > 0')
+    const batch = body.indexOf('await db.batch(')
+    expect(blokir).toBeGreaterThan(-1)
+    expect(blokir).toBeLessThan(batch)
+  })
+
+  it('pesan blokirnya menyebut BARIS MANA, bukan sekadar akunnya', () => {
+    // Tanpa label, akunting cuma diberi tahu "ada akun yang dipakai" dan harus
+    // menebak baris rekening koran mana yang harus dibereskan.
+    expect(body).toContain('b.label')
+    expect(body).toContain("kas: 'akun kas'")
+    expect(body).toContain("'impor-kas':")
+  })
+
+  it('jalur hapus-langsung ikut memperhitungkan mutasi', () => {
+    expect(body).toContain('mutationAccounts.length === 0')
+  })
+
+  it('relink mutasi dieksekusi per kolom, dan impor punya cabang tabelnya sendiri', () => {
+    expect(body).toContain("mutationRelinks.filter(r => r.kolom === kolom)")
+    expect(body).toContain('update ${cashMutations} as cm')
+    expect(body).toContain('update ${cashMutationImports} as ci')
   })
 })
