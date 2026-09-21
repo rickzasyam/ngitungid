@@ -770,8 +770,8 @@ Batas "Σ alokasi ≤ nominal mutasi", "Σ alokasi ≤ sisa invoice", dan "`term
 | `coa_mapping_history` | — | sudah ada | — |
 | `journal_lines.master_coa_id` | NOT NULL | blokir **409** | ✅ A3 |
 | `master_supplier.akun_hutang_default_id` | NULL | set null + hitung dampak | ✅ A3/B3 |
-| 🆕 `purchase_invoices.akun_tujuan_id` | NOT NULL | blokir **409** | M5 |
-| 🆕 `purchase_invoices.akun_hutang_id` / `.akun_ppn_masukan_id` / `.akun_kas_id` | NULL | set null + hitung dampak | M5 |
+| 🆕 `purchase_invoices.akun_tujuan_id` | NOT NULL | blokir **409** | ✅ M5 |
+| 🆕 `purchase_invoices.akun_hutang_id` / `.akun_ppn_masukan_id` / `.akun_kas_id` | NULL **tapi diikat CHECK** | blokir **409** — lihat catatan di bawah | ✅ M5 |
 | 🆕 `client_accounting_settings.akun_ppn_masukan_id` | NULL | set null | M5 |
 | 🆕 `cash_mutations.akun_kas_id` | NOT NULL | blokir **409** | N5 |
 | 🆕 `cash_mutations.akun_lawan_id` | NULL | set null + hitung dampak | N5 |
@@ -780,6 +780,30 @@ Batas "Σ alokasi ≤ nominal mutasi", "Σ alokasi ≤ sisa invoice", dan "`term
 | ~~`bank_import_rows.akun_lawan_id`~~ · ~~`bank_mapping_rules.akun_id`~~ · ~~`bank_imports.akun_kas_id`~~ | — | ❌ dibatalkan (§3.5) | — |
 
 **Setiap tabel baru yang merujuk `master_coa` menambah satu langkah "perluas replace-plan + test" di fasenya.** Perubahan 2026-09-19 menambah **enam** kolom sekaligus — ini bertambah dari 2 menjadi 8, dan §12 mencatatnya sebagai risiko tersendiri.
+
+#### Catatan: "nullable" TIDAK otomatis berarti "set null" (keputusan Ricko 2026-09-21)
+
+Ketiga kolom akun `purchase_invoices` di atas memang nullable, tapi **CHECK tabelnya
+mewajibkan kolom itu terisi menurut cara bayar**: `akun_hutang_id` wajib saat Kredit,
+`akun_kas_id` wajib saat Tunai, `akun_ppn_masukan_id` wajib saat PPN > 0. Menulis NULL
+ke sana melanggar CHECK-nya, dan karena ganti-massal berjalan dalam satu `db.batch`,
+**seluruh batch gagal dengan galat Postgres yang tidak menyebut satu invoice pun** —
+akunting melihat "gagal menyimpan" tanpa tahu invoice mana yang harus dibereskan.
+
+Keempat kolom akun invoice karena itu **MEMBLOKIR**, dengan daftar invoice penghalang
+yang bisa dibaca di dialog dampak. Alasannya sama dengan `journal_lines`: **invoice
+adalah dokumen yang SUDAH TERJADI, dan hutangnya tidak boleh kehilangan akun sandaran.**
+
+`client_accounting_settings.akun_ppn_masukan_id` tetap **set null** dan itu bukan
+inkonsistensi: ia pengisi awal formulir, bukan angka yang sudah jadi. Kehilangannya
+membuat invoice ber-PPN berikutnya ditolak dengan pesan ke Settings — bukan membuat
+angka yang sudah tercatat kehilangan sandaran.
+
+**Aturan yang berlaku untuk perujuk baru sesudah ini** (berlaku juga di N5): yang
+menentukan blokir-vs-set-null bukan nullability kolomnya, melainkan dua pertanyaan —
+**(1)** apakah ada CHECK/aturan yang membuat NULL tidak sah, dan **(2)** apakah barisnya
+mencatat sesuatu yang sudah terjadi (blokir) atau sekadar bawaan untuk pengisian
+berikutnya (set null).
 
 ---
 
