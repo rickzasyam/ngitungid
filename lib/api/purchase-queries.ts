@@ -183,9 +183,14 @@ export async function loadInvoiceDetail(invoiceId: string) {
  *
  * `total` dijumlahkan di Postgres lewat cast `numeric(18,2)::text` supaya
  * nilainya tidak pernah melewati float JS (P1) — pola yang sama dengan daftar
- * jurnal. `sisa` dihitung di JS dari total dikurangi alokasi; alokasi baru ada
- * di §5.E, jadi untuk sekarang ia selalu sama dengan total untuk invoice
- * kredit, dan nol untuk tunai (tunai lunas saat dibuat).
+ * jurnal. `sisa` = total dikurangi Σ alokasi pembayaran yang menunjuk invoice
+ * ini (N4).
+ *
+ * Σ alokasi diambil lewat SUBQUERY berkorelasi, bukan leftJoin kedua: baris
+ * invoice sudah digandakan oleh join ke `purchase_invoice_lines`, dan join
+ * kedua akan mengalikan keduanya — Σ subtotal dan Σ alokasi sama-sama membesar
+ * sebanyak baris lawannya, dan totalnya terlihat masuk akal sampai ada invoice
+ * dengan dua baris dan dua pembayaran.
  */
 export async function listInvoices(opts: {
   clientId: string
@@ -216,6 +221,11 @@ export async function listInvoices(opts: {
       createdByName: users.name,
       subtotalDb: sql<string>`coalesce(sum(${purchaseInvoiceLines.subtotal}), 0)::numeric(18,2)::text`,
       lineCount: sql<number>`count(${purchaseInvoiceLines.id})::int`,
+      teralokasiDb: sql<string>`(
+        select coalesce(sum(a.nominal), 0)::numeric(18,2)::text
+        from cash_mutation_allocations a
+        where a.invoice_id = ${purchaseInvoices.id}
+      )`,
     })
     .from(purchaseInvoices)
     .innerJoin(masterSupplier, eq(purchaseInvoices.supplierId, masterSupplier.id))
@@ -227,16 +237,25 @@ export async function listInvoices(opts: {
 
   return rows.map(r => {
     const totalMinor = (toMinorUnits(r.subtotalDb) ?? 0) + (toMinorUnits(r.ppn) ?? 0)
-    // Alokasi pembayaran lahir di §5.E. Sampai itu ada, sisa hutang sebuah
-    // invoice KREDIT sama dengan totalnya, dan invoice TUNAI tidak pernah
-    // punya sisa — ia dibayar saat dibuat.
-    const sisaMinor = r.caraBayar === 'kredit' ? totalMinor : 0
+    const teralokasiMinor = toMinorUnits(r.teralokasiDb) ?? 0
+    // Invoice TUNAI tidak pernah punya sisa — ia dibayar saat dibuat, dan
+    // hutangnya tidak pernah lahir. Invoice KREDIT: sisa = total − Σ alokasi,
+    // DITURUNKAN setiap kali dibaca (D37, P3).
+    const sisaMinor = r.caraBayar === 'kredit' ? totalMinor - teralokasiMinor : 0
     return {
       ...r,
       subtotal: r.subtotalDb,
       total: fromMinorUnits(totalMinor),
+      teralokasi: r.teralokasiDb,
       sisa: fromMinorUnits(sisaMinor),
-      status: r.caraBayar === 'tunai' ? 'tunai' : sisaMinor <= 0 ? 'lunas' : 'belum dibayar',
+      status:
+        r.caraBayar === 'tunai'
+          ? 'tunai'
+          : sisaMinor <= 0
+            ? 'lunas'
+            : teralokasiMinor > 0
+              ? 'sebagian'
+              : 'belum dibayar',
     }
   })
 }
