@@ -631,3 +631,210 @@ describe('buildReplacePlan — instruksi no-op tidak dikirim', () => {
     expect(supplierRelinks).toEqual([])
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════
+// M5 — perujuk master_coa dari modul pembelian
+// ══════════════════════════════════════════════════════════════════════════
+
+// ══ PENJAGA BERDIRI: INPUT LAMA MENGHASILKAN KELUARAN YANG SAMA PERSIS ═══
+// Setiap kali replace-plan bertambah perujuk, risikonya bukan cuma yang baru
+// salah — yang lama bisa ikut bergeser. Test ini membandingkan pemanggilan
+// TANPA input baru terhadap pemanggilan dengan input baru yang KOSONG.
+describe('regresi: perujuk baru tidak mengubah perilaku lama', () => {
+  const dasar = {
+    oldAccounts: [
+      { id: 'old-1', kode: '1-1000' },
+      { id: 'old-2', kode: '2-1000' },
+    ],
+    newKodeToId: new Map([
+      ['1-1000', 'new-1'],
+      ['3-3000', 'new-3'],
+    ]),
+    ambiguousKode: [],
+    lines: [],
+    history: [],
+    reports: [],
+  }
+
+  it('tanpa invoiceAccounts sama dengan invoiceAccounts kosong', () => {
+    const a = buildReplacePlan(dasar)
+    const b = buildReplacePlan({ ...dasar, invoiceAccounts: [], accountingSettings: [] })
+    expect(b.plan).toEqual(a.plan)
+    expect(b.relinks).toEqual(a.relinks)
+    expect(b.journalRelinks).toEqual(a.journalRelinks)
+    expect(b.supplierRelinks).toEqual(a.supplierRelinks)
+  })
+
+  it('hitungan barunya nol, dan blokirnya kosong', () => {
+    const { plan } = buildReplacePlan(dasar)
+    expect(plan.invoiceRelinkedCount).toBe(0)
+    expect(plan.invoiceBlocked).toEqual([])
+    expect(plan.settingUnlinkedCount).toBe(0)
+  })
+
+  it('bentuk kembaliannya bertambah dua, sisanya tidak berubah', () => {
+    const hasil = buildReplacePlan(dasar)
+    expect(Object.keys(hasil).sort()).toEqual([
+      'invoiceRelinks',
+      'journalRelinks',
+      'plan',
+      'relinks',
+      'settingRelinks',
+      'supplierRelinks',
+    ])
+  })
+})
+
+describe('invoice pembelian: disambung by kode, DIBLOKIR bila hilang', () => {
+  const dasar = {
+    oldAccounts: [
+      { id: 'old-1', kode: '1-1000' },
+      { id: 'old-2', kode: '2-1000' },
+    ],
+    newKodeToId: new Map([['1-1000', 'new-1']]),
+    ambiguousKode: [],
+    lines: [],
+    history: [],
+    reports: [],
+  }
+
+  it('akun yang kodenya masih ada disambung ke id baru', () => {
+    const { plan, invoiceRelinks } = buildReplacePlan({
+      ...dasar,
+      invoiceAccounts: [
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'tujuan' as const, masterCoaId: 'old-1' },
+      ],
+    })
+    expect(plan.invoiceRelinkedCount).toBe(1)
+    expect(plan.invoiceBlocked).toEqual([])
+    expect(invoiceRelinks).toEqual([
+      { invoiceId: 'inv-1', kolom: 'tujuan', newMasterCoaId: 'new-1' },
+    ])
+  })
+
+  // ══ INI PENYIMPANGAN SADAR DARI §8.15 ═══════════════════════════════
+  // Tiga dari empat kolom itu NULL-able, dan kebijakan umum §8.15 berbunyi
+  // "NULL-able → set null". Di sini tidak bisa: purchase_invoices punya CHECK
+  // yang mewajibkan akun hutang untuk kredit, akun kas untuk tunai, dan akun
+  // PPN bila ppn > 0. Memutusnya jadi NULL melanggar CHECK dan menggagalkan
+  // SELURUH batch, dengan galat Postgres yang tidak menyebut satu pun invoice.
+  it.each(['tujuan', 'kas', 'hutang', 'ppn'] as const)(
+    'kolom %s yang kodenya HILANG memblokir, bukan diputus jadi null',
+    kolom => {
+      const { plan, invoiceRelinks } = buildReplacePlan({
+        ...dasar,
+        invoiceAccounts: [{ invoiceId: 'inv-1', noInvoice: 'INV-1', kolom, masterCoaId: 'old-2' }],
+      })
+      expect(plan.invoiceBlocked).toEqual([
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom, kode: '2-1000' },
+      ])
+      expect(invoiceRelinks).toEqual([])
+    }
+  )
+
+  it('kode AMBIGU juga memblokir — menyambung ke salah satunya cuma tebakan', () => {
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      ambiguousKode: ['1-1000'],
+      invoiceAccounts: [
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'tujuan' as const, masterCoaId: 'old-1' },
+      ],
+    })
+    expect(plan.invoiceBlocked).toHaveLength(1)
+  })
+
+  it('dua kolom bermasalah pada satu invoice tetap DUA baris blokir', () => {
+    // Keduanya menuntut perbaikan yang berbeda: akun tujuan dan akun hutang
+    // tidak bisa dibetulkan dengan tindakan yang sama.
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      invoiceAccounts: [
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'tujuan' as const, masterCoaId: 'old-2' },
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'hutang' as const, masterCoaId: 'old-2' },
+      ],
+    })
+    expect(plan.invoiceBlocked).toHaveLength(2)
+  })
+
+  it('kolom & kode yang SAMA pada satu invoice dideduplikasi', () => {
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      invoiceAccounts: [
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'tujuan' as const, masterCoaId: 'old-2' },
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'tujuan' as const, masterCoaId: 'old-2' },
+      ],
+    })
+    expect(plan.invoiceBlocked).toHaveLength(1)
+  })
+
+  it('invoice tanpa nomor diurutkan lebih dulu lewat kunci kosong, tidak melempar', () => {
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      invoiceAccounts: [
+        { invoiceId: 'inv-2', noInvoice: 'INV-9', kolom: 'tujuan' as const, masterCoaId: 'old-2' },
+        { invoiceId: 'inv-1', noInvoice: null, kolom: 'tujuan' as const, masterCoaId: 'old-2' },
+      ],
+    })
+    expect(plan.invoiceBlocked.map(b => b.invoiceId)).toEqual(['inv-1', 'inv-2'])
+  })
+
+  it('id yang TIDAK berpindah tidak menghasilkan instruksi tulis', () => {
+    // Jalur hapus-satu-baris memanggil planner dengan peta kode→id yang
+    // SEKARANG; tanpa penyaringan ini setiap invoice ditulis ulang tanpa
+    // berubah.
+    const { plan, invoiceRelinks } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map([['1-1000', 'old-1']]),
+      invoiceAccounts: [
+        { invoiceId: 'inv-1', noInvoice: 'INV-1', kolom: 'tujuan' as const, masterCoaId: 'old-1' },
+      ],
+    })
+    expect(plan.invoiceRelinkedCount).toBe(1)
+    expect(invoiceRelinks).toEqual([])
+  })
+})
+
+describe('setelan pembukuan: BOLEH diputus, beda dari invoice', () => {
+  const dasar = {
+    oldAccounts: [
+      { id: 'old-1', kode: '1-1000' },
+      { id: 'old-2', kode: '2-1000' },
+    ],
+    newKodeToId: new Map([['1-1000', 'new-1']]),
+    ambiguousKode: [],
+    lines: [],
+    history: [],
+    reports: [],
+  }
+
+  it('kode masih ada → disambung, tidak dihitung sebagai putus', () => {
+    const { plan, settingRelinks } = buildReplacePlan({
+      ...dasar,
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: 'old-1' }],
+    })
+    expect(plan.settingUnlinkedCount).toBe(0)
+    expect(settingRelinks).toEqual([{ clientId: 'c1', newAkunPpnMasukanId: 'new-1' }])
+  })
+
+  it('kode hilang → DIPUTUS jadi null, bukan memblokir', () => {
+    // Berbeda dari invoice: ini pengisi awal formulir, bukan bagian dari
+    // pencatatan. Invoice yang sudah ada tetap memegang akun PPN-nya sendiri
+    // lewat snapshot (D30), jadi memutus setelan tidak mengubah satu angka pun.
+    const { plan, settingRelinks } = buildReplacePlan({
+      ...dasar,
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: 'old-2' }],
+    })
+    expect(plan.settingUnlinkedCount).toBe(1)
+    expect(plan.invoiceBlocked).toEqual([])
+    expect(settingRelinks).toEqual([{ clientId: 'c1', newAkunPpnMasukanId: null }])
+  })
+
+  it('setelan tanpa akun PPN dilewati sama sekali', () => {
+    const { plan, settingRelinks } = buildReplacePlan({
+      ...dasar,
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: null }],
+    })
+    expect(plan.settingUnlinkedCount).toBe(0)
+    expect(settingRelinks).toEqual([])
+  })
+})

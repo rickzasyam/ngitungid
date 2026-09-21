@@ -72,6 +72,56 @@ export interface AffectedSupplier {
   akunHutangDefaultId: string | null
 }
 
+/**
+ * Invoice pembelian yang merujuk Master COA (M5).
+ *
+ * ══ KEEMPAT KOLOMNYA MEMBLOKIR, WALAU TIGA DI ANTARANYA NULL-ABLE ════════
+ * Ini MENYIMPANG dari kebijakan umum "NULL-able → set null" di §8.15, dan
+ * penyimpangannya bukan pilihan: `purchase_invoices` punya CHECK yang
+ * mewajibkan akun hutang untuk invoice kredit, akun kas untuk tunai, dan akun
+ * PPN Masukan bila ppn > 0. Memutus salah satunya jadi NULL akan melanggar
+ * CHECK itu dan MENGGAGALKAN SELURUH BATCH ganti-massal — dengan galat
+ * Postgres yang tidak menyebut satu pun invoice.
+ *
+ * Jadi: disambung ulang by kode kalau kodenya masih ada, DIBLOKIR 409 kalau
+ * hilang. Yang diblokir bisa dibaca manusia (nomor invoice + kode akunnya),
+ * sama seperti blokir jurnal.
+ */
+export interface AffectedInvoiceAccount {
+  invoiceId: string
+  /** null = invoice itu memang tidak punya nomor (D29). */
+  noInvoice: string | null
+  /** Kolom mana yang merujuk — dipakai pesan blokir supaya bisa ditindak. */
+  kolom: 'tujuan' | 'kas' | 'hutang' | 'ppn'
+  masterCoaId: string
+}
+
+/** Setelan pembukuan klien yang merujuk Master COA (akun PPN Masukan). */
+export interface AffectedAccountingSetting {
+  clientId: string
+  akunPpnMasukanId: string | null
+}
+
+/** Invoice yang menghalangi penggantian: akunnya hilang/ambigu di berkas baru. */
+export interface BlockedInvoice {
+  invoiceId: string
+  noInvoice: string | null
+  kolom: 'tujuan' | 'kas' | 'hutang' | 'ppn'
+  kode: string
+}
+
+export interface InvoiceRelink {
+  invoiceId: string
+  kolom: 'tujuan' | 'kas' | 'hutang' | 'ppn'
+  newMasterCoaId: string
+}
+
+export interface SettingRelink {
+  clientId: string
+  /** null = akun PPN Masukan diputus (kodenya hilang/ambigu). */
+  newAkunPpnMasukanId: string | null
+}
+
 /** Jurnal yang menghalangi penggantian: akunnya hilang/ambigu di berkas baru. */
 export interface BlockedJournal {
   journalId: string
@@ -142,6 +192,17 @@ export interface ReplacePlan {
   supplierRelinkedCount: number
   /** Supplier yang akun hutang default-nya diputus jadi null. */
   supplierUnlinkedCount: number
+  /** Kolom akun invoice pembelian yang bisa disambung ke id baru. */
+  invoiceRelinkedCount: number
+  /**
+   * Invoice yang MENGHALANGI penggantian. Tidak kosong = route wajib menolak
+   * 409 SEBELUM menulis apa pun — alasan yang sama dengan journalBlocked,
+   * ditambah satu: memutusnya jadi null akan melanggar CHECK invoice dan
+   * menggagalkan seluruh batch dengan galat yang tidak menyebut invoicenya.
+   */
+  invoiceBlocked: BlockedInvoice[]
+  /** Setelan klien yang akun PPN Masukan-nya diputus jadi null. */
+  settingUnlinkedCount: number
 }
 
 /** Baris ini akan disambung ke id baru, atau diputus (null). */
@@ -178,6 +239,8 @@ export interface PlanInput {
    */
   journalLines?: AffectedJournalLine[]
   suppliers?: AffectedSupplier[]
+  invoiceAccounts?: AffectedInvoiceAccount[]
+  accountingSettings?: AffectedAccountingSetting[]
 }
 
 /**
@@ -191,6 +254,8 @@ export function buildReplacePlan(input: PlanInput): {
   relinks: LineRelink[]
   journalRelinks: JournalRelink[]
   supplierRelinks: SupplierRelink[]
+  invoiceRelinks: InvoiceRelink[]
+  settingRelinks: SettingRelink[]
 } {
   const { oldAccounts, newKodeToId, ambiguousKode, lines, history, reports } = input
 
@@ -387,6 +452,55 @@ export function buildReplacePlan(input: PlanInput): {
     }
   }
 
+  // ── purchase_invoices: EMPAT kolom, semuanya memblokir (M5) ──────────
+  // Lihat catatan panjang di AffectedInvoiceAccount: CHECK invoice membuat
+  // "set null" mustahil, jadi kebijakannya blokir — sama dengan journal_lines.
+  const invoiceRelinks: InvoiceRelink[] = []
+  const invoiceBlocked: BlockedInvoice[] = []
+  const invoiceBlockedSeen = new Set<string>()
+  let invoiceRelinkedCount = 0
+
+  for (const ia of input.invoiceAccounts ?? []) {
+    const target = resolve(ia.masterCoaId)
+    if (target) {
+      invoiceRelinkedCount++
+      if (target !== ia.masterCoaId) {
+        invoiceRelinks.push({ invoiceId: ia.invoiceId, kolom: ia.kolom, newMasterCoaId: target })
+      }
+      continue
+    }
+    // Didedup per (invoice, kolom, kode) — satu invoice yang dua kolomnya
+    // menunjuk akun hilang yang sama tetap dua masalah berbeda untuk dibaca.
+    const kode = oldIdToKode.get(ia.masterCoaId) ?? '(tidak diketahui)'
+    const key = `${ia.invoiceId} ${ia.kolom} ${kode}`
+    if (invoiceBlockedSeen.has(key)) continue
+    invoiceBlockedSeen.add(key)
+    invoiceBlocked.push({ invoiceId: ia.invoiceId, noInvoice: ia.noInvoice, kolom: ia.kolom, kode })
+  }
+
+  invoiceBlocked.sort((a, b) => {
+    const ka = a.noInvoice ?? ''
+    const kb = b.noInvoice ?? ''
+    if (ka !== kb) return ka.localeCompare(kb)
+    return a.kolom === b.kolom ? a.kode.localeCompare(b.kode) : a.kolom.localeCompare(b.kolom)
+  })
+
+  // ── client_accounting_settings.akun_ppn_masukan_id: BOLEH diputus ────
+  // Berbeda dari invoice: ini pengisi awal formulir, bukan bagian dari sebuah
+  // pencatatan. Invoice yang sudah ada tetap memegang akun PPN-nya sendiri
+  // lewat snapshot (D30), jadi memutus setelan tidak mengubah satu angka pun.
+  const settingRelinks: SettingRelink[] = []
+  let settingUnlinkedCount = 0
+
+  for (const st of input.accountingSettings ?? []) {
+    if (!st.akunPpnMasukanId) continue
+    const target = resolve(st.akunPpnMasukanId)
+    if (!target) settingUnlinkedCount++
+    if (target !== st.akunPpnMasukanId) {
+      settingRelinks.push({ clientId: st.clientId, newAkunPpnMasukanId: target })
+    }
+  }
+
   return {
     plan: {
       matchedKode,
@@ -405,10 +519,15 @@ export function buildReplacePlan(input: PlanInput): {
       journalBlocked,
       supplierRelinkedCount,
       supplierUnlinkedCount,
+      invoiceRelinkedCount,
+      invoiceBlocked,
+      settingUnlinkedCount,
     },
     relinks,
     journalRelinks,
     supplierRelinks,
+    invoiceRelinks,
+    settingRelinks,
   }
 }
 

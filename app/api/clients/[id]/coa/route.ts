@@ -4,12 +4,14 @@ import { asc, eq, inArray, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
+  clientAccountingSettings,
   clients,
   coaMappingHistory,
   financialReports,
   journalEntries,
   journalLines,
   masterCoa,
+  purchaseInvoices,
   reportLineItems,
 } from '@/lib/db/schema'
 import { requireAkunting, requireUser } from '@/lib/api/guards'
@@ -250,7 +252,55 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .innerJoin(journalEntries, eq(journalLines.journalId, journalEntries.id))
           .where(eq(journalEntries.clientId, id))
 
-  const { plan, relinks, journalRelinks } = buildReplacePlan({
+  // ── Invoice pembelian: EMPAT kolom akun, semuanya memblokir (M5) ────
+  // Dibaca sebagai satu baris per (invoice, kolom) supaya planner bisa
+  // menyebut KOLOM MANA yang bermasalah — "akun tujuan" dan "akun hutang"
+  // yang hilang menuntut perbaikan yang berbeda.
+  const invoiceRows =
+    oldIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: purchaseInvoices.id,
+            noInvoice: purchaseInvoices.noInvoice,
+            akunTujuanId: purchaseInvoices.akunTujuanId,
+            akunKasId: purchaseInvoices.akunKasId,
+            akunHutangId: purchaseInvoices.akunHutangId,
+            akunPpnMasukanId: purchaseInvoices.akunPpnMasukanId,
+          })
+          .from(purchaseInvoices)
+          .where(eq(purchaseInvoices.clientId, id))
+
+  const invoiceAccounts = invoiceRows.flatMap(inv =>
+    (
+      [
+        ['tujuan', inv.akunTujuanId],
+        ['kas', inv.akunKasId],
+        ['hutang', inv.akunHutangId],
+        ['ppn', inv.akunPpnMasukanId],
+      ] as const
+    )
+      .filter((pair): pair is readonly ['tujuan' | 'kas' | 'hutang' | 'ppn', string] => pair[1] !== null)
+      .map(([kolom, masterCoaId]) => ({
+        invoiceId: inv.id,
+        noInvoice: inv.noInvoice,
+        kolom,
+        masterCoaId,
+      }))
+  )
+
+  const settingRows =
+    oldIds.length === 0
+      ? []
+      : await db
+          .select({
+            clientId: clientAccountingSettings.clientId,
+            akunPpnMasukanId: clientAccountingSettings.akunPpnMasukanId,
+          })
+          .from(clientAccountingSettings)
+          .where(eq(clientAccountingSettings.clientId, id))
+
+  const { plan, relinks, journalRelinks, invoiceRelinks, settingRelinks } = buildReplacePlan({
     oldAccounts,
     newKodeToId,
     ambiguousKode: ambiguousKode ?? [],
@@ -258,6 +308,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     history,
     reports: reportRows,
     journalLines: journalRows,
+    invoiceAccounts,
+    accountingSettings: settingRows,
   })
 
   if (dryRun) {
@@ -295,6 +347,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
+  // ── Blokir: invoice pembelian menahan akun yang kodenya hilang ──────
+  //
+  // Sama mendesaknya dengan blokir jurnal, dan satu alasan tambahan: kolom
+  // akun invoice punya CHECK (kredit wajib akun hutang, tunai wajib akun kas,
+  // ppn>0 wajib akun PPN). Memutusnya jadi NULL akan melanggar CHECK itu dan
+  // menggagalkan seluruh batch dengan galat Postgres yang tidak menyebut satu
+  // pun invoice. Ditolak di sini, dengan menyebut nomor invoice & kolomnya.
+  if (plan.invoiceBlocked.length > 0) {
+    const labelKolom: Record<string, string> = {
+      tujuan: 'akun tujuan',
+      kas: 'akun kas',
+      hutang: 'akun hutang',
+      ppn: 'akun PPN Masukan',
+    }
+    return NextResponse.json(
+      {
+        error: 'Master COA tidak bisa diganti: ada akun terpakai invoice pembelian yang hilang di file baru.',
+        details: plan.invoiceBlocked.map(
+          b =>
+            `Invoice ${b.noInvoice ?? '(tanpa nomor)'} memakai ${labelKolom[b.kolom] ?? b.kolom} ${b.kode}, yang tidak ada di file baru.`
+        ),
+        impact: plan,
+      },
+      { status: 409 }
+    )
+  }
+
   // ── Tulis: satu batch, urutan wajib dijaga ──────────────────────────
   const now = new Date()
   const statements: BatchItem<'pg'>[] = []
@@ -318,7 +397,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // 2) Ganti isi Master COA. History ikut terhapus (FK CASCADE) — sengaja
   //    dibiarkan, lalu yang kode-nya selamat di-insert ulang di langkah 5.
-  if (journalRows.length === 0) {
+  // Invoice ikut menentukan jalurnya: keempat kolom akunnya juga FK RESTRICT,
+  // jadi DELETE master_coa akan ditolak selama sebuah invoice masih menunjuk
+  // ke sana — persis masalah yang sama dengan baris jurnal.
+  if (journalRows.length === 0 && invoiceAccounts.length === 0) {
     // Jalur lama, tidak berubah sedikit pun: hapus dulu, lalu sisipkan.
     statements.push(db.delete(masterCoa).where(eq(masterCoa.clientId, id)))
     if (values.length > 0) statements.push(db.insert(masterCoa).values(values))
@@ -363,6 +445,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           from (values ${jTuples}) as v(id, master_coa_id)
           where jl.id = v.id
         `)
+      )
+    }
+
+    // Invoice disambung ulang per KOLOM. Satu UPDATE per kolom, bukan per
+    // baris: jumlah kolomnya tetap empat berapa pun banyaknya invoice.
+    for (const kolom of ['tujuan', 'kas', 'hutang', 'ppn'] as const) {
+      const sekolom = invoiceRelinks.filter(r => r.kolom === kolom)
+      if (sekolom.length === 0) continue
+      const tuples = sql.join(
+        sekolom.map(r => sql`(${r.invoiceId}::uuid, ${r.newMasterCoaId}::uuid)`),
+        sql`, `
+      )
+      const target =
+        kolom === 'tujuan'
+          ? sql`akun_tujuan_id`
+          : kolom === 'kas'
+            ? sql`akun_kas_id`
+            : kolom === 'hutang'
+              ? sql`akun_hutang_id`
+              : sql`akun_ppn_masukan_id`
+      statements.push(
+        db.execute(sql`
+          update ${purchaseInvoices} as pi
+          set ${target} = v.akun_id
+          from (values ${tuples}) as v(id, akun_id)
+          where pi.id = v.id
+        `)
+      )
+    }
+
+    // Setelan klien BOLEH diputus (null) — ia pengisi awal formulir, bukan
+    // bagian dari pencatatan. Invoice yang sudah ada tetap memegang akun
+    // PPN-nya sendiri lewat snapshot (D30).
+    for (const r of settingRelinks) {
+      statements.push(
+        db
+          .update(clientAccountingSettings)
+          .set({ akunPpnMasukanId: r.newAkunPpnMasukanId, updatedAt: now })
+          .where(eq(clientAccountingSettings.clientId, r.clientId))
       )
     }
 

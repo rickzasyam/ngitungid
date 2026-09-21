@@ -277,3 +277,52 @@ describe('GET /coa membawa tipe turunan dan penyaring opsional (R8)', () => {
     expect(updated).toBeLessThan(filter)
   })
 })
+
+// ══ PENJAGA BERDIRI: PERUJUK master_coa DARI MODUL PEMBELIAN (M5) ════════
+// Kolom perujuk yang lupa didaftarkan membuat ganti-massal COA memutus FK
+// atau memindahkan angka ke akun yang salah — dan tidak ada test perilaku
+// yang otomatis merah. Penjaganya harus struktural.
+describe('replace-all sadar invoice pembelian & setelan klien', () => {
+  const body = handler(REPLACE, 'POST')
+
+  it('keempat kolom akun invoice dibaca dan dioper ke planner', () => {
+    for (const kolom of ['akunTujuanId', 'akunKasId', 'akunHutangId', 'akunPpnMasukanId']) {
+      expect(body, kolom).toContain(`purchaseInvoices.${kolom}`)
+    }
+    expect(body).toContain('invoiceAccounts,')
+  })
+
+  it('setelan klien ikut dioper — akun PPN Masukan juga merujuk master_coa', () => {
+    expect(body).toContain('clientAccountingSettings.akunPpnMasukanId')
+    expect(body).toContain('accountingSettings: settingRows')
+  })
+
+  it('invoice yang terblokir menolak 409 SEBELUM satu statement pun dikirim', () => {
+    const blokir = body.indexOf('plan.invoiceBlocked.length > 0')
+    const batch = body.indexOf('await db.batch(')
+    expect(blokir).toBeGreaterThan(-1)
+    expect(blokir).toBeLessThan(batch)
+  })
+
+  it('pesan blokirnya menyebut nomor invoice DAN kolom mana yang bermasalah', () => {
+    expect(body).toContain('b.noInvoice')
+    expect(body).toContain('labelKolom[b.kolom]')
+  })
+
+  it('jalur hapus-langsung hanya dipakai bila TIDAK ada jurnal DAN tidak ada invoice', () => {
+    // Keempat kolom akun invoice juga FK RESTRICT, jadi DELETE master_coa
+    // ditolak selama sebuah invoice masih menunjuk ke sana.
+    expect(body).toContain('journalRows.length === 0 && invoiceAccounts.length === 0')
+  })
+
+  it('relink invoice dieksekusi per KOLOM, di dalam batch', () => {
+    expect(body).toContain('invoiceRelinks.filter(r => r.kolom === kolom)')
+    expect(body).toContain('update ${purchaseInvoices} as pi')
+    expect(body).not.toContain('await db.execute(')
+  })
+
+  it('setelan klien DIPUTUS jadi null, bukan memblokir', () => {
+    expect(body).toContain('for (const r of settingRelinks)')
+    expect(body).toContain('akunPpnMasukanId: r.newAkunPpnMasukanId')
+  })
+})
