@@ -34,10 +34,10 @@ export interface LedgerRow extends LedgerLine {
   saldo: number
 }
 
-export interface RunningBalance {
+export interface RunningBalance<T extends LedgerLine = LedgerLine> {
   /** Saldo sebelum baris pertama — akumulasi seluruh baris periode sebelumnya. */
   opening: number
-  rows: LedgerRow[]
+  rows: (T & { saldo: number })[]
   closing: number
 }
 
@@ -120,15 +120,20 @@ function mutasi(line: LedgerLine, sign: 1 | -1): number {
  * modul ini hanya menjumlahkannya. Pemisahan itu disengaja: "sebelum periode"
  * adalah pertanyaan query (dengan index tanggal), bukan pertanyaan aturan.
  */
-export function computeRunningBalance({
+// Generik atas bentuk barisnya: pemanggil boleh memberi baris yang membawa
+// field TAMBAHAN (mis. penanda `diubahSetelahPosting` dari query), dan
+// field itu ikut utuh ke keluaran lewat spread di bawah. Tanpa generik,
+// TypeScript memangkasnya ke LedgerLine dan penandanya lenyap dalam
+// perjalanan — tanpa satu pun galat.
+export function computeRunningBalance<T extends LedgerLine>({
   lines,
   posisi,
   openingLines = [],
 }: {
-  lines: readonly LedgerLine[]
+  lines: readonly T[]
   posisi: string
   openingLines?: readonly LedgerLine[]
-}): RunningBalance {
+}): RunningBalance<T> {
   const sign = normalSign(posisi)
 
   let opening = 0
@@ -136,7 +141,7 @@ export function computeRunningBalance({
 
   const urut = [...lines].sort(compareLedgerLines)
   let saldo = opening
-  const rows: LedgerRow[] = urut.map(l => {
+  const rows: (T & { saldo: number })[] = urut.map(l => {
     saldo += mutasi(l, sign)
     return { ...l, saldo }
   })

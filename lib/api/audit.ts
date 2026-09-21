@@ -53,6 +53,9 @@ export function recordJournalEvent(v: {
   event: JournalEvent
   userId: string | null
   catatan?: string | null
+  /** Wajib saat jurnal TERPOSTING diubah lewat sakelar D42. */
+  nilaiSebelum?: unknown
+  nilaiSesudah?: unknown
 }): BatchItem<'pg'> {
   return recordAuditEvent({
     clientId: v.clientId,
@@ -61,6 +64,8 @@ export function recordJournalEvent(v: {
     event: v.event,
     userId: v.userId,
     catatan: v.catatan,
+    nilaiSebelum: v.nilaiSebelum,
+    nilaiSesudah: v.nilaiSesudah,
   })
 }
 

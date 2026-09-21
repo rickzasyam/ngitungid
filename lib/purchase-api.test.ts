@@ -358,7 +358,7 @@ describe('tombol "Koreksi di Pembelian" di /jurnal', () => {
 
   it('route detail menolak PATCH/DELETE jurnal bersumber modul, dengan pesan tersendiri', () => {
     const DET = read('app', 'api', 'journals', '[id]', 'route.ts')
-    expect(DET).toContain('isSumberModul(sumber)')
+    expect(DET).toContain('isSumberModul(row.sumber)')
     expect(DET).toContain('tidak bisa diubah dari halaman Jurnal')
     // Pesan yang sama untuk dua sebab berbeda membuat akunting mencoba jalan
     // yang tidak akan pernah berhasil.

@@ -80,6 +80,8 @@ interface JournalRow {
   reversalOfNoBukti: string | null
   /** Id dokumen asal untuk jurnal bersumber modul (D32). null = tidak ketemu. */
   sumberDokumenId: string | null
+  /** Mitigasi (c) D42 — diturunkan dari riwayat, tidak disimpan. */
+  diubahSetelahPosting: boolean
 }
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
@@ -609,6 +611,19 @@ export default function JurnalPage() {
                                   Pembalik dari {r.reversalOfNoBukti ?? TANPA_NO_BUKTI}
                                 </span>
                               )}
+                              {/* ── Mitigasi (c) D42 ──────────────────────
+                                  Pembaca berhak tahu bahwa sebuah angka pernah
+                                  berbeda TANPA harus membuka panel riwayat
+                                  lebih dulu. Warnanya kritis, bukan netral:
+                                  ini bukan informasi tambahan, ini peringatan. */}
+                              {r.diubahSetelahPosting && (
+                                <span
+                                  style={lencanaPeringatan}
+                                  title="Jurnal ini diubah SESUDAH diposting. Rinciannya ada di panel Riwayat."
+                                >
+                                  diubah setelah posting
+                                </span>
+                              )}
                             </td>
                             <td
                               style={{
@@ -947,6 +962,18 @@ const aksiBtn: React.CSSProperties = {
   background: 'var(--color-accent-primary)',
   color: 'var(--color-accent-primary-fg)',
   cursor: 'pointer',
+}
+
+const lencanaPeringatan: React.CSSProperties = {
+  display: 'inline-block',
+  marginLeft: 6,
+  borderRadius: 999,
+  padding: '1px 8px',
+  fontSize: 10.5,
+  fontWeight: 600,
+  background: 'color-mix(in srgb, var(--color-accent-critical) 16%, white)',
+  color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)',
+  verticalAlign: 'middle',
 }
 
 const lencana: React.CSSProperties = {

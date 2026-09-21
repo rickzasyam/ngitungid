@@ -4,7 +4,7 @@
 // Dipisah dari halamannya supaya page.tsx tetap soal daftar & aksi, bukan soal
 // tata letak tabel bersarang.
 
-import { History, Loader2 } from 'lucide-react'
+import { AlertTriangle, History, Loader2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
 import { computeTotals, labelEvent, TANPA_NO_BUKTI } from '@/lib/journal'
 
@@ -50,6 +50,8 @@ export interface JournalDetailData {
   reversals?: JournalRefRow[]
   reversedBy?: JournalRefRow | null
   reversalOf?: JournalRefRow | null
+  /** Mitigasi (c) D42 — diturunkan dari riwayat, tidak disimpan. */
+  diubahSetelahPosting?: boolean
 }
 
 const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
@@ -172,6 +174,27 @@ export function JournalDetail({
       {/* Keterkaitan asli ↔ pembalik. Draf pembalik DITAMPILKAN terpisah: ia
           belum membalik apa pun, dan menyembunyikannya membuat orang membuat
           draf kedua tanpa tahu yang pertama masih menunggu diposting. */}
+      {detail.diubahSetelahPosting && (
+        <div
+          role="note"
+          className="mt-2 px-3.5 py-2.5 rounded-2xl flex items-start gap-2"
+          style={{
+            background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)',
+            border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)',
+          }}
+        >
+          <AlertTriangle
+            className="w-4 h-4 flex-shrink-0 mt-0.5"
+            style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+          />
+          <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
+            <strong>Jurnal ini diubah setelah diposting.</strong> Angka yang pernah dilaporkan dari
+            jurnal ini bisa berbeda dari yang tampil sekarang — perubahannya tercatat lengkap di
+            Riwayat di bawah.
+          </p>
+        </div>
+      )}
+
       {(detail.reversedBy || detail.reversalOf || (detail.reversals?.length ?? 0) > 0) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           {detail.reversalOf && (

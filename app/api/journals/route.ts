@@ -103,6 +103,20 @@ export async function GET(req: Request) {
       sumberDokumenId: sql<string | null>`(
         select pi.id from purchase_invoices pi where pi.journal_id = ${journalEntries.id} limit 1
       )`,
+      // Mitigasi (c) D42: lencana "diubah setelah posting". Diturunkan dari
+      // riwayat — ada event 'updated' SESUDAH event 'posted' terakhir. Tidak
+      // disimpan sebagai kolom (P3), dan index (entity_type, entity_id, at)
+      // yang membuat dua subquery ini murah.
+      diubahSetelahPosting: sql<boolean>`exists (
+        select 1 from audit_events u
+        where u.entity_type = 'journal' and u.entity_id = ${journalEntries.id}
+          and u.event = 'updated'
+          and u.at > (
+            select max(p.at) from audit_events p
+            where p.entity_type = 'journal' and p.entity_id = ${journalEntries.id}
+              and p.event = 'posted'
+          )
+      )`,
     })
     .from(journalEntries)
     .innerJoin(users, eq(journalEntries.createdBy, users.id))

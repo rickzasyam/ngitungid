@@ -10,6 +10,7 @@ import {
   users,
 } from '@/lib/db/schema'
 import type { JournalLineValue } from '@/lib/journal'
+import { diubahSetelahPosting } from '@/lib/accounting-settings'
 
 // Query & penjaga yang dipakai BERSAMA oleh route daftar jurnal dan route
 // detailnya. Hidup di modul terpisah karena Next menolak export non-handler di
@@ -192,6 +193,9 @@ export async function loadJournalDetail(journalId: string) {
     reversedBy,
     reversalOf,
     sumberDokumen,
+    // Mitigasi (c) D42 — diturunkan dari riwayat yang SUDAH dimuat di atas,
+    // tanpa query tambahan. Tidak disimpan sebagai kolom (P3).
+    diubahSetelahPosting: diubahSetelahPosting(events),
   }
 }
 

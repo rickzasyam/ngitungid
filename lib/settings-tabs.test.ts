@@ -26,7 +26,7 @@ describe('visibleSettingsTabs', () => {
 
   it('akunting melihat semua kecuali tab ownerOnly', () => {
     expect(visibleSettingsTabs('akunting')).toEqual([
-      'general', 'coa', 'supplier', 'analytics', 'account', 'notifications',
+      'general', 'coa', 'supplier', 'pembukuan', 'analytics', 'account', 'notifications',
     ])
   })
 
@@ -99,7 +99,7 @@ describe('finance — General + Layanan + Account', () => {
 
   it('daftar role lain tidak bergeser', () => {
     expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
-    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'analytics', 'account', 'notifications'])
+    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'pembukuan', 'analytics', 'account', 'notifications'])
     expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
   })
 })
@@ -125,7 +125,7 @@ describe('tab Layanan — komersial, bukan akunting', () => {
   it('daftar lengkap per role', () => {
     expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
     expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'layanan', 'account'])
-    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'analytics', 'account', 'notifications'])
+    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'pembukuan', 'analytics', 'account', 'notifications'])
     expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
   })
 
@@ -167,5 +167,48 @@ describe('tab Supplier', () => {
     const tab = SETTINGS_TABS.find(t => t.id === 'supplier')!
     expect(tab.ownerOnly).toBeUndefined()
     expect(tab.commercialOnly).toBeUndefined()
+  })
+})
+
+// ══ TAB PEMBUKUAN (M8) ═══════════════════════════════════════════
+// Tab ini memegang sakelar D42 ("jurnal terposting boleh diedit"). Ia bukan
+// setelan tampilan — ia mengubah apa yang boleh terjadi pada angka yang sudah
+// diserahkan ke klien. Karena itu finance TIDAK melihatnya walau ia orang
+// dalam, dan klien jelas tidak.
+describe('tab Pembukuan', () => {
+  it('terlihat oleh owner dan akunting', () => {
+    for (const r of ['owner', 'akunting'] as const) {
+      expect(isSettingsTabVisible(r, 'pembukuan'), r).toBe(true)
+    }
+  })
+
+  it('TIDAK terlihat oleh finance — ia isInternal, jadi ini yang paling mudah bocor', () => {
+    // Kalau cabang finance dihapus atau dipindah SESUDAH isInternal, assertion
+    // ini yang merah lebih dulu.
+    expect(isSettingsTabVisible('finance', 'pembukuan')).toBe(false)
+    expect(visibleSettingsTabs('finance')).not.toContain('pembukuan')
+  })
+
+  it('TIDAK terlihat oleh klien maupun role kosong', () => {
+    expect(isSettingsTabVisible('user', 'pembukuan')).toBe(false)
+    expect(isSettingsTabVisible(null, 'pembukuan')).toBe(false)
+    expect(isSettingsTabVisible(undefined, 'pembukuan')).toBe(false)
+  })
+
+  it('duduk tepat sesudah Supplier, sebelum Analytics Display', () => {
+    const ids = SETTINGS_TABS.map(t => t.id)
+    expect(ids.indexOf('pembukuan')).toBe(ids.indexOf('supplier') + 1)
+    expect(ids.indexOf('pembukuan')).toBe(ids.indexOf('analytics') - 1)
+  })
+
+  it('bukan ownerOnly maupun commercialOnly', () => {
+    const tab = SETTINGS_TABS.find(t => t.id === 'pembukuan')!
+    expect(tab.ownerOnly).toBeUndefined()
+    expect(tab.commercialOnly).toBeUndefined()
+  })
+
+  it('daftar role lain tidak ikut bergeser karena penambahannya', () => {
+    expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'layanan', 'account'])
   })
 })

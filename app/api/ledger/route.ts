@@ -88,6 +88,7 @@ export async function GET(req: Request) {
       debit: r.debit,
       kredit: r.kredit,
       saldo: fromMinorUnits(r.saldo),
+      diubahSetelahPosting: r.diubahSetelahPosting,
     })),
   })
 }

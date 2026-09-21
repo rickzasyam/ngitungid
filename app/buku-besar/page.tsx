@@ -38,6 +38,8 @@ interface LedgerRow {
   debit: string
   kredit: string
   saldo: string
+  /** Mitigasi (c) D42 — diturunkan dari riwayat, tidak disimpan. */
+  diubahSetelahPosting?: boolean
 }
 
 interface LedgerResponse {
@@ -443,6 +445,21 @@ export default function BukuBesarPage() {
                               >
                                 {r.noBukti ?? '—'}
                               </button>
+                              {/* Mitigasi (c) D42 — angka di buku besar yang
+                                  pernah berbeda harus terlihat begitu, tanpa
+                                  membuka riwayat lebih dulu. */}
+                              {r.diubahSetelahPosting && (
+                                <span
+                                  className="ml-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                                  style={{
+                                    background: 'color-mix(in srgb, var(--color-accent-critical) 16%, white)',
+                                    color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)',
+                                  }}
+                                  title="Jurnal ini diubah SESUDAH diposting."
+                                >
+                                  diubah
+                                </span>
+                              )}
                             </td>
                             <td
                               style={{

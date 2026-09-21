@@ -16,6 +16,7 @@ export type SettingsTabId =
   | 'general'
   | 'coa'
   | 'supplier'
+  | 'pembukuan'
   | 'analytics'
   | 'users'
   | 'layanan'
@@ -27,6 +28,14 @@ export const SETTINGS_TABS: { id: SettingsTabId; ownerOnly?: boolean; commercial
   { id: 'general' },
   { id: 'coa' },
   { id: 'supplier' },
+  // Pembukuan: setelan yang mengubah PERILAKU pembukuan klien — akun PPN
+  // Masukan (D33) dan sakelar "posting bisa diedit" (D42). Kelak menampung
+  // kunci periode (§7.B, K4).
+  //
+  // BUKAN untuk finance, dan itu keputusan: ia menyetel bagaimana pembukuan
+  // dikerjakan, bukan melihat hasilnya. Tidak ada di FINANCE_VISIBLE_TABS, jadi
+  // ia tersaring di cabang finance sebelum sampai ke isInternal.
+  { id: 'pembukuan' },
   { id: 'analytics' },
   { id: 'users', ownerOnly: true },
   // Master Layanan: katalog jasa yang dijual. owner + finance, TANPA akunting —

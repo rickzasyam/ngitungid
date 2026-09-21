@@ -498,10 +498,36 @@ export function isSumberModul(sumber: string | null | undefined): boolean {
  *    berubah. Alternatifnya — sinkronisasi dua arah — adalah kelas bug yang
  *    tidak selesai-selesai.
  *
- * `sumber` OPSIONAL supaya pemanggil lama (yang cuma punya status) tetap sah
- * apa adanya; tanpa sumber, ia berperilaku persis seperti sebelumnya.
+ * 3. **Sakelar "posting bisa diedit" per klien** (D42, bawaan FALSE). Bila
+ *    menyala, jurnal terposting boleh diubah — TAPI kunci periode tetap
+ *    mengalahkannya, dan jurnal yang sudah punya pembalik terposting tetap
+ *    tidak boleh diubah (ia sudah dikoreksi lewat jalur lain; mengubahnya
+ *    membuat pasangan asli↔pembalik tidak lagi berjumlah nol).
+ *
+ * URUTAN KEWENANGANNYA, dari yang paling mengikat:
+ *   D32 (bersumber modul) → kunci periode → sudah dibalik → sakelar klien.
+ *
+ * Seluruh argumen sesudah `status` OPSIONAL supaya pemanggil lama tetap sah apa
+ * adanya: tanpa mereka, fungsi ini berperilaku persis seperti sebelum D42 —
+ * hanya draf yang boleh diubah.
  */
-export function canEditJournal(status: JournalStatus, sumber?: string | null): boolean {
+export function canEditJournal(
+  status: JournalStatus,
+  sumber?: string | null,
+  opts?: {
+    /** Setelan klien (D42). Bawaannya false — lihat lib/accounting-settings.ts. */
+    bolehEditPosting?: boolean
+    /** Kunci periode (§7.B). MENGALAHKAN sakelar di atas. */
+    isLocked?: boolean
+    /** Sudah punya pembalik TERPOSTING? */
+    sudahDibalik?: boolean
+  }
+): boolean {
   if (isSumberModul(sumber)) return false
-  return status === 'draft'
+  if (status === 'draft') return true
+
+  // Sejak sini: jurnal TERPOSTING. Tanpa D42 jawabannya selalu tidak.
+  if (opts?.isLocked) return false
+  if (opts?.sudahDibalik) return false
+  return opts?.bolehEditPosting === true
 }

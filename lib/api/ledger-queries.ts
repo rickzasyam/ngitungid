@@ -3,6 +3,9 @@ import { db } from '@/lib/db'
 import { journalEntries, journalLines, masterCoa } from '@/lib/db/schema'
 import type { AccountRef, LedgerLine } from '@/lib/ledger'
 
+/** Baris buku besar + penanda turunan D42. */
+export type LedgerLineRow = LedgerLine & { diubahSetelahPosting: boolean }
+
 // Query buku besar. Hidup terpisah dari route karena Next menolak export
 // non-handler di berkas route — dan karena route buku besar per akun dan route
 // neraca saldo menanyakan hal yang SAMA dengan filter berbeda: "baris jurnal
@@ -67,7 +70,7 @@ export async function loadPostedLines(opts: {
   clientId: string
   periodEnd: string
   masterCoaId?: string
-}): Promise<LedgerLine[]> {
+}): Promise<LedgerLineRow[]> {
   const filters = [
     eq(journalEntries.clientId, opts.clientId),
     eq(journalEntries.status, 'posted'),
@@ -88,6 +91,18 @@ export async function loadPostedLines(opts: {
       debit: journalLines.debit,
       kredit: journalLines.kredit,
       lineOrder: journalLines.lineOrder,
+      // Mitigasi (c) D42 — pembaca buku besar berhak tahu bahwa sebuah angka
+      // pernah berbeda, tanpa harus membuka panel riwayat lebih dulu.
+      diubahSetelahPosting: sql<boolean>`exists (
+        select 1 from audit_events u
+        where u.entity_type = 'journal' and u.entity_id = ${journalEntries.id}
+          and u.event = 'updated'
+          and u.at > (
+            select max(p.at) from audit_events p
+            where p.entity_type = 'journal' and p.entity_id = ${journalEntries.id}
+              and p.event = 'posted'
+          )
+      )`,
     })
     .from(journalLines)
     .innerJoin(journalEntries, eq(journalLines.journalId, journalEntries.id))

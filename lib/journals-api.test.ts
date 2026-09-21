@@ -172,12 +172,24 @@ describe('immutabilitas jurnal terposting', () => {
 
   it('penjaganya benar-benar memakai predikat lib, bukan perbandingan lokal', () => {
     expect(DETAIL).toContain('canEditJournal(')
+    // Perbandingan status lokal akan menduplikasi aturan yang hidup di
+    // lib/journal.ts — dan duplikat itulah yang menyimpang diam-diam saat
+    // aturannya berubah (D42 menambah tiga syarat sekaligus).
     expect(DETAIL).not.toContain("status === 'draft'")
+    expect(DETAIL).not.toContain("status === 'posted'")
   })
 
-  it('penolakannya 409, bukan 403 atau 400', () => {
-    const blok = DETAIL.slice(DETAIL.indexOf('function assertEditable'))
-    expect(blok.slice(0, 600)).toContain('status: 409')
+  it('SETIAP penolakan di assertEditable 409, bukan 403 atau 400', () => {
+    // Bentuk lamanya memotong 600 karakter pertama; sejak assertEditable punya
+    // beberapa cabang penolakan (D32, kunci periode, sudah dibalik, sakelar
+    // D42), potongan itu berhenti sebelum sebagian cabangnya. Sekarang SETIAP
+    // respons di dalam fungsi itu diperiksa.
+    const mulai = DETAIL.indexOf('async function assertEditable')
+    expect(mulai).toBeGreaterThan(-1)
+    const blok = DETAIL.slice(mulai, DETAIL.indexOf('export async function GET('))
+    const status = [...blok.matchAll(/\{ status: (\d{3}) \}/g)].map(m => m[1])
+    expect(status.length).toBeGreaterThanOrEqual(3)
+    expect([...new Set(status)]).toEqual(['409'])
   })
 })
 
@@ -586,3 +598,98 @@ function SCHEMA_TIDAK_PUNYA_KOLOM_SUDAH_DIBALIK(): boolean {
   const schema = read('lib', 'db', 'schema.ts')
   return !schema.includes('sudahDibalik') && !schema.includes('is_reversed')
 }
+
+// ══ D42 — TIGA MITIGASI, DIBANGUN BERSAMAAN (M8) ═════════════════════════
+// Syarat Ricko: sakelar "posting bisa diedit" hanya boleh ada bersama ketiga
+// mitigasinya. Test di bawah gagal kalau salah satunya dilepas — termasuk
+// kalau sakelarnya dinyalakan tanpa nilai_sebelum/nilai_sesudah tertulis.
+describe('D42 — sakelar posting dan ketiga mitigasinya', () => {
+  const ASSERT = DETAIL.slice(
+    DETAIL.indexOf('async function assertEditable'),
+    DETAIL.indexOf('export async function GET(')
+  )
+
+  it('assertEditable membaca sakelar dari SETELAN KLIEN, bukan konstanta', () => {
+    expect(ASSERT).toContain('loadAccountingSettings(row.clientId)')
+    expect(ASSERT).toContain('bolehEditPosting(settings)')
+  })
+
+  it('D32 diperiksa PALING DULU — dokumen asal mengalahkan setelan apa pun', () => {
+    const d32 = ASSERT.indexOf('isSumberModul(row.sumber)')
+    const setelan = ASSERT.indexOf('loadAccountingSettings(')
+    expect(d32).toBeGreaterThan(-1)
+    expect(d32).toBeLessThan(setelan)
+  })
+
+  it('mitigasi (a) kunci periode: dibaca, dan urutannya di ATAS sakelar', () => {
+    // Kalau sakelar diperiksa lebih dulu, klien yang menyalakannya bisa
+    // mengubah periode yang sudah dikunci.
+    const kunci = ASSERT.indexOf('periodLockChecker(')
+    const izin = ASSERT.indexOf('bolehEditPosting(settings)')
+    expect(kunci).toBeGreaterThan(-1)
+    expect(kunci).toBeLessThan(izin)
+    expect(ASSERT).toContain('isLocked: terkunci')
+  })
+
+  it('mitigasi (a) jurnal yang sudah dibalik tetap tidak bisa diubah', () => {
+    expect(ASSERT).toContain('findPostedReversal(row.id)')
+    expect(ASSERT).toContain('sudahDibalik,')
+  })
+
+  it('mitigasi (b) nilai_sebelum & nilai_sesudah ditulis untuk jurnal TERPOSTING', () => {
+    const patch = handler(DETAIL, 'PATCH')
+    expect(patch).toContain('nilaiSebelum')
+    expect(patch).toContain('nilaiSesudah')
+    // Snapshot diambil SEBELUM tulisannya masuk batch — sesudahnya ia sudah
+    // berisi nilai baru dan riwayatnya mencatat dua nilai yang identik.
+    const snap = patch.indexOf('nilaiSebelum')
+    expect(snap).toBeLessThan(patch.indexOf('await db.batch('))
+  })
+
+  it('mitigasi (b) riwayatnya ditulis DI DALAM batch yang sama, bukan sesudahnya', () => {
+    // Event-nya berupa STATEMENT di dalam array yang diserahkan ke db.batch —
+    // bukan tulisan terpisah sesudahnya. Kalau ia dilepas dari batch, jurnal
+    // bisa berubah tanpa riwayat saat tulisan kedua gagal, dan justru saat itu
+    // riwayatnya paling dibutuhkan (P10).
+    const patch = handler(DETAIL, 'PATCH')
+    const arr = patch.indexOf("const statements: BatchItem<'pg'>[] = [")
+    const batch = patch.indexOf('await db.batch(')
+    const event = patch.indexOf('recordJournalEvent(')
+    expect(arr).toBeGreaterThan(-1)
+    expect(event).toBeGreaterThan(arr)
+    expect(event).toBeLessThan(batch)
+    expect(patch).toContain('db.batch(statements as')
+  })
+
+  it('helper riwayat memang menerima kedua nilai itu', () => {
+    expect(AUDIT).toContain('nilaiSebelum')
+    expect(AUDIT).toContain('nilaiSesudah')
+  })
+
+  it('mitigasi (c) lencana DITURUNKAN dari riwayat, tidak disimpan sebagai kolom', () => {
+    const schema = read('lib', 'db', 'schema.ts')
+    expect(schema).not.toContain('diubahSetelahPosting')
+    expect(schema).not.toContain('diubah_setelah_posting')
+  })
+
+  it('detail jurnal menurunkan penandanya dari riwayat lewat predikat lib', () => {
+    // Detail sudah memuat seluruh riwayatnya, jadi ia memakai predikat murni —
+    // bukan query kedua yang bisa menjawab beda dari yang tampil di panelnya.
+    expect(QUERIES).toContain('diubahSetelahPosting(events)')
+  })
+
+  it('mitigasi (c) daftar jurnal & buku besar sama-sama membawa penandanya', () => {
+    const LEDGER = read('lib', 'api', 'ledger-queries.ts')
+    for (const [nama, src] of [
+      ['daftar jurnal', LIST],
+      ['buku besar', LEDGER],
+    ] as const) {
+      expect(src.includes('diubahSetelahPosting'), nama).toBe(true)
+      // "updated SESUDAH posted TERAKHIR" — bukan sekadar "pernah ada updated",
+      // yang akan menyala untuk setiap draf yang pernah disunting.
+      expect(src.includes("u.event = 'updated'"), nama).toBe(true)
+      expect(src.includes("p.event = 'posted'"), nama).toBe(true)
+      expect(src.includes('max(p.at)'), nama).toBe(true)
+    }
+  })
+})

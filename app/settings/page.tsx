@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-replace-dialog'
 import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
 import { CoaTypesDialog, type CoaTypesPreview } from '@/components/settings/coa-types-dialog'
 import { SupplierTab } from '@/components/settings/supplier-manager'
+import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import {
   FileSpreadsheet,
   Upload,
@@ -34,6 +35,7 @@ import {
   KeyRound,
   Package,
   Truck,
+  BookLock,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
@@ -175,6 +177,7 @@ const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe;
   general:       { label: 'General',           desc: 'Bahasa & format nominal',     Icon: Globe,             scoped: false },
   coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
   supplier:      { label: 'Supplier',          desc: 'Master data rekanan klien',   Icon: Truck,             scoped: true },
+  pembukuan:     { label: 'Pembukuan',         desc: 'Akun PPN & aturan posting',   Icon: BookLock,          scoped: true },
   analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
   users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
   layanan:       { label: 'Layanan',           desc: 'Master jasa yang dijual',     Icon: Package,           scoped: false },
@@ -1268,6 +1271,261 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
   )
 }
 
+// ── Tab: Pembukuan (scoped ke klien aktif) ───────────────────
+//
+// Dua setelan yang mengubah PERILAKU pembukuan klien, bukan tampilannya:
+//   1. Akun PPN Masukan (D33) — dipakai route pembelian saat invoice ber-PPN.
+//   2. "Posting bisa diedit" (D42) — bawaan MATI.
+//
+// ══ KENAPA SAKELARNYA MINTA KONFIRMASI SAAT DINYALAKAN ═══════════════════
+// Menyalakannya berarti angka yang sudah diserahkan ke klien bisa berubah tanpa
+// jejak yang terlihat di laporan. Jejaknya memang ada (audit_events, lencana
+// "diubah setelah posting"), tapi orang yang menyalakan sakelar ini sering
+// tidak tahu itu. Satu ketukan tambahan adalah harga yang murah; mematikannya
+// kembali tidak minta konfirmasi, karena mematikan tidak menimbulkan risiko.
+function PembukuanTab({ clientId, readOnly = false }: { clientId: string; readOnly?: boolean }) {
+  const [akunPpnMasukanId, setAkunPpn] = useState<string>('')
+  const [postingBisaDiedit, setPosting] = useState(false)
+  const [tersimpan, setTersimpan] = useState(false)
+  const [accounts, setAccounts] = useState<CoaAccount[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [konfirmasi, setKonfirmasi] = useState(false)
+
+  // `loading` lahir TRUE dan tidak pernah disetel ulang secara sinkron di dalam
+  // efek: komponen ini di-mount ulang tiap ganti klien (key={activeClient.id}),
+  // jadi keadaan awalnya sudah benar. Bentuk setLoading(true) di badan efek
+  // memicu render berantai — react-hooks/set-state-in-effect.
+  useEffect(() => {
+    let batal = false
+    void (async () => {
+      try {
+        const [rSet, rCoa] = await Promise.all([
+          fetch(`/api/clients/${clientId}/accounting-settings`),
+          fetch(`/api/clients/${clientId}/coa`),
+        ])
+        const setelan = (await rSet.json().catch(() => null)) as {
+          akunPpnMasukanId?: string | null
+          postingBisaDiedit?: boolean
+          tersimpan?: boolean
+          error?: string
+        } | null
+        if (!rSet.ok) throw new Error(setelan?.error ?? 'Gagal memuat setelan pembukuan.')
+        const coa = (await rCoa.json().catch(() => null)) as { accounts?: CoaAccount[] } | null
+        if (batal) return
+        setAkunPpn(setelan?.akunPpnMasukanId ?? '')
+        // Bentuk `=== true`, bukan `?? true`: ketiadaan baris setelan berarti
+        // MATI, sama persis dengan tersimpan false (D42).
+        setPosting(setelan?.postingBisaDiedit === true)
+        setTersimpan(setelan?.tersimpan === true)
+        setAccounts(coa?.accounts ?? [])
+      } catch (err) {
+        if (!batal) setError(err instanceof Error ? err.message : 'Gagal memuat.')
+      } finally {
+        if (!batal) setLoading(false)
+      }
+    })()
+    return () => {
+      batal = true
+    }
+  }, [clientId])
+
+  // Satu jalur simpan untuk kedua setelan. Field yang tidak dikirim tidak
+  // diubah di server, jadi menyimpan PPN tidak pernah ikut mematikan sakelar.
+  async function simpan(patch: { akunPpnMasukanId?: string | null; postingBisaDiedit?: boolean }) {
+    const sebelum = { akunPpnMasukanId, postingBisaDiedit }
+    if ('akunPpnMasukanId' in patch) setAkunPpn(patch.akunPpnMasukanId ?? '')
+    if (typeof patch.postingBisaDiedit === 'boolean') setPosting(patch.postingBisaDiedit)
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/clients/${clientId}/accounting-settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) throw new Error(payload?.error ?? 'Gagal menyimpan setelan.')
+      setTersimpan(true)
+    } catch (err) {
+      // Rollback supaya layar tidak menampilkan setelan yang tidak tersimpan.
+      setAkunPpn(sebelum.akunPpnMasukanId)
+      setPosting(sebelum.postingBisaDiedit)
+      setError(err instanceof Error ? err.message : 'Gagal menyimpan.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const opsiAkun: StyledOption[] = useMemo(
+    () =>
+      accounts.map(a => ({
+        value: a.id,
+        label: a.nama,
+        badge: a.kode,
+        group: a.kelompok,
+      })),
+    [accounts]
+  )
+
+  if (loading) {
+    return (
+      <div
+        className="rounded-2xl px-5 py-8 text-center"
+        style={{ background: 'white', border: '1px solid #f0f0f0' }}
+      >
+        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Memuat setelan pembukuan…</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <SettingsCard>
+        <SectionHeading
+          Icon={BookLock}
+          accent="var(--color-accent-secondary)"
+          title="Pembukuan"
+          subtitle="Setelan yang mengubah cara pembukuan klien ini dikerjakan"
+        />
+
+        {error && (
+          <p role="alert" className="text-xs mt-3" style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+            {error}
+          </p>
+        )}
+        {saving && !error && (
+          <p className="text-xs mt-3" style={{ color: 'var(--color-text-muted)' }} data-testid="pembukuan-saving">
+            Menyimpan…
+          </p>
+        )}
+
+        {/* ── Akun PPN Masukan ── */}
+        <div className="mt-5">
+          <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+            Akun PPN Masukan
+          </label>
+          <StyledSelect
+            options={opsiAkun}
+            value={akunPpnMasukanId}
+            onChange={v => simpan({ akunPpnMasukanId: v })}
+            placeholder="— belum disetel —"
+            searchable
+            searchPlaceholder="Cari kode atau nama akun…"
+            disabled={readOnly || saving}
+            ariaLabel="Akun PPN Masukan klien ini"
+          />
+          <p className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+            Dipakai saat invoice pembelian ber-PPN. Selama belum disetel, invoice ber-PPN akan
+            DITOLAK — akun pajak tidak ditebak, karena salahnya baru ketahuan saat SPT.
+          </p>
+          {akunPpnMasukanId !== '' && !readOnly && (
+            <button
+              type="button"
+              onClick={() => simpan({ akunPpnMasukanId: null })}
+              disabled={saving}
+              className="mt-2 text-[11px] rounded-full px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)', minHeight: 32 }}
+            >
+              Kosongkan
+            </button>
+          )}
+        </div>
+      </SettingsCard>
+
+      {/* ── Sakelar posting ── */}
+      <SettingsCard delay={70}>
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold" style={{ color: 'var(--color-text-primary)' }}>
+              Jurnal terposting boleh diedit
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              Bawaannya <strong>mati</strong>: begitu diposting, jurnal hanya bisa dikoreksi lewat
+              jurnal pembalik. {tersimpan ? '' : 'Klien ini belum pernah menyetelnya, jadi berlaku bawaan.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={postingBisaDiedit}
+            aria-label="Izinkan jurnal terposting diedit untuk klien ini"
+            disabled={readOnly || saving}
+            onClick={() => {
+              if (postingBisaDiedit) {
+                void simpan({ postingBisaDiedit: false })
+                setKonfirmasi(false)
+                return
+              }
+              setKonfirmasi(true)
+            }}
+            className="flex-shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+            style={{ cursor: readOnly ? 'not-allowed' : 'pointer', padding: 6, minHeight: 34, minWidth: 50 }}
+          >
+            <SwitchVisual on={postingBisaDiedit} accent="var(--color-accent-critical)" />
+          </button>
+        </div>
+
+        {postingBisaDiedit && (
+          <div
+            role="note"
+            className="mt-3 rounded-2xl px-3.5 py-2.5 flex items-start gap-2"
+            style={{
+              background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)',
+              border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)',
+            }}
+          >
+            <AlertTriangle
+              className="w-4 h-4 flex-shrink-0 mt-0.5"
+              style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 45%, black)' }}
+            />
+            <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
+              Menyala. Setiap suntingan setelah posting direkam beserta nilai sebelum dan
+              sesudahnya, dan jurnalnya diberi lencana <strong>&quot;diubah setelah posting&quot;</strong> di
+              /jurnal dan buku besar. Periode yang sudah dikunci tetap tidak bisa diubah.
+            </p>
+          </div>
+        )}
+
+        {konfirmasi && !postingBisaDiedit && (
+          <div
+            className="mt-3 rounded-2xl px-3.5 py-3"
+            style={{ background: 'var(--color-muted-bg)', border: '1px solid #e5e5e5' }}
+          >
+            <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
+              Nyalakan untuk klien ini? Angka yang sudah diserahkan ke klien akan bisa berubah.
+              Perubahannya tercatat, tapi laporan yang sudah dicetak tidak ikut berubah.
+            </p>
+            <div className="flex gap-2 mt-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setKonfirmasi(false)
+                  void simpan({ postingBisaDiedit: true })
+                }}
+                disabled={saving}
+                className="rounded-full px-4 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ background: 'var(--color-accent-critical)', color: 'white', minHeight: 34 }}
+              >
+                Ya, nyalakan
+              </button>
+              <button
+                type="button"
+                onClick={() => setKonfirmasi(false)}
+                className="rounded-full px-4 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ background: 'white', border: '1px solid #e5e5e5', color: 'var(--color-text-muted)', minHeight: 34 }}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        )}
+      </SettingsCard>
+    </>
+  )
+}
+
 // ── Page ─────────────────────────────────────────────────────
 
 // ── Kelola Akun (Owner only) ─────────────────────────────────
@@ -2032,6 +2290,14 @@ export default function SettingsPage() {
 
               {activeTab === 'supplier' && activeClient && (
                 <SupplierTab key={activeClient.id} clientId={activeClient.id} readOnly={!canDoAccounting} />
+              )}
+
+              {activeTab === 'pembukuan' && activeClient && (
+                <PembukuanTab
+                  key={activeClient.id}
+                  clientId={activeClient.id}
+                  readOnly={!canDoAccounting}
+                />
               )}
 
               {activeTab === 'analytics' && activeClient && (
