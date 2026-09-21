@@ -322,3 +322,46 @@ describe('nomor invoice dobel jadi 409, bukan 500', () => {
     expect(DETAIL).toContain('dbWriteErrorResponse(')
   })
 })
+
+// ══ PENJAGA BERDIRI: D32 — JALAN KELUAR DI /jurnal ═══════════════════════
+describe('tombol "Koreksi di Pembelian" di /jurnal', () => {
+  const HAL = read('app', 'jurnal', 'page.tsx')
+  const JQ = read('lib', 'api', 'journal-queries.ts')
+  const JLIST = read('app', 'api', 'journals', 'route.ts')
+
+  it('halaman menawarkan tautan, bukan sekadar menyembunyikan tombol edit', () => {
+    expect(HAL).toContain('Koreksi di')
+    expect(HAL).toContain('isSumberModul(')
+  })
+
+  it('bila dokumen asalnya TIDAK ketemu, yang tampil keterangan jujur', () => {
+    // Invoicenya bisa saja dihapus lewat jalur lain. Tombol yang menuju
+    // halaman kosong lebih buruk daripada kalimat yang menjelaskan.
+    expect(HAL).toContain('dokumen asal tidak ditemukan')
+    expect(HAL).toContain('dariModul && !r.sumberDokumenId')
+  })
+
+  it('idnya dari pencarian MUNDUR, bukan kolom balik di journal_entries', () => {
+    // Kolom balik akan jadi kolom polimorfik KEDUA tanpa FK (invoice? mutasi?
+    // kelak marketplace?). Kita sudah membayar harga satu di audit_events.
+    expect(JQ).toContain('eq(purchaseInvoices.journalId, journalId)')
+    expect(JLIST).toContain('where pi.journal_id =')
+    const SCHEMA = read('lib', 'db', 'schema.ts')
+    for (const terlarang of ['purchaseInvoiceId', 'purchase_invoice_id', 'sumberDokumenId:']) {
+      const blok = SCHEMA.slice(
+        SCHEMA.indexOf('export const journalEntries'),
+        SCHEMA.indexOf('export const journalLines')
+      )
+      expect(blok, terlarang).not.toContain(terlarang)
+    }
+  })
+
+  it('route detail menolak PATCH/DELETE jurnal bersumber modul, dengan pesan tersendiri', () => {
+    const DET = read('app', 'api', 'journals', '[id]', 'route.ts')
+    expect(DET).toContain('isSumberModul(sumber)')
+    expect(DET).toContain('tidak bisa diubah dari halaman Jurnal')
+    // Pesan yang sama untuk dua sebab berbeda membuat akunting mencoba jalan
+    // yang tidak akan pernah berhasil.
+    expect(DET).toContain('Koreksi jurnal terposting dilakukan lewat jurnal balik')
+  })
+})

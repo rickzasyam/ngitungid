@@ -50,15 +50,20 @@ export const JOURNAL_STATUS_LABEL: Record<JournalStatus, string> = {
 }
 
 /**
- * Dari mana jurnal lahir. Fase 1 hanya 'manual'; nilai berikutnya
- * ('import_bank', 'marketplace', 'kas_kecil', 'opening_balance') ditambahkan
- * per fase bersama migrasi enum-nya.
+ * Dari mana jurnal lahir. 'manual' sejak Fase 1; 'pembelian' & 'mutasi_kas'
+ * menyusul di migrasi 0016. Nilai berikutnya ('marketplace', 'kas_kecil',
+ * 'opening_balance') ditambahkan per fase bersama ADD VALUE enum-nya.
+ *
+ * Urutannya mengikuti urutan fisik enum di Postgres — lihat catatan
+ * journalSourceEnum di schema.ts.
  */
-export const JOURNAL_SOURCE = ['manual'] as const
+export const JOURNAL_SOURCE = ['manual', 'pembelian', 'mutasi_kas'] as const
 export type JournalSource = (typeof JOURNAL_SOURCE)[number]
 
 export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = {
   manual: 'Manual',
+  pembelian: 'Pembelian',
+  mutasi_kas: 'Mutasi Kas',
 }
 
 // ── Batas ────────────────────────────────────────────────────
@@ -459,13 +464,44 @@ export function defaultReversalNoBukti(asli: string | null): string | null {
 // ── Immutabilitas ────────────────────────────────────────────
 
 /**
- * Boleh diubah / dihapus?
+ * Jurnal yang lahir dari MODUL, bukan diketik tangan di /jurnal.
  *
- * Hanya draf. Jurnal terposting adalah catatan yang sudah masuk buku besar:
- * koreksinya lewat JURNAL BALIK (Fase 2), bukan lewat mengubah yang lama.
- * Ditegakkan sejak Fase 1 meski posting belum ada, supaya tidak ada satu pun
- * jalur tulis yang lahir tanpa memanggilnya.
+ * Daftarnya sengaja di sini, bukan di route: predikat canEditJournal yang
+ * memakainya harus bisa diuji tanpa database, dan setiap sumber baru wajib
+ * lewat satu tempat ini.
  */
-export function canEditJournal(status: JournalStatus): boolean {
+export const SUMBER_MODUL: readonly string[] = ['pembelian', 'mutasi_kas']
+
+/** Label dokumen asal, untuk tombol "Koreksi di …" di /jurnal (D32). */
+export const SUMBER_MODUL_LABEL: Record<string, string> = {
+  pembelian: 'Pembelian',
+  mutasi_kas: 'Mutasi Kas',
+}
+
+export function isSumberModul(sumber: string | null | undefined): boolean {
+  return typeof sumber === 'string' && SUMBER_MODUL.includes(sumber)
+}
+
+/**
+ * Boleh diubah / dihapus DARI /jurnal?
+ *
+ * Dua syarat, dan keduanya menutup jalan yang berbeda:
+ *
+ * 1. **Hanya draf.** Jurnal terposting adalah catatan yang sudah masuk buku
+ *    besar: koreksinya lewat JURNAL BALIK, bukan mengubah yang lama.
+ *    Ditegakkan sejak Fase 1 meski posting belum ada, supaya tidak ada satu
+ *    pun jalur tulis yang lahir tanpa memanggilnya.
+ *
+ * 2. **Bukan jurnal bersumber modul** (D32). Jurnal pembelian & mutasi kas
+ *    dimiliki dokumen asalnya; mengubahnya dari /jurnal berarti dua penulis
+ *    untuk satu jurnal, dan yang kedua tidak pernah tahu dokumen asalnya
+ *    berubah. Alternatifnya — sinkronisasi dua arah — adalah kelas bug yang
+ *    tidak selesai-selesai.
+ *
+ * `sumber` OPSIONAL supaya pemanggil lama (yang cuma punya status) tetap sah
+ * apa adanya; tanpa sumber, ia berperilaku persis seperti sebelumnya.
+ */
+export function canEditJournal(status: JournalStatus, sumber?: string | null): boolean {
+  if (isSumberModul(sumber)) return false
   return status === 'draft'
 }

@@ -5,7 +5,13 @@ import { db } from '@/lib/db'
 import { journalEntries, journalLines } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
-import { canEditJournal, validateJournalInput, JOURNAL_STATUS_LABEL } from '@/lib/journal'
+import {
+  canEditJournal,
+  validateJournalInput,
+  isSumberModul,
+  SUMBER_MODUL_LABEL,
+  JOURNAL_STATUS_LABEL,
+} from '@/lib/journal'
 import { dbWriteErrorResponse, isFkViolation, isUniqueViolation } from '@/lib/api/db-errors'
 import {
   assertAccountsBelongToClient,
@@ -41,6 +47,7 @@ async function guard(params: Promise<{ id: string }>) {
       clientId: journalEntries.clientId,
       noBukti: journalEntries.noBukti,
       status: journalEntries.status,
+      sumber: journalEntries.sumber,
     })
     .from(journalEntries)
     .where(eq(journalEntries.id, id))
@@ -56,9 +63,27 @@ async function guard(params: Promise<{ id: string }>) {
   return { row, user: g.user }
 }
 
-/** Jurnal terposting tidak bisa diubah/dihapus — hanya dibalik (Fase 2, P11). */
-function assertEditable(status: string): NextResponse | null {
-  if (canEditJournal(status as 'draft' | 'posted')) return null
+/**
+ * Dua penolakan yang berbeda sebabnya, dan pesannya WAJIB berbeda juga:
+ * yang satu menyuruh membuat jurnal balik, yang lain menyuruh membuka dokumen
+ * asalnya. Pesan yang sama untuk keduanya membuat akunting mencoba jalan yang
+ * tidak akan pernah berhasil.
+ */
+function assertEditable(status: string, sumber?: string | null): NextResponse | null {
+  if (canEditJournal(status as 'draft' | 'posted', sumber)) return null
+
+  // D32: jurnal bersumber modul dimiliki dokumen asalnya.
+  if (isSumberModul(sumber)) {
+    const label = SUMBER_MODUL_LABEL[sumber as string] ?? sumber
+    return NextResponse.json(
+      {
+        error: `Jurnal ini dibuat otomatis dari ${label} dan tidak bisa diubah dari halaman Jurnal.`,
+        details: [`Buka dokumennya di halaman ${label} — jurnalnya ikut diperbarui dari sana.`],
+      },
+      { status: 409 }
+    )
+  }
+
   const label = JOURNAL_STATUS_LABEL[status as 'draft' | 'posted'] ?? status
   return NextResponse.json(
     {
@@ -84,7 +109,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const g = await guard(params)
   if ('error' in g) return g.error
 
-  const blocked = assertEditable(g.row.status)
+  const blocked = assertEditable(g.row.status, g.row.sumber)
   if (blocked) return blocked
 
   let body: unknown
@@ -179,7 +204,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const g = await guard(params)
   if ('error' in g) return g.error
 
-  const blocked = assertEditable(g.row.status)
+  const blocked = assertEditable(g.row.status, g.row.sumber)
   if (blocked) return blocked
 
   const statements: BatchItem<'pg'>[] = [

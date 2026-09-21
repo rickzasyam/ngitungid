@@ -25,6 +25,7 @@ import {
   Pencil,
   Plus,
   RotateCw,
+  SquareArrowOutUpRight,
   Trash2,
   Undo2,
 } from 'lucide-react'
@@ -36,10 +37,13 @@ import { DateRangePicker } from '@/components/date-range-picker'
 import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
 import {
   canEditJournal,
+  isSumberModul,
   JOURNAL_STATUS_LABEL,
+  SUMBER_MODUL_LABEL,
   TANPA_NO_BUKTI,
   type JournalStatus,
 } from '@/lib/journal'
+import Link from 'next/link'
 import {
   JournalFormModal,
   blankJournalForm,
@@ -74,6 +78,8 @@ interface JournalRow {
   reversedByNoBukti: string | null
   reversalOfId: string | null
   reversalOfNoBukti: string | null
+  /** Id dokumen asal untuk jurnal bersumber modul (D32). null = tidak ketemu. */
+  sumberDokumenId: string | null
 }
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
@@ -538,13 +544,15 @@ export default function JurnalPage() {
                   <tbody>
                     {rows.map(r => {
                       const open = expanded === r.id
-                      const bisaUbah = bolehTulis && canEditJournal(r.status)
+                      // D32: jurnal bersumber modul dimiliki dokumen asalnya.
+                      const bisaUbah = bolehTulis && canEditJournal(r.status, r.sumber)
+                      const dariModul = isSumberModul(r.sumber)
                       const bisaPosting = bolehTulis && r.status === 'draft'
                       // "Belum dibalik" = belum punya pembalik TERPOSTING.
                       // Pembalik yang masih draf tidak menghalangi, persis
                       // seperti canReverse di server.
                       const bisaBalik = bolehTulis && r.status === 'posted' && !r.reversedById
-                      const adaAksi = bisaUbah || bisaPosting || bisaBalik
+                      const adaAksi = bisaUbah || bisaPosting || bisaBalik || dariModul
                       return (
                         <Fragment key={r.id}>
                           <tr style={{ borderTop: '1px solid #f5f5f5' }}>
@@ -677,6 +685,36 @@ export default function JurnalPage() {
                                     >
                                       <CheckCircle2 className="w-3.5 h-3.5" /> Posting
                                     </button>
+                                  )}
+                                  {/* ── D32: JALAN KELUAR, bukan sekadar tombol
+                                      yang hilang ──────────────────────────
+                                      Tombol edit yang lenyap tanpa penjelasan
+                                      adalah kebuntuan: akunting melihat jurnal
+                                      yang salah, tahu ia salah, dan tidak
+                                      diberi tahu ke mana harus pergi. */}
+                                  {dariModul && r.sumberDokumenId && (
+                                    <Link
+                                      href={`/pembelian?invoice=${r.sumberDokumenId}`}
+                                      aria-label={`Koreksi jurnal ${r.noBukti ?? TANPA_NO_BUKTI} di ${SUMBER_MODUL_LABEL[r.sumber] ?? 'dokumen asalnya'}`}
+                                      className="inline-flex items-center gap-1 rounded-full font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                                      style={{ ...aksiBtn, background: 'white', border: '1px solid #e5e7eb', color: 'var(--color-text-muted)', textDecoration: 'none' }}
+                                    >
+                                      <SquareArrowOutUpRight className="w-3.5 h-3.5" />
+                                      Koreksi di {SUMBER_MODUL_LABEL[r.sumber] ?? 'dokumen asal'}
+                                    </Link>
+                                  )}
+                                  {/* Dokumen asalnya bisa saja sudah dihapus
+                                      lewat jalur lain. Keterangan jujur lebih
+                                      baik daripada tombol menuju halaman
+                                      kosong. */}
+                                  {dariModul && !r.sumberDokumenId && (
+                                    <span
+                                      className="text-[11px]"
+                                      style={{ color: 'var(--color-text-muted)' }}
+                                      title="Jurnal ini dibuat dari sebuah dokumen yang sudah tidak ada."
+                                    >
+                                      dokumen asal tidak ditemukan
+                                    </span>
                                   )}
                                   {bisaBalik && (
                                     <button

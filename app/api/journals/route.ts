@@ -97,6 +97,12 @@ export async function GET(req: Request) {
         select asli.no_bukti from journal_entries asli
         where asli.id = ${journalEntries.reversalOfId}
       )`,
+      // Dokumen asal untuk jurnal bersumber modul (D32). Pencarian MUNDUR:
+      // purchase_invoices.journal_id menunjuk ke jurnal, bukan sebaliknya.
+      // Index purchase_invoices_journal_idx yang membuatnya murah.
+      sumberDokumenId: sql<string | null>`(
+        select pi.id from purchase_invoices pi where pi.journal_id = ${journalEntries.id} limit 1
+      )`,
     })
     .from(journalEntries)
     .innerJoin(users, eq(journalEntries.createdBy, users.id))

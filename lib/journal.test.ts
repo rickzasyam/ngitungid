@@ -12,6 +12,9 @@ import {
   isBalanced,
   validateJournalInput,
   canEditJournal,
+  isSumberModul,
+  SUMBER_MODUL,
+  SUMBER_MODUL_LABEL,
   canPost,
   canReverse,
   buildReversalLines,
@@ -40,9 +43,31 @@ const punyaGalat = (errors: string[], potongan: string) =>
   errors.some((e) => e.includes(potongan))
 
 describe('konstanta', () => {
-  it('status dan sumber sesuai enum Postgres (migrasi 0010)', () => {
+  it('status dan sumber sesuai enum Postgres', () => {
     expect(JOURNAL_STATUS).toEqual(['draft', 'posted'])
-    expect(JOURNAL_SOURCE).toEqual(['manual'])
+    // 'manual' sejak 0010; 'pembelian' & 'mutasi_kas' ditambah 0016 lewat
+    // ADD VALUE. URUTANNYA IKUT: daftar di lib harus mengikuti urutan fisik
+    // enum di Postgres, kalau tidak perbandingan dengan migrasinya tak berarti.
+    expect(JOURNAL_SOURCE).toEqual(['manual', 'pembelian', 'mutasi_kas'])
+  })
+
+  // ══ D32: jurnal bersumber modul dimiliki dokumen asalnya ══════════
+  it('SUMBER_MODUL memuat sumber yang jurnalnya dibuat otomatis', () => {
+    expect([...SUMBER_MODUL]).toEqual(['pembelian', 'mutasi_kas'])
+    // 'manual' BUKAN sumber modul — jurnal yang diketik tangan tetap bisa
+    // diubah dari /jurnal, dan itu seluruh gunanya pembedaan ini.
+    expect(isSumberModul('manual')).toBe(false)
+    for (const m of SUMBER_MODUL) expect(isSumberModul(m), m).toBe(true)
+  })
+
+  it('isSumberModul aman terhadap null/undefined/nilai asing', () => {
+    for (const buruk of [null, undefined, '', 'Pembelian', 'entah']) {
+      expect(isSumberModul(buruk as string | null), String(buruk)).toBe(false)
+    }
+  })
+
+  it('setiap sumber modul punya label untuk tombol "Koreksi di …"', () => {
+    for (const m of SUMBER_MODUL) expect(SUMBER_MODUL_LABEL[m], m).toBeTruthy()
   })
 
   it('setiap nilai enum punya label', () => {
@@ -662,5 +687,35 @@ describe('JOURNAL_EVENTS', () => {
 
   it('tidak ada duplikat', () => {
     expect(new Set(JOURNAL_EVENTS).size).toBe(JOURNAL_EVENTS.length)
+  })
+})
+
+// ══ PENJAGA BERDIRI: JURNAL BERSUMBER MODUL TIDAK BISA DIUBAH DI /jurnal ══
+// Tanpa aturan ini ada DUA penulis untuk satu jurnal, dan yang kedua tidak
+// pernah tahu dokumen asalnya berubah. Alternatifnya — sinkronisasi dua arah —
+// adalah kelas bug yang tidak selesai-selesai.
+describe('canEditJournal sadar sumber (D32)', () => {
+  it('draf manual boleh diubah', () => {
+    expect(canEditJournal('draft', 'manual')).toBe(true)
+  })
+
+  it('draf BERSUMBER MODUL tidak boleh diubah, walau masih draf', () => {
+    for (const m of SUMBER_MODUL) {
+      expect(canEditJournal('draft', m), m).toBe(false)
+    }
+  })
+
+  it('terposting tetap tidak boleh, apa pun sumbernya', () => {
+    expect(canEditJournal('posted', 'manual')).toBe(false)
+    expect(canEditJournal('posted', 'pembelian')).toBe(false)
+  })
+
+  // Pemanggil lama cuma punya status. Tanpa kompatibilitas ini, setiap
+  // pemanggil harus diubah sekaligus — dan yang terlewat gagal diam-diam.
+  it('tanpa argumen sumber, perilakunya persis seperti sebelumnya', () => {
+    expect(canEditJournal('draft')).toBe(true)
+    expect(canEditJournal('posted')).toBe(false)
+    expect(canEditJournal('draft', null)).toBe(true)
+    expect(canEditJournal('draft', undefined)).toBe(true)
   })
 })

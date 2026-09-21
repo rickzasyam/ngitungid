@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { auditEvents, journalEntries, journalLines, masterCoa, users } from '@/lib/db/schema'
+import {
+  auditEvents,
+  journalEntries,
+  journalLines,
+  masterCoa,
+  purchaseInvoices,
+  users,
+} from '@/lib/db/schema'
 import type { JournalLineValue } from '@/lib/journal'
 
 // Query & penjaga yang dipakai BERSAMA oleh route daftar jurnal dan route
@@ -154,7 +161,38 @@ export async function loadJournalDetail(journalId: string) {
     reversalOf = asli ?? null
   }
 
-  return { ...header, postedByName, lines, events, reversals, reversedBy, reversalOf }
+  // ── Dokumen asal, untuk tombol "Koreksi di …" (D32) ────────────────
+  //
+  // ══ ARAHNYA TERBALIK DARI ARAH FK, DAN ITU DISENGAJA ════════════════
+  // `purchase_invoices.journal_id` menunjuk KE jurnal; dari jurnal tidak ada
+  // kolom yang menunjuk balik. Jadi ini pencarian MUNDUR lewat index
+  // `purchase_invoices_journal_idx` — bukan kolom balik di journal_entries,
+  // yang akan jadi kolom polimorfik KEDUA tanpa FK (invoice? mutasi? kelak
+  // marketplace?). Kita sudah membayar harga satu di audit_events.
+  //
+  // Hasilnya boleh null walau sumbernya 'pembelian': invoicenya bisa saja
+  // dihapus lewat jalur lain. UI menampilkan keterangan jujur untuk itu, bukan
+  // tombol yang menuju halaman kosong.
+  let sumberDokumen: { tipe: 'pembelian'; id: string; label: string | null } | null = null
+  if (header.sumber === 'pembelian') {
+    const [inv] = await db
+      .select({ id: purchaseInvoices.id, noInvoice: purchaseInvoices.noInvoice })
+      .from(purchaseInvoices)
+      .where(eq(purchaseInvoices.journalId, journalId))
+      .limit(1)
+    if (inv) sumberDokumen = { tipe: 'pembelian', id: inv.id, label: inv.noInvoice }
+  }
+
+  return {
+    ...header,
+    postedByName,
+    lines,
+    events,
+    reversals,
+    reversedBy,
+    reversalOf,
+    sumberDokumen,
+  }
 }
 
 /**
