@@ -81,6 +81,18 @@ function bulanBerjalan(): { start: string; end: string } {
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
 }
 
+/**
+ * Mutasi ini diselesaikan lewat AKUN LAWAN, bukan alokasi?
+ *
+ * Kalau ya, kolom "Belum dialokasikan" tidak punya arti untuknya: tidak ada
+ * yang pernah dialokasikan dan tidak ada yang perlu dialokasikan. Mutasi yang
+ * punya akun lawan DAN alokasi tetap memakai angkanya — begitu ada satu
+ * alokasi, alokasinya yang menentukan jurnalnya.
+ */
+function alokasiTidakDipakai(r: { akunLawanId: string | null; alokasiCount: number }): boolean {
+  return r.akunLawanId !== null && r.alokasiCount === 0
+}
+
 const WARNA_STATUS: Record<string, { bg: string; fg: string }> = {
   'belum dijurnal': {
     bg: 'color-mix(in srgb, var(--color-accent-critical) 16%, white)',
@@ -474,7 +486,11 @@ function MutasiKasContent() {
                       <th scope="col" style={th}>Keterangan</th>
                       <th scope="col" style={{ ...th, textAlign: 'right' }}>Masuk</th>
                       <th scope="col" style={{ ...th, textAlign: 'right' }}>Keluar</th>
-                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Sisa</th>
+                      {/* Judulnya sama dengan panel alokasi, bukan "Sisa":
+                          angka ini soal ALOKASI, dan "Sisa" mengundang dibaca
+                          sebagai "belum beres" oleh mutasi yang sudah selesai
+                          lewat akun lawan. */}
+                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Belum dialokasikan</th>
                       <th scope="col" style={th}>Status</th>
                       <th scope="col" style={{ ...th, textAlign: 'right' }}>Aksi</th>
                     </tr>
@@ -519,7 +535,13 @@ function MutasiKasContent() {
                               {Number(r.kredit) > 0 ? rupiah(Number(r.kredit)) : '—'}
                             </td>
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {Number(r.sisa) === 0 ? '—' : rupiah(Number(r.sisa))}
+                              {/* Mutasi yang lawannya sebuah AKUN tidak memakai
+                                  alokasi sama sekali — menampilkan nominal
+                                  penuhnya di kolom ini membuat baris yang sudah
+                                  selesai terbaca seperti masih menggantung. */}
+                              {alokasiTidakDipakai(r) || Number(r.sisa) === 0
+                                ? '—'
+                                : rupiah(Number(r.sisa))}
                             </td>
                             <td style={td}>
                               <span

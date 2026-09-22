@@ -100,10 +100,13 @@ export function AllocationPanel({
     () =>
       invoices.map(i => ({
         value: i.id,
-        label: `${i.noInvoice ?? '(tanpa nomor)'} · sisa ${i.sisa}`,
+        // Diformat rupiah, bukan angka mentah dari DB: yang dibaca akunting
+        // saat memilih invoice adalah nominalnya, dan "3630000.00" menuntut ia
+        // menghitung digitnya sendiri.
+        label: `${i.noInvoice ?? '(tanpa nomor)'} · sisa ${rupiah(Number(i.sisa))}`,
         badge: i.supplierNama,
       })),
-    [invoices]
+    [invoices, rupiah]
   )
 
   const opsiTermin: StyledOption[] = useMemo(() => {

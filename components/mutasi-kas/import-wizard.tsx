@@ -15,6 +15,7 @@
 
 import { useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeftRight, CopyCheck, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
+import { useRupiah } from '@/lib/preferences-context'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { MUTASI_FIELD_LABEL, MUTASI_FIELDS, type MutasiField } from '@/lib/csv/mutasi-kas'
 
@@ -60,6 +61,7 @@ export function ImportWizard({
   onClose: () => void
   onSelesai: (tersimpan: number) => void
 }) {
+  const { rupiah } = useRupiah()
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
@@ -326,11 +328,15 @@ export function ImportWizard({
                         </td>
                         <td style={sel}>{r.tanggal}</td>
                         <td style={{ ...sel, color: 'var(--color-text-muted)' }}>{r.keterangan ?? '—'}</td>
+                        {/* Diformat rupiah, sama dengan tabel mutasi utama.
+                            Angka mentah dari parser ("2500000.00") membuat
+                            pembacanya menghitung digit sendiri — justru di layar
+                            yang meminta ia memeriksa arah tiap baris. */}
                         <td style={{ ...sel, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {r.debit === '0.00' ? '—' : r.debit}
+                          {r.debit === '0.00' ? '—' : rupiah(Number(r.debit))}
                         </td>
                         <td style={{ ...sel, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {r.kredit === '0.00' ? '—' : r.kredit}
+                          {r.kredit === '0.00' ? '—' : rupiah(Number(r.kredit))}
                         </td>
                       </tr>
                     )

@@ -406,3 +406,45 @@ describe('halaman /mutasi-kas', () => {
     expect(LIST_JURNAL).toContain('from cash_mutations cm')
   })
 })
+
+// ══ PELABELAN & FORMAT (temuan uji klik CP-18) ═══════════════════════════
+// Tiga hal yang tidak salah secara angka, tapi menyesatkan yang membacanya.
+// Dikunci test supaya tidak balik lagi dalam satu polish pass.
+describe('pelabelan nominal & kolom', () => {
+  const PAGE = read('app', 'mutasi-kas', 'page.tsx')
+  const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
+  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+
+  it('kolom alokasi di tabel memakai judul yang SAMA dengan panelnya', () => {
+    // "Sisa" mengundang dibaca sebagai "belum beres" oleh mutasi yang sudah
+    // selesai lewat akun lawan.
+    expect(PAGE).toContain('>Belum dialokasikan</th>')
+    expect(PAGE).not.toContain("}}>Sisa</th>")
+  })
+
+  it('mutasi berakun-lawan tanpa alokasi menampilkan tanda hubung, bukan nominal', () => {
+    expect(PAGE).toContain('function alokasiTidakDipakai(')
+    expect(PAGE).toContain('r.akunLawanId !== null && r.alokasiCount === 0')
+    expect(PAGE).toContain('alokasiTidakDipakai(r) || Number(r.sisa) === 0')
+  })
+
+  it('mutasi yang PUNYA alokasi tetap menampilkan angkanya walau berakun lawan', () => {
+    // Begitu ada satu alokasi, alokasinya yang menentukan jurnalnya — jadi
+    // "belum dialokasikan" kembali punya arti. Syaratnya karena itu
+    // `alokasiCount === 0`, bukan sekadar `akunLawanId !== null`.
+    const mulai = PAGE.indexOf('function alokasiTidakDipakai(')
+    const blok = PAGE.slice(mulai, mulai + 400)
+    expect(blok).toContain('alokasiCount === 0')
+  })
+
+  it('dropdown invoice di panel alokasi diformat rupiah', () => {
+    expect(PANEL).toContain('sisa ${rupiah(Number(i.sisa))}')
+    expect(PANEL).not.toContain('sisa ${i.sisa}')
+  })
+
+  it('pratinjau impor diformat rupiah, sama dengan tabel utama', () => {
+    expect(WIZARD).toContain('rupiah(Number(r.debit))')
+    expect(WIZARD).toContain('rupiah(Number(r.kredit))')
+    expect(WIZARD).toContain("useRupiah()")
+  })
+})
