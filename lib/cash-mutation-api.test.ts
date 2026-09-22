@@ -296,6 +296,18 @@ describe('impor CSV', () => {
     expect(body).toContain('PEMISAH_SAH.includes(pemisahRaw)')
   })
 
+  it('berkas MM/DD/YYYY DITOLAK seluruhnya, bukan dibaca separuh', () => {
+    expect(body).toContain('deteksiTanggalMMDD(selTanggal)')
+    expect(body).toContain('MM/DD/YYYY')
+    // Diperiksa SEBELUM mapRows: kalau sesudahnya, sebagian baris sudah
+    // terbaca dengan hari dan bulan tertukar.
+    expect(body.indexOf('deteksiTanggalMMDD(')).toBeLessThan(body.indexOf('mapRows({'))
+  })
+
+  it('penolakannya menyebut baris buktinya, bukan sekadar "format salah"', () => {
+    expect(body).toContain('mmdd.contoh.map')
+  })
+
   it('duplikat dicari per (klien, akun kas) — bukan lintas rekening', () => {
     // Nominal & tanggal yang sama di dua rekening berbeda adalah dua transaksi
     // berbeda; menandainya duplikat melatih orang mengabaikan peringatan.
@@ -369,6 +381,13 @@ describe('halaman /mutasi-kas', () => {
   it('wizard impor: pratinjau dulu, commit terkunci sampai ada pratinjau', () => {
     expect(WIZARD).toContain("fd.append('dryRun', '1')")
     expect(WIZARD).toContain('disabled={!file || busy || !pratinjau}')
+  })
+
+  it('pratinjau memperingatkan agar arah beberapa baris pertama diperiksa', () => {
+    // Arah yang terbalik tidak pernah menimbulkan galat — satu-satunya saat ia
+    // murah diperbaiki adalah di layar ini, sebelum barisnya tersimpan.
+    expect(WIZARD).toContain('Periksa arah beberapa baris pertama')
+    expect(WIZARD).toContain('tidak menimbulkan galat')
   })
 
   it('wizard impor menandai duplikat DAN mengatakan ia tetap tersimpan (D38)', () => {

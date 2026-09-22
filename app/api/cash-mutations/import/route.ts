@@ -9,6 +9,7 @@ import { canAccessClientData } from '@/lib/roles'
 import { fingerprintMutasi } from '@/lib/cash-mutation'
 import {
   detectHeader,
+  deteksiTanggalMMDD,
   mapRows,
   parseCsv,
   MUTASI_FIELDS,
@@ -161,6 +162,37 @@ export async function POST(req: Request) {
       fields: MUTASI_FIELDS,
       note: 'Header tidak dikenali — petakan kolomnya secara manual.',
     })
+  }
+
+  // ══ BERKAS MM/DD/YYYY DITOLAK, TIDAK DIBACA SEPARUH ════════════════
+  // Diperiksa SEBELUM mapRows, di tingkat BERKAS: satu sel `01/02/2026`
+  // mustahil dibedakan, tapi satu sel yang potongan keduanya > 12 sudah
+  // membuktikan urutannya bulan-di-depan.
+  //
+  // Tanpa penolakan ini berkasnya masuk SEPARUH — baris bertanggal 1–12
+  // terbaca dengan hari & bulan TERTUKAR, baris bertanggal 13+ ditolak satu
+  // per satu. Akunting membetulkan yang gagal dan tidak pernah tahu sisanya
+  // pindah bulan. Keputusan Ricko 2026-09-21: DITOLAK dengan pesan jelas.
+  const kolomTanggal = mapping.tanggal
+  if (kolomTanggal !== undefined) {
+    const selTanggal = parsed.rows
+      .slice(mulaiDariIndex)
+      .map(r => ({ nomor: r.nomor, nilai: r.cells[kolomTanggal] ?? '' }))
+    const mmdd = deteksiTanggalMMDD(selTanggal)
+    if (mmdd.terdeteksi) {
+      return NextResponse.json(
+        {
+          error:
+            'Tanggal di berkas ini ditulis MM/DD/YYYY (bulan di depan) — format itu tidak didukung.',
+          details: [
+            ...mmdd.contoh.map(c => `Baris ${c.nomor}: "${c.nilai}" hanya masuk akal sebagai bulan/hari.`),
+            'Ubah kolom tanggalnya ke YYYY-MM-DD atau DD/MM/YYYY, lalu unggah ulang.',
+            'Ditolak seluruhnya dengan sengaja: dibaca sebagian, baris bertanggal 1–12 akan tertukar hari dan bulannya tanpa galat apa pun.',
+          ],
+        },
+        { status: 400 }
+      )
+    }
   }
 
   const { rows, bermasalah } = mapRows({ rows: parsed.rows, mapping, mulaiDariIndex })

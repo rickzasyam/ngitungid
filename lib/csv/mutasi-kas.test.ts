@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import {
   detectDelimiter,
   detectHeader,
+  deteksiTanggalMMDD,
   mapRows,
   normalizeHeader,
   parseCsv,
@@ -393,5 +394,56 @@ describe('kontrak modul', () => {
     for (const f of MUTASI_FIELDS) expect(typeof f).toBe('string')
     expect(MUTASI_FIELDS).toContain('tanggal')
     expect(FIELD_WAJIB.every(f => MUTASI_FIELDS.includes(f))).toBe(true)
+  })
+})
+
+
+// ══ MM/DD/YYYY DITOLAK, TIDAK DIBACA SEPARUH ═════════════════════════════
+// Keputusan Ricko 2026-09-21. Berkas Amerika yang lolos separuh adalah bentuk
+// kegagalan paling mahal modul ini: baris bertanggal 1–12 terbaca dengan hari
+// dan bulan TERTUKAR (pindah periode, tanpa galat), sementara baris bertanggal
+// 13+ ditolak satu per satu — sehingga akunting membetulkan yang gagal dan
+// tidak pernah tahu sisanya salah.
+describe('deteksiTanggalMMDD', () => {
+  const sel = (...nilai: string[]) => nilai.map((v, i) => ({ nomor: i + 1, nilai: v }))
+
+  it('mengenali berkas MM/DD/YYYY dari satu sel yang membuktikannya', () => {
+    // 09/21 hanya masuk akal sebagai bulan/hari — tidak ada bulan ke-21.
+    const d = deteksiTanggalMMDD(sel('01/02/2026', '09/21/2026', '03/04/2026'))
+    expect(d.terdeteksi).toBe(true)
+    expect(d.contoh[0]).toEqual({ nomor: 2, nilai: '09/21/2026' })
+  })
+
+  it('berkas DD/MM/YYYY yang jelas TIDAK terdeteksi', () => {
+    // 21/09 membuktikan hari di depan; tidak ada yang perlu dipersoalkan.
+    expect(deteksiTanggalMMDD(sel('21/09/2026', '01/02/2026')).terdeteksi).toBe(false)
+  })
+
+  it('YYYY-MM-DD tidak pernah dianggap terbalik', () => {
+    expect(deteksiTanggalMMDD(sel('2026-09-21', '2026-12-31')).terdeteksi).toBe(false)
+  })
+
+  it('nama bulan tidak pernah ambigu', () => {
+    expect(deteksiTanggalMMDD(sel('21 Sep 2026', 'Sep 21 2026')).terdeteksi).toBe(false)
+  })
+
+  it('berkas yang SELURUH tanggalnya 1–12 memang tak bisa diputuskan', () => {
+    // false di sini berarti "tidak ada bukti ia terbalik", BUKAN "pasti DD/MM".
+    // Sisanya urusan peringatan arah di layar pratinjau.
+    expect(deteksiTanggalMMDD(sel('01/02/2026', '03/04/2026')).terdeteksi).toBe(false)
+  })
+
+  it('paling banyak tiga contoh — pesan galat tidak jadi daftar seratus baris', () => {
+    const banyak = sel(...Array.from({ length: 20 }, () => '09/21/2026'))
+    expect(deteksiTanggalMMDD(banyak).contoh).toHaveLength(3)
+  })
+
+  it('sel kosong & bukan tanggal dilewati tanpa melempar', () => {
+    expect(deteksiTanggalMMDD(sel('', 'SALDO AWAL', '2026')).terdeteksi).toBe(false)
+    expect(deteksiTanggalMMDD([{ nomor: 1, nilai: null }]).terdeteksi).toBe(false)
+  })
+
+  it('hari > 31 bukan bukti apa pun — ia sekadar tanggal rusak', () => {
+    expect(deteksiTanggalMMDD(sel('01/99/2026')).terdeteksi).toBe(false)
   })
 })

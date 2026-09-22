@@ -14,7 +14,7 @@
 // peringatan yang bisa ia abaikan, bukan penolakan yang harus ia akali.
 
 import { useRef, useState } from 'react'
-import { AlertTriangle, CopyCheck, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, CopyCheck, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { MUTASI_FIELD_LABEL, MUTASI_FIELDS, type MutasiField } from '@/lib/csv/mutasi-kas'
 
@@ -251,6 +251,33 @@ export function ImportWizard({
 
         {/* ── Langkah 3: pratinjau ── */}
         {pratinjau && (
+          <>
+            {/* ══ PERIKSA ARAH BEBERAPA BARIS PERTAMA ══════════════════════
+                Permintaan eksplisit Ricko 2026-09-21. Arah yang terbalik TIDAK
+                pernah menimbulkan galat: jurnalnya tetap seimbang, tetap bisa
+                diposting, dan salahnya baru terlihat saat saldo kas bergerak
+                berlawanan dengan rekening korannya — berbulan-bulan kemudian.
+                Satu-satunya saat ia murah diperbaiki adalah SEKARANG, di layar
+                ini, sebelum barisnya tersimpan. */}
+            <div
+              role="note"
+              className="rounded-2xl px-3.5 py-2.5 flex items-start gap-2"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent-secondary) 14%, white)',
+                border: '1px solid color-mix(in srgb, var(--color-accent-secondary) 45%, white)',
+              }}
+            >
+              <ArrowLeftRight className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--color-text-primary)' }} />
+              <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                <strong>Periksa arah beberapa baris pertama</strong> sebelum melanjutkan —
+                cocokkan kolom <em>Masuk</em> dan <em>Keluar</em> di bawah dengan rekening korannya.
+                Arah yang terbalik <strong>tidak menimbulkan galat</strong>: jurnalnya tetap
+                seimbang dan tetap bisa diposting, dan salahnya baru terlihat saat saldo kas
+                bergerak berlawanan dengan rekening koran. Kalau tertukar, batalkan lalu petakan
+                kolomnya manual.
+              </p>
+            </div>
+
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
             <div className="px-3.5 py-2.5 flex items-center gap-3 flex-wrap" style={{ background: '#fafafa', borderBottom: '1px solid #ececec' }}>
               <span className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>
@@ -334,6 +361,7 @@ export function ImportWizard({
               </p>
             )}
           </div>
+          </>
         )}
       </div>
 

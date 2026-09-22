@@ -419,12 +419,11 @@ function hariDalamBulan(tahun: number, bulan: number): number {
  * `DD/MM/YYYY` untuk tanggal 1–12, jadi mendukungnya berarti menebak — dan
  * separuh tebakannya salah tanpa ada yang tahu.
  */
-export function parseTanggalCell(raw: unknown): string | null {
+/** Pecah teks jadi potongan angka/huruf, per karakter. Tanpa regex (D22). */
+function potonganTanggal(raw: unknown): string[] {
   const teks = (typeof raw === 'string' ? raw : String(raw ?? '')).trim()
-  if (teks === '') return null
-
-  // Pecah jadi potongan angka/huruf, per karakter.
-  const potongan: string[] = []
+  if (teks === '') return []
+  const out: string[] = []
   let buf = ''
   let jenis: 'angka' | 'huruf' | null = null
   for (const ch of teks) {
@@ -433,19 +432,26 @@ export function parseTanggalCell(raw: unknown): string | null {
     const huruf = (kode >= 65 && kode <= 90) || (kode >= 97 && kode <= 122)
     const jenisIni = angka ? 'angka' : huruf ? 'huruf' : null
     if (jenisIni === null) {
-      if (buf !== '') potongan.push(buf)
+      if (buf !== '') out.push(buf)
       buf = ''
       jenis = null
       continue
     }
     if (jenis !== null && jenisIni !== jenis) {
-      potongan.push(buf)
+      out.push(buf)
       buf = ''
     }
     jenis = jenisIni
     buf += ch
   }
-  if (buf !== '') potongan.push(buf)
+  if (buf !== '') out.push(buf)
+  return out
+}
+
+const semuaAngka = (s: string) => s.length > 0 && [...s].every(ch => ch >= '0' && ch <= '9')
+
+export function parseTanggalCell(raw: unknown): string | null {
+  const potongan = potonganTanggal(raw)
   if (potongan.length < 3) return null
 
   const [a, b, c] = potongan
@@ -453,7 +459,7 @@ export function parseTanggalCell(raw: unknown): string | null {
   let bulan: number
   let hari: number
 
-  const isAngka = (s: string) => s.length > 0 && [...s].every(ch => ch >= '0' && ch <= '9')
+  const isAngka = semuaAngka
 
   if (isAngka(a) && a.length === 4) {
     // YYYY-MM-DD
@@ -475,6 +481,59 @@ export function parseTanggalCell(raw: unknown): string | null {
   if (hari < 1 || hari > hariDalamBulan(tahun, bulan)) return null
 
   return `${tahun}-${String(bulan).padStart(2, '0')}-${String(hari).padStart(2, '0')}`
+}
+
+// ── 3b. Deteksi format tanggal Amerika (MM/DD/YYYY) ─────────
+
+export type DeteksiMMDD = {
+  terdeteksi: boolean
+  /** Sampai tiga contoh sel yang membuktikannya — dipakai di pesan penolakan. */
+  contoh: { nomor: number; nilai: string }[]
+}
+
+/**
+ * Apakah kolom tanggal berkas ini ditulis **MM/DD/YYYY**?
+ *
+ * ══ KENAPA DIPERIKSA DI TINGKAT BERKAS, BUKAN PER SEL ═══════════════════
+ * Satu sel `01/02/2026` mustahil dibedakan: ia 1 Februari (Indonesia) atau
+ * 2 Januari (Amerika), dan keduanya tanggal yang sah. Yang bisa memutuskan
+ * hanya SELURUH kolomnya — begitu ada satu sel yang potongan KEDUA-nya lebih
+ * dari 12, urutannya pasti bulan-di-depan, karena tidak ada bulan ke-13.
+ *
+ * Tanpa pemeriksaan ini, berkas MM/DD/YYYY masuk SEPARUH: baris bertanggal 1–12
+ * terbaca dengan hari dan bulan TERTUKAR, dan baris bertanggal 13+ ditolak satu
+ * per satu sebagai "tanggal tidak terbaca". Akunting melihat beberapa baris
+ * gagal, membetulkannya, dan tidak pernah tahu sisanya masuk ke bulan yang
+ * salah. Itu kegagalan paling mahal yang bisa dihasilkan modul ini: transaksi
+ * pindah periode tanpa satu pun galat.
+ *
+ * `false` BUKAN jaminan formatnya DD/MM — berkas yang seluruh tanggalnya 1–12
+ * memang tidak bisa diputuskan. Ia berarti "tidak ada bukti bahwa ia terbalik",
+ * dan sisanya urusan peringatan di layar pratinjau.
+ */
+export function deteksiTanggalMMDD(
+  sel: readonly { nomor: number; nilai: unknown }[]
+): DeteksiMMDD {
+  const contoh: { nomor: number; nilai: string }[] = []
+
+  for (const s of sel) {
+    const p = potonganTanggal(s.nilai)
+    if (p.length < 3) continue
+    const [a, b] = p
+    // YYYY-… tidak ambigu, dan nama bulan juga tidak.
+    if (semuaAngka(a) && a.length === 4) continue
+    if (!semuaAngka(a) || !semuaAngka(b)) continue
+    const pertama = Number(a)
+    const kedua = Number(b)
+    // Potongan kedua > 12 hanya mungkin bila ia HARI — berarti bulan di depan.
+    // Potongan pertama juga harus masuk akal sebagai bulan; kalau ia > 12,
+    // urutannya justru DD/MM dan tidak ada yang perlu dipersoalkan.
+    if (pertama >= 1 && pertama <= 12 && kedua > 12 && kedua <= 31) {
+      if (contoh.length < 3) contoh.push({ nomor: s.nomor, nilai: String(s.nilai ?? '') })
+    }
+  }
+
+  return { terdeteksi: contoh.length > 0, contoh }
 }
 
 // ── 4. Pemetaan baris ────────────────────────────────────────
