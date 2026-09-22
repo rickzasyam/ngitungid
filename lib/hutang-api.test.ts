@@ -152,3 +152,60 @@ describe('detail supplier', () => {
     expect(QUERIES).not.toContain('sql.raw(')
   })
 })
+
+// ══ UI /hutang (U4) ══════════════════════════════════════════════════════
+// Struktural, bukan render: yang dijaga adalah janji-janji yang paling mudah
+// hilang dalam satu polish pass.
+describe('halaman /hutang', () => {
+  const PAGE = read('app', 'hutang', 'page.tsx')
+  const DETAIL_PANEL = read('components', 'hutang', 'supplier-detail.tsx')
+
+  it('tidak menghitung satu angka pun — semuanya dari server', () => {
+    for (const fn of ['ageBuckets(', 'applyPayments(', 'invoiceOutstanding(', 'bucketOf(']) {
+      expect(PAGE.includes(fn), fn).toBe(false)
+      expect(DETAIL_PANEL.includes(fn), `panel — ${fn}`).toBe(false)
+    }
+    // Yang diimpor dari lib/hutang hanya DAFTAR ember dan labelnya.
+    expect(PAGE).toContain("AGE_BUCKETS, AGE_BUCKET_LABEL")
+  })
+
+  it('kelima ember tampil, warnanya dari TOKEN bukan hex lepas', () => {
+    expect(PAGE).toContain('AGE_BUCKETS.map(k =>')
+    expect(PAGE).toContain('--color-accent-critical')
+    expect(PAGE).toContain('--color-accent-secondary')
+  })
+
+  it('daftar jatuh tempo per CICILAN, dan yang telat diberi tanda', () => {
+    expect(PAGE).toContain('ke-{i.terminUrutan}')
+    expect(PAGE).toContain('telat ${Math.abs(i.hariLagi)} hari')
+  })
+
+  it('rekap supplier bisa dibuka ke detail invoice + pembayaran', () => {
+    expect(PAGE).toContain('<SupplierDetail')
+    expect(DETAIL_PANEL).toContain('Pembayaran teralokasi')
+    expect(DETAIL_PANEL).toContain('p.terminUrutan === null')
+  })
+
+  it('paku yatim ditampilkan di ringkasan DAN di detailnya (D40)', () => {
+    expect(PAGE).toContain('aging.pakuYatim > 0')
+    expect(DETAIL_PANEL).toContain('inv.pakuYatim.length > 0')
+    // Dan dikatakan bahwa pembayarannya tetap terhitung — bukan sekadar
+    // peringatan yang membuat orang mengira uangnya hilang.
+    expect(DETAIL_PANEL).toContain('tetap terhitung')
+  })
+
+  it('unduh CSV dibentuk dari data yang SUDAH di layar', () => {
+    // Berkas yang isinya berbeda dari yang barusan dibaca orangnya adalah
+    // berkas yang tidak bisa dipertanggungjawabkan saat dikirim ke luar.
+    expect(PAGE).toContain('suppliers.map(s => [')
+    expect(PAGE).not.toContain("fetch('/api/hutang/export")
+  })
+
+  it('empty state menyebut bahwa invoice tunai memang tidak masuk', () => {
+    expect(PAGE).toContain('Invoice tunai tidak masuk monitoring hutang')
+  })
+
+  it('bagian Rekonsiliasi yang menyusul disebut, bukan dibiarkan hilang', () => {
+    expect(PAGE).toContain('Rekonsiliasi')
+  })
+})
