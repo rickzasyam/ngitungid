@@ -4,6 +4,8 @@ import {
   INTERNAL_ONLY_PREFIXES, CONTRACT_PREFIXES, USER_HOME,
 } from './route-access'
 import { isInternal, type Role } from './roles'
+import { NAV_ITEMS, navItemsForRole } from './nav-items'
+import { SETTINGS_TABS } from './settings-tabs'
 
 const STAFF_ROLES: Role[] = ['owner', 'akunting']
 
@@ -342,5 +344,35 @@ describe('/pembelian — surface orang dalam, bukan surface akunting', () => {
   it('sub-path ikut, nama mirip tidak', () => {
     expect(isPathAllowedForRole('user', '/pembelian/abc')).toBe(false)
     expect(isPathAllowedForRole('user', '/pembeliannya')).toBe(true)
+  })
+})
+
+// ══ MONITORING HUTANG (U3) ═══════════════════════════════════════════════
+describe('sumbu akses /hutang (U3)', () => {
+  it('nav hutang ada, internalOnly, sesudah mutasi-kas', () => {
+    const ids = NAV_ITEMS.map(i => i.id)
+    expect(ids.indexOf('hutang')).toBe(ids.indexOf('mutasi-kas') + 1)
+    const item = NAV_ITEMS.find(i => i.id === 'hutang')!
+    expect(item.internalOnly).toBe(true)
+    expect(item.staffOnly).toBeUndefined()
+  })
+
+  it('/hutang masuk INTERNAL_ONLY_PREFIXES', () => {
+    expect([...INTERNAL_ONLY_PREFIXES]).toContain('/hutang')
+  })
+
+  it('finance MELIHAT, klien TIDAK', () => {
+    expect(navItemsForRole('finance').map(i => i.id)).toContain('hutang')
+    expect(navItemsForRole('user').map(i => i.id)).not.toContain('hutang')
+  })
+
+  it('owner & akunting melihatnya juga', () => {
+    for (const r of ['owner', 'akunting'] as const) {
+      expect(navItemsForRole(r).map(i => i.id), r).toContain('hutang')
+    }
+  })
+
+  it('BUKAN di Settings — ia menu sejajar Jurnal & Buku Besar (D39)', () => {
+    expect(SETTINGS_TABS.map(t => t.id)).not.toContain('hutang')
   })
 })

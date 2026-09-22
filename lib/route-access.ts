@@ -51,6 +51,10 @@ export const INTERNAL_ONLY_PREFIXES = [
   // arus kas klien dan mengunduhnya, tapi API-nya tetap requireAkunting untuk
   // setiap tulisan. Menyembunyikan menu BUKAN kontrol keamanan.
   '/mutasi-kas',
+  // Monitoring Hutang (U3) — sumbu yang sama. SELURUH route-nya baca-saja,
+  // jadi finance membaca dan mengunduh tanpa satu pun jalur tulis yang perlu
+  // digerbangi terpisah.
+  '/hutang',
 ] as const
 
 /**

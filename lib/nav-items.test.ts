@@ -14,7 +14,7 @@ const ids = (role: Role | null | undefined, sessionLoading = false): NavItemId[]
 describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
   it('owner: semuanya', () => {
     expect(ids('owner')).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'mutasi-kas', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'mutasi-kas', 'hutang', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -23,7 +23,7 @@ describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
     // Akunting membukukan pekerjaan klien; katalog & kontrak komersial bukan
     // urusannya. Ini satu-satunya item yang staf kehilangan tapi klien punya.
     expect(ids('akunting')).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'mutasi-kas', 'laporan',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'mutasi-kas', 'hutang', 'laporan',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -35,6 +35,7 @@ describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
       'analytics',
       'pembelian',
       'mutasi-kas',
+      'hutang',
       'laporan',
       'kontrak',
       'settings',
@@ -53,7 +54,7 @@ describe('navItemsForRole — isi & urutan persis untuk keempat role', () => {
   it('finance = user PLUS Pembelian, tidak lebih', () => {
     const finance = ids('finance')
     const user = ids('user')
-    expect(finance.filter(i => !user.includes(i))).toEqual(['pembelian', 'mutasi-kas'])
+    expect(finance.filter(i => !user.includes(i))).toEqual(['pembelian', 'mutasi-kas', 'hutang'])
     expect(user.filter(i => !finance.includes(i))).toEqual([])
   })
 })
@@ -93,7 +94,7 @@ describe('sessionLoading — semua item tampil, apa pun role-nya', () => {
 
   it('daftar penuhnya persis NAV_ITEMS, urutan apa adanya', () => {
     expect(ids(null, true)).toEqual([
-      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'mutasi-kas', 'laporan', 'kontrak',
+      'dashboard', 'analytics', 'upload', 'jurnal', 'buku-besar', 'pembelian', 'mutasi-kas', 'hutang', 'laporan', 'kontrak',
       'coa-mapping', 'operational', 'settings',
     ])
   })
@@ -116,8 +117,8 @@ describe('daftar berubah setelah sesi resolve — kapsul wajib mengukur ulang', 
     // masuk, 2 saat Buku Besar menyusul, 3 sejak Mutasi Kas (semuanya tidak
     // dilihat finance setelah settle) — konsekuensi tidak mengukur ulang justru
     // makin kelihatan seiring waktu, bukan makin samar.
-    expect(ids('finance', true).indexOf('kontrak')).toBe(8)
-    expect(ids('finance', false).indexOf('kontrak')).toBe(5)
+    expect(ids('finance', true).indexOf('kontrak')).toBe(9)
+    expect(ids('finance', false).indexOf('kontrak')).toBe(6)
   })
 
   it('finance: indeks lama melampaui daftar baru — kapsul jatuh di luar', () => {
@@ -143,7 +144,7 @@ describe('daftar berubah setelah sesi resolve — kapsul wajib mengukur ulang', 
   it('navKey stabil untuk daftar yang sama (tidak memicu ukur-ulang palsu)', () => {
     expect(navKey(navItemsForRole('finance'))).toBe(navKey(navItemsForRole('finance')))
     expect(navKey(navItemsForRole('finance'))).toBe(
-      'dashboard|analytics|pembelian|mutasi-kas|laporan|kontrak|settings'
+      'dashboard|analytics|pembelian|mutasi-kas|hutang|laporan|kontrak|settings'
     )
   })
 })
