@@ -7,7 +7,9 @@ import {
   aggregateBalanceSheet,
   aggregateCashflow,
   monthLabel,
+  saldoNeracaPerAkun,
   type AggLine,
+  type AggLineAkun,
 } from './financial-agg'
 
 // Baris default = baris Laba Rugi normal yang ikut dihitung; override seperlunya.
@@ -417,5 +419,103 @@ describe('checkBalance — toleransi Rp 1.000', () => {
     ])
     expect(r.balance.unclassifiedCount).toBe(1)
     expect(r.balance.unclassifiedTotal).toBe(750)
+  })
+})
+
+// ══ Rekonsiliasi hutang: saldo per AKUN, bukan per nama (keputusan CP-8) ══
+describe('saldoNeracaPerAkun', () => {
+  const HPK = 'akun-hutang-pihak-ketiga'
+  const HD = 'akun-hutang-dagang'
+  const LAIN = 'akun-biaya-yg-masih-harus-dibayar'
+  const akunLine = (over: Partial<AggLineAkun> = {}): AggLineAkun => ({
+    ...bsLine({ subKelompok: 'Hutang' }),
+    masterCoaId: null,
+    ...over,
+  })
+
+  it('menjumlahkan baris yang DIPETAKAN ke akun yang diminta — per akun dan total', () => {
+    const r = saldoNeracaPerAkun(
+      [
+        akunLine({ masterCoaId: HPK, nama: 'Hutang Pihak Ketiga', amount: 1_000_000 }),
+        akunLine({ masterCoaId: HPK, nama: 'Hutang Pihak Ketiga (lanjutan)', amount: 250_000 }),
+        akunLine({ masterCoaId: HD, nama: 'Hutang Dagang', amount: 500_000 }),
+        akunLine({ masterCoaId: LAIN, nama: 'Biaya Yang Masih Harus Dibayar', amount: 7_125_000 }),
+      ],
+      [HPK, HD]
+    )
+    expect(r.perAkun).toEqual([
+      { masterCoaId: HPK, saldoMinor: 125_000_000, jumlahBaris: 2 },
+      { masterCoaId: HD, saldoMinor: 50_000_000, jumlahBaris: 1 },
+    ])
+    expect(r.totalMinor).toBe(175_000_000)
+  })
+
+  it('mencocokkan lewat PEMETAAN, bukan nama — kebalikan dari hutangUsaha', () => {
+    const lines = [
+      // Bernama "dagang" tapi dipetakan ke akun lain: TIDAK ikut.
+      akunLine({ masterCoaId: LAIN, nama: 'Hutang Dagang', amount: 900_000 }),
+      // Tidak bernama "dagang" tapi dipetakan ke akun hutang supplier: IKUT.
+      akunLine({ masterCoaId: HPK, nama: 'Hutang Pihak Ketiga', amount: 300_000 }),
+    ]
+    expect(saldoNeracaPerAkun(lines, [HPK]).totalMinor).toBe(30_000_000)
+    // Neraca yang sama di Analytics: hanya baris "dagang".
+    expect(aggregateBalanceSheet(lines).hutangUsaha).toBe(900_000)
+  })
+
+  it('aturan baris SAMA dengan aggregateBalanceSheet: matched/edited, bukan subtotal, kelompok neraca', () => {
+    const r = saldoNeracaPerAkun(
+      [
+        akunLine({ masterCoaId: HPK, amount: 100, status: 'matched' }),
+        akunLine({ masterCoaId: HPK, amount: 20, status: 'edited' }),
+        akunLine({ masterCoaId: HPK, amount: 5_000, status: 'unmatched' }),
+        akunLine({ masterCoaId: HPK, amount: 5_000, status: 'rejected' }),
+        akunLine({ masterCoaId: HPK, amount: 5_000, isSubtotal: true }),
+        akunLine({ masterCoaId: HPK, amount: 5_000, kelompok: 'Laba Rugi' }),
+      ],
+      [HPK]
+    )
+    expect(r.totalMinor).toBe(12_000)
+    expect(r.perAkun[0].jumlahBaris).toBe(2)
+  })
+
+  it('penjumlahan BERTANDA — saldo debit (negatif) mengurangi, tidak di-Math.abs', () => {
+    const r = saldoNeracaPerAkun(
+      [akunLine({ masterCoaId: HPK, amount: 1_000 }), akunLine({ masterCoaId: HPK, amount: -1_500 })],
+      [HPK]
+    )
+    expect(r.totalMinor).toBe(-50_000)
+  })
+
+  it('tidak satu pun akun terpetakan → totalMinor NULL, bukan 0', () => {
+    const r = saldoNeracaPerAkun([akunLine({ masterCoaId: LAIN, amount: 7_125_000 })], [HPK])
+    expect(r.perAkun).toEqual([])
+    expect(r.totalMinor).toBeNull()
+  })
+
+  it('akunIds kosong → null juga (belum ada akun hutang supplier)', () => {
+    expect(saldoNeracaPerAkun([akunLine({ masterCoaId: HPK, amount: 1 })], []).totalMinor).toBeNull()
+  })
+
+  it('akun ADA dengan saldo nol → 0, bukan null — "ada, nol" berbeda dari "tidak ada"', () => {
+    const r = saldoNeracaPerAkun([akunLine({ masterCoaId: HPK, amount: 0 })], [HPK])
+    expect(r.totalMinor).toBe(0)
+    expect(r.perAkun).toHaveLength(1)
+  })
+
+  it('baris yang hanya berstatus unmatched tidak membuat akunnya dianggap "ditemukan"', () => {
+    const r = saldoNeracaPerAkun([akunLine({ masterCoaId: HPK, amount: 500, status: 'unmatched' })], [HPK])
+    expect(r.totalMinor).toBeNull()
+  })
+
+  it('dijumlah dalam SEN — tidak ada galat float antar baris', () => {
+    const lines = [0.1, 0.2, 0.7].map(amount => akunLine({ masterCoaId: HPK, amount }))
+    expect(saldoNeracaPerAkun(lines, [HPK]).totalMinor).toBe(100)
+  })
+
+  it('urutan mengikuti akunIds; id ganda tidak menghitung dua kali', () => {
+    const lines = [akunLine({ masterCoaId: HD, amount: 1 }), akunLine({ masterCoaId: HPK, amount: 2 })]
+    const r = saldoNeracaPerAkun(lines, [HPK, HD, HPK])
+    expect(r.perAkun.map(s => s.masterCoaId)).toEqual([HPK, HD])
+    expect(r.totalMinor).toBe(300)
   })
 })

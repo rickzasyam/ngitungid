@@ -6,8 +6,10 @@
 //     dari lib/hutang.ts. TIDAK dihitung ulang di sini: dua penghitung sisa
 //     hutang berarti dua jawaban, dan rekonsiliasi yang membandingkan dirinya
 //     dengan salinannya sendiri tidak menemukan apa pun.
-//   - SALDO HUTANG USAHA DI NERACA — dari laporan neraca klien, lewat
-//     lib/financial-agg.ts (P5: tidak ada agregator kedua).
+//   - SALDO AKUN HUTANG SUPPLIER DI NERACA — baris laporan neraca klien yang
+//     dipetakan ke akun hutang supplier, lewat `saldoNeracaPerAkun` di
+//     lib/financial-agg.ts (P5: tidak ada agregator kedua). Cakupan akun ini
+//     diputuskan Ricko di CP-8; ia BUKAN `hutangUsaha` Analytics.
 //
 // ══ SELISIH DITAMPILKAN APA ADANYA ═══════════════════════════════════════
 // Keputusan Ricko 2026-09-23: jangan dibulatkan, jangan disembunyikan.
@@ -80,7 +82,7 @@ export function efekHutangMinor(b: { debit?: unknown; kredit?: unknown }): numbe
 }
 
 /**
- * Membandingkan sisa hutang per supplier dengan saldo hutang usaha di neraca.
+ * Membandingkan sisa hutang per supplier dengan saldo akun hutang supplier di neraca.
  *
  * `perSupplier` WAJIB keluaran `supplierSummary()` dari lib/hutang.ts — fungsi
  * ini hanya menjumlahkan `sisaMinor`-nya, tidak menghitung ulang dari invoice.

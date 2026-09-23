@@ -232,14 +232,38 @@ describe('GET /api/hutang/reconciliation', () => {
 
   it('totalNeraca lewat lib/financial-agg.ts — bukan agregator kedua (P5)', () => {
     expect(RQ).toContain("from '@/lib/financial-agg'")
-    expect(RQ).toContain('aggregateBalanceSheet(lines)')
-    // Tidak ada penjumlahan baris neraca sendiri di modul ini.
-    expect(RQ).not.toContain('.reduce((s, l) => s + l.amount')
+    expect(RQ).toContain('saldo: saldoNeracaPerAkun(lines, akunIds)')
+    // Tidak ada penjumlahan baris neraca sendiri di modul ini maupun di route.
+    expect(RQ).not.toContain('.reduce(')
+    expect(REKON).not.toContain('.reduce(')
   })
 
-  it('memakai HUTANG USAHA, bukan totalHutang yang mencampur pajak & gaji', () => {
-    expect(RQ).toContain('bs.hutangUsaha')
+  it('angka neraca = saldo AKUN HUTANG SUPPLIER yang dipetakan, bukan predikat nama "dagang" (CP-8)', () => {
+    // Klien yang mencatat hutang supplier di "Hutang Pihak Ketiga" akan
+    // selamanya berselisih sebesar seluruh hutangnya kalau dibandingkan
+    // dengan hutangUsaha.
+    expect(REKON).toContain('saldoNeracaHutangMinor: neraca?.saldo.totalMinor ?? null')
+    expect(REKON).not.toContain('hutangUsahaAnalyticsMinor ??')
+    expect(RQ).toContain('masterCoaId: it.masterCoaId')
     expect(RQ).not.toContain('bs.balanceSheet.totalHutang')
+  })
+
+  it('himpunan akun yang SAMA untuk angka neraca dan penjelas', () => {
+    expect(REKON).toContain('const akunIds = akun.map(a => a.id)')
+    expect(REKON).toContain('loadNeracaPembanding(g.clientId, g.asOf, akunIds)')
+    expect(REKON).toMatch(/loadPenjelasJurnalManual\(\{\s*clientId: g\.clientId,\s*akunIds,/)
+  })
+
+  it('akun yang dijumlahkan & yang tidak ditemukan ikut dikirim ke layar, dengan kode + nama', () => {
+    expect(REKON).toContain('akunDijumlahkan:')
+    expect(REKON).toContain('akunTidakDitemukan:')
+    expect(REKON).toContain('kode: a.kode, nama: a.nama')
+    expect(RQ).toContain('select({ id: masterCoa.id, kode: masterCoa.kode, nama: masterCoa.nama })')
+  })
+
+  it('hutang usaha versi Analytics ikut dikirim sebagai KETERANGAN, lewat agregator yang sama', () => {
+    expect(RQ).toContain('rupiahKeSen(aggregateBalanceSheet(lines).hutangUsaha)')
+    expect(REKON).toContain('hutangUsahaAnalytics: fromMinorUnits(neraca.hutangUsahaAnalyticsMinor)')
   })
 
   it('AggLine.nama diisi RAW NAME dari PDF, bukan nama Master COA', () => {
@@ -321,6 +345,27 @@ describe('panel Rekonsiliasi di /hutang', () => {
     expect(PANEL).toContain('data.selisih === null')
     expect(PANEL).toContain('belum bisa dihitung')
     expect(PANEL).toContain("data.totalNeraca === null ? '—'")
+  })
+
+  it('menyebut akun yang DIJUMLAHKAN dengan kode + nama, dan saldonya persis (CP-8)', () => {
+    expect(PANEL).toContain('data.neraca.akunDijumlahkan.map(a =>')
+    expect(PANEL).toContain('{a.kode}</span> {a.nama}')
+    expect(PANEL).toContain('rupiahPersis(a.saldo)')
+    expect(PANEL).toContain("data.neraca.akunTidakDitemukan.map(a => `${a.kode} ${a.nama}`)")
+  })
+
+  it('menjelaskan kenapa angkanya bisa berbeda dari hutang usaha di Analytics', () => {
+    expect(PANEL).toContain('bisa berbeda dari hutang usaha di Analytics')
+    expect(PANEL).toContain('cakupannya berbeda')
+    expect(PANEL).toContain('rupiahPersis(data.neraca.hutangUsahaAnalytics)')
+  })
+
+  it('tidak satu pun akun terpetakan → "belum bisa dihitung", bukan Rp 0', () => {
+    expect(PANEL).toContain('Tidak satu pun akun hutang supplier dipetakan')
+    expect(PANEL).toContain('Belum ada akun hutang supplier.')
+    expect(PANEL.match(/saldo neraca belum bisa dihitung/g)?.length).toBe(2)
+    // Label lama tidak tersisa.
+    expect(PANEL).not.toContain('Hutang usaha di neraca')
   })
 
   it('arah selisih dijelaskan dengan KATA, bukan warna saja', () => {

@@ -14,6 +14,14 @@
 // itu di depan mata, "invoice saya tidak ikut" akan terbaca sebagai bug —
 // padahal invoice sesudah tanggal neraca memang belum ada di neraca itu.
 //
+// ══ AKUN YANG DIJUMLAHKAN WAJIB DISEBUT (keputusan Ricko di CP-8) ════════
+// Angka neraca = saldo akun hutang supplier yang dipetakan di neraca, BUKAN
+// hutang usaha Analytics (baris "dagang"). Dua halaman bisa menampilkan dua
+// angka berbeda untuk neraca yang sama — karena itu panel menyebut akun mana
+// saja yang dijumlahkan (kode + nama), akun yang tidak ditemukan, dan angka
+// versi Analytics beserta alasan bedanya. Tidak satu pun akun terpetakan →
+// "belum bisa dihitung", bukan Rp 0.
+//
 // ══ TIDAK ADA ANGKA YANG DIHITUNG DI SINI ═════════════════════════════════
 // Semuanya datang jadi dari /api/hutang/reconciliation, yang menurunkannya lewat
 // lib/hutang-reconciliation.ts.
@@ -35,10 +43,23 @@ interface PenjelasRow {
   efek: string
 }
 
+interface AkunRingkas {
+  id: string
+  kode: string
+  nama: string
+}
+
 interface RekonResponse {
   asOf: string
   tanggalPembanding: string
-  neraca: { reportId: string; periodStart: string; periodEnd: string } | null
+  neraca: {
+    reportId: string
+    periodStart: string
+    periodEnd: string
+    akunDijumlahkan: (AkunRingkas & { saldo: string })[]
+    akunTidakDitemukan: AkunRingkas[]
+    hutangUsahaAnalytics: string
+  } | null
   rows: { supplierId: string; supplierNama: string; sisa: string }[]
   totalSupplier: string
   totalNeraca: string | null
@@ -53,7 +74,9 @@ interface RekonResponse {
 function arahSelisih(selisih: string): { teks: string; nol: boolean } {
   const neg = selisih.trim().startsWith('-')
   const nol = Number(selisih) === 0
-  if (nol) return { teks: 'Cocok — sisa hutang per supplier sama persis dengan hutang usaha di neraca.', nol: true }
+  if (nol) {
+    return { teks: 'Cocok — sisa hutang per supplier sama persis dengan saldo akun hutang supplier di neraca.', nol: true }
+  }
   if (neg) {
     return {
       teks: 'Neraca mencatat hutang LEBIH KECIL dari modul — ada hutang di modul yang tidak diakui neraca.',
@@ -105,7 +128,7 @@ export function ReconciliationPanel({ clientId, asOf }: { clientId: string; asOf
           <Scale className="w-4 h-4" /> Rekonsiliasi hutang supplier
         </h2>
         <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-          Sisa hutang per supplier dibandingkan dengan hutang usaha di neraca
+          Sisa hutang per supplier dibandingkan dengan saldo akun hutang supplier di neraca
         </p>
       </div>
 
@@ -152,7 +175,9 @@ export function ReconciliationPanel({ clientId, asOf }: { clientId: string; asOf
               </p>
             </div>
             <div className="rounded-2xl p-3.5" style={{ border: '1px solid #f0f0f0' }}>
-              <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Hutang usaha di neraca</p>
+              <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                Saldo akun hutang supplier di neraca
+              </p>
               <p className="text-base font-bold mt-1" style={{ color: 'var(--color-text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                 {data.totalNeraca === null ? '—' : rupiahPersis(data.totalNeraca)}
               </p>
@@ -197,6 +222,53 @@ export function ReconciliationPanel({ clientId, asOf }: { clientId: string; asOf
               )
             })()}
           </div>
+
+          {/* ── Akun yang dijumlahkan — WAJIB disebut (CP-8) ── */}
+          {data.neraca && (
+            <div role="note" className="rounded-2xl px-3.5 py-2.5" style={{ border: '1px solid #f0f0f0' }}>
+              {data.neraca.akunDijumlahkan.length > 0 ? (
+                <>
+                  <p className="text-[11px] font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                    Akun yang dijumlahkan dari neraca {fmtTanggal(data.neraca.periodEnd)}
+                  </p>
+                  <ul className="mt-1 flex flex-col gap-0.5" style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                    {data.neraca.akunDijumlahkan.map(a => (
+                      <li key={a.id} className="text-[11px] flex items-center justify-between gap-3">
+                        <span style={{ color: 'var(--color-text-primary)' }}>
+                          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{a.kode}</span> {a.nama}
+                        </span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{rupiahPersis(a.saldo)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : data.neraca.akunTidakDitemukan.length > 0 ? (
+                <p className="text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
+                  <strong>Tidak satu pun akun hutang supplier dipetakan</strong> di neraca{' '}
+                  {fmtTanggal(data.neraca.periodEnd)} — saldo neraca belum bisa dihitung. Petakan baris hutangnya
+                  di COA Mapping.
+                </p>
+              ) : (
+                <p className="text-[11px]" style={{ color: 'var(--color-text-primary)' }}>
+                  <strong>Belum ada akun hutang supplier.</strong> Akun ini ditentukan dari invoice pembelian kredit
+                  atau akun hutang default supplier — saldo neraca belum bisa dihitung.
+                </p>
+              )}
+              {data.neraca.akunTidakDitemukan.length > 0 && (
+                <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                  Akun hutang supplier yang tidak ditemukan di neraca ini:{' '}
+                  {data.neraca.akunTidakDitemukan.map(a => `${a.kode} ${a.nama}`).join(', ')}.
+                </p>
+              )}
+              <p className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                Angka ini bisa berbeda dari hutang usaha di Analytics (
+                {rupiahPersis(data.neraca.hutangUsahaAnalytics)}
+                {' '}untuk neraca yang sama) karena cakupannya berbeda: Analytics hanya menjumlahkan baris hutang
+                bernama &ldquo;dagang&rdquo; sebagai dasar DPO, sedangkan rekonsiliasi menjumlahkan akun yang dipakai
+                hutang supplier di atas.
+              </p>
+            </div>
+          )}
 
           {/* ── Sisa per supplier ── */}
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #f0f0f0' }}>

@@ -43,7 +43,7 @@ export interface AggLine {
 
 const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().trim()
 
-export function contributing(lines: AggLine[]): AggLine[] {
+export function contributing<T extends AggLine>(lines: readonly T[]): T[] {
   return lines.filter(l => !l.isSubtotal && (l.status === 'matched' || l.status === 'edited'))
 }
 
@@ -314,6 +314,69 @@ export function aggregateBalanceSheet(lines: AggLine[]): {
     prepaid,
     hutangLancar,
     hutangUsaha,
+  }
+}
+
+// ── Saldo neraca per akun (Rekonsiliasi hutang supplier) ─────
+
+/** AggLine yang membawa akun Master COA tempat baris itu dipetakan. */
+export interface AggLineAkun extends AggLine {
+  /** `report_line_items.master_coa_id` — null bila baris belum dipetakan. */
+  masterCoaId: string | null
+}
+
+export interface SaldoAkunNeraca {
+  masterCoaId: string
+  /** Jumlah BERTANDA baris yang ikut dihitung, dalam SEN. */
+  saldoMinor: number
+  jumlahBaris: number
+}
+
+/**
+ * Saldo neraca untuk SEKUMPULAN AKUN pilihan pemanggil — dicocokkan lewat
+ * pemetaan (`master_coa_id`), BUKAN lewat nama.
+ *
+ * Lahir untuk Rekonsiliasi hutang supplier (keputusan Ricko di CP-8): yang
+ * dibandingkan dengan sisa per supplier adalah saldo akun yang BENAR-BENAR
+ * menampung hutang supplier, bukan `hutangUsaha` yang hanya mengenali nama
+ * "dagang". Klien yang mencatat hutang supplier di "Hutang Pihak Ketiga"
+ * akan selamanya berselisih sebesar seluruh hutangnya kalau dibandingkan
+ * dengan predikat nama — selisih yang bukan temuan, melainkan salah ukur.
+ *
+ * Aturan baris yang ikut SAMA dengan `aggregateBalanceSheet`: `contributing()`
+ * (matched/edited, bukan subtotal), kelompok neraca, dan penjumlahan BERTANDA.
+ *
+ * Hasilnya:
+ *   - `perAkun` — hanya akun yang punya minimal satu baris yang ikut dihitung,
+ *     berurutan menurut `akunIds`. Akun yang tidak muncul di sini TIDAK ADA di
+ *     neraca ini — berbeda dari akun yang ada dengan saldo nol.
+ *   - `totalMinor` — `null` bila tidak satu pun akun ditemukan. Nol di sana
+ *     akan terbaca "hutangnya nol", padahal neracanya tidak menyebut akun itu.
+ *
+ * Dalam SEN: tiap baris dibulatkan ke sen SEBELUM dijumlah, jadi tidak ada
+ * galat float yang menumpuk di antara baris.
+ */
+export function saldoNeracaPerAkun(
+  lines: readonly AggLineAkun[],
+  akunIds: readonly string[]
+): { perAkun: SaldoAkunNeraca[]; totalMinor: number | null } {
+  const dicari = new Set(akunIds)
+  const per = new Map<string, SaldoAkunNeraca>()
+  for (const l of contributing(lines)) {
+    if (!norm(l.kelompok).includes('neraca')) continue
+    if (l.masterCoaId === null || !dicari.has(l.masterCoaId)) continue
+    const s = per.get(l.masterCoaId) ?? { masterCoaId: l.masterCoaId, saldoMinor: 0, jumlahBaris: 0 }
+    s.saldoMinor += Math.round(l.amount * 100)
+    s.jumlahBaris += 1
+    per.set(l.masterCoaId, s)
+  }
+  const perAkun = [...dicari].flatMap(id => {
+    const s = per.get(id)
+    return s ? [s] : []
+  })
+  return {
+    perAkun,
+    totalMinor: perAkun.length === 0 ? null : perAkun.reduce((t, s) => t + s.saldoMinor, 0),
   }
 }
 

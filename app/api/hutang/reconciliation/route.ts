@@ -14,9 +14,16 @@ export const runtime = 'nodejs'
 
 // GET /api/hutang/reconciliation?clientId[&asOf]
 //
-// Sisa hutang per supplier vs saldo hutang usaha di neraca (D41).
-// requireInternal lewat guardHutang — sama dengan keempat route /api/hutang
-// lainnya, dan sama-sama baca-saja.
+// Sisa hutang per supplier vs saldo AKUN HUTANG SUPPLIER di neraca (D41;
+// cakupan akun diputuskan Ricko di CP-8). requireInternal lewat guardHutang —
+// sama dengan keempat route /api/hutang lainnya, dan sama-sama baca-saja.
+//
+// ══ SATU HIMPUNAN AKUN, DUA PEMAKAIAN ════════════════════════════════════
+// Akun hutang supplier (dipakai invoice atau jadi default supplier) menentukan
+// angka neraca pembanding DAN daftar penjelas. Akun yang dijumlahkan dikirim
+// ke layar lengkap dengan kode + nama, begitu pula akun yang tidak ditemukan
+// di neraca — tanpa itu Rekonsiliasi dan Analytics menampilkan dua "hutang"
+// berbeda tanpa penjelasan.
 //
 // ══ KEDUA SISI DIPOTONG DI TANGGAL YANG SAMA ═════════════════════════════
 // Neraca adalah potret SATU tanggal: `period_end` laporan neraca terbaru yang
@@ -26,12 +33,16 @@ export const runtime = 'nodejs'
 // karangan, dan tidak ada yang akan tahu itu karangan.
 //
 // Kalau belum ada neraca sama sekali, sisi supplier dipotong di asOf dan
-// selisihnya `null` — bukan nol, yang akan terbaca "cocok".
+// selisihnya `null` — bukan nol, yang akan terbaca "cocok". Begitu juga bila
+// neracanya ada tapi tidak satu pun akun hutang supplier dipetakan di sana.
 export async function GET(req: Request) {
   const g = await guardHutang(req)
   if ('error' in g) return g.error
 
-  const neraca = await loadNeracaPembanding(g.clientId, g.asOf)
+  const akun = await loadAkunHutangSupplier(g.clientId)
+  const akunIds = akun.map(a => a.id)
+
+  const neraca = await loadNeracaPembanding(g.clientId, g.asOf, akunIds)
   const tanggalPembanding = neraca?.periodEnd ?? g.asOf
 
   const { invoices, alokasi } = await loadHutang({
@@ -40,7 +51,6 @@ export async function GET(req: Request) {
   })
   const perSupplier = supplierSummary(invoices, alokasi)
 
-  const akunIds = await loadAkunHutangSupplier(g.clientId)
   const jurnalManualHutang = await loadPenjelasJurnalManual({
     clientId: g.clientId,
     akunIds,
@@ -49,9 +59,11 @@ export async function GET(req: Request) {
 
   const r = reconcileHutang({
     perSupplier,
-    saldoNeracaHutangMinor: neraca?.hutangUsahaMinor ?? null,
+    saldoNeracaHutangMinor: neraca?.saldo.totalMinor ?? null,
     jurnalManualHutang,
   })
+
+  const saldoPerAkun = new Map((neraca?.saldo.perAkun ?? []).map(s => [s.masterCoaId, s.saldoMinor]))
 
   const penjelas = (x: (typeof r.penjelas)['berSupplier']) => ({
     total: fromMinorUnits(x.totalMinor),
@@ -74,7 +86,22 @@ export async function GET(req: Request) {
     /** Tanggal potret yang dipakai KEDUA sisi. Selalu ditampilkan di layar. */
     tanggalPembanding,
     neraca: neraca
-      ? { reportId: neraca.reportId, periodStart: neraca.periodStart, periodEnd: neraca.periodEnd }
+      ? {
+          reportId: neraca.reportId,
+          periodStart: neraca.periodStart,
+          periodEnd: neraca.periodEnd,
+          /** Akun yang saldonya DIJUMLAHKAN jadi totalNeraca — wajib tampil di layar. */
+          akunDijumlahkan: akun.flatMap(a => {
+            const s = saldoPerAkun.get(a.id)
+            return s === undefined ? [] : [{ id: a.id, kode: a.kode, nama: a.nama, saldo: fromMinorUnits(s) }]
+          }),
+          /** Akun hutang supplier yang TIDAK dipetakan di neraca ini. */
+          akunTidakDitemukan: akun
+            .filter(a => !saldoPerAkun.has(a.id))
+            .map(a => ({ id: a.id, kode: a.kode, nama: a.nama })),
+          /** Keterangan saja — cakupan Analytics berbeda (baris "dagang"). */
+          hutangUsahaAnalytics: fromMinorUnits(neraca.hutangUsahaAnalyticsMinor),
+        }
       : null,
     rows: r.rows.map(x => ({
       supplierId: x.supplierId,

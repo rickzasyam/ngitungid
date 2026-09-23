@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
   financialReports,
@@ -9,44 +9,62 @@ import {
   purchaseInvoices,
   reportLineItems,
 } from '@/lib/db/schema'
-import { aggregateBalanceSheet, type AggLine } from '@/lib/financial-agg'
+import {
+  aggregateBalanceSheet,
+  saldoNeracaPerAkun,
+  type AggLineAkun,
+  type SaldoAkunNeraca,
+} from '@/lib/financial-agg'
 import { rupiahKeSen, type PenjelasBaris } from '@/lib/hutang-reconciliation'
 
 // Pembaca data rekonsiliasi hutang (F3). Hidup terpisah dari hutang-queries.ts
 // karena menyentuh DUA dunia yang tidak disentuh monitoring hutang: laporan
 // neraca hasil ekstraksi, dan jurnal manual.
 
+export type AkunHutangSupplier = { id: string; kode: string; nama: string }
+
 export type NeracaPembanding = {
   reportId: string
   periodStart: string
   /** Tanggal potret neraca — SELURUH perbandingan dipotong di tanggal ini. */
   periodEnd: string
-  /** Hutang usaha dari neraca, dalam SEN. */
-  hutangUsahaMinor: number
+  /**
+   * Saldo akun hutang supplier di neraca ini. `totalMinor` null = tidak satu
+   * pun akun hutang supplier dipetakan di neraca — BUKAN saldo nol.
+   */
+  saldo: { perAkun: SaldoAkunNeraca[]; totalMinor: number | null }
+  /**
+   * Hutang usaha versi Analytics (baris hutang bernama "dagang", dasar DPO)
+   * untuk neraca yang SAMA, dalam SEN. Bukan angka pembanding — ditampilkan
+   * supaya perbedaan cakupan kedua halaman terlihat, bukan ditebak.
+   */
+  hutangUsahaAnalyticsMinor: number
 }
 
 /**
- * Neraca terbaru dengan `period_end ≤ asOf`, beserta hutang usahanya.
+ * Neraca terbaru dengan `period_end ≤ asOf`, beserta saldo akun hutang
+ * supplier di dalamnya.
  *
  * ══ LEWAT lib/financial-agg.ts, BUKAN QUERY SENDIRI (P5) ═════════════════
- * `aggregateBalanceSheet` sudah punya definisi "hutang usaha" — baris hutang
- * yang namanya memuat "dagang", dasar DPO di Analytics. Rekonsiliasi memakai
- * ukuran YANG SAMA, bukan `totalHutang` yang mencampur utang pajak, gaji, dan
- * pihak ketiga yang bukan urusan supplier. Agregator kedua di sini akan
- * membuat "hutang usaha" di Analytics dan di Rekonsiliasi bisa berbeda untuk
- * neraca yang sama.
+ * Angka pembandingnya `saldoNeracaPerAkun` — baris neraca yang DIPETAKAN ke
+ * akun hutang supplier, himpunan akun yang sama dengan daftar penjelas
+ * (keputusan Ricko di CP-8). Dulu `hutangUsaha` (predikat nama "dagang"):
+ * klien yang mencatat hutang supplier di "Hutang Pihak Ketiga" jadi selalu
+ * berselisih sebesar seluruh hutangnya, karena neraca-nya tidak pernah punya
+ * baris "dagang". `hutangUsaha` tetap dihitung, tapi hanya sebagai
+ * keterangan "versi Analytics" di layar.
  *
  * Pembentukan AggLine mengikuti route dashboard persis — termasuk aturan yang
  * paling mudah dilanggar: `nama` diisi RAW NAME dari PDF, bukan
- * `master_coa.nama` (lihat dok AggLine.nama). Predikat "dagang" mencocokkan
- * nama itu; mengisinya dengan nama COA membuat hutang usaha ikut bergeser saat
- * seseorang merapikan label akun.
+ * `master_coa.nama` (lihat dok AggLine.nama). Predikat "dagang" di
+ * `hutangUsaha` mencocokkan nama itu.
  *
  * `null` = belum ada neraca yang bisa dibandingkan — BUKAN hutang nol.
  */
 export async function loadNeracaPembanding(
   clientId: string,
-  asOf: string
+  asOf: string,
+  akunIds: readonly string[]
 ): Promise<NeracaPembanding | null> {
   const [report] = await db
     .select({
@@ -70,6 +88,7 @@ export async function loadNeracaPembanding(
   const items = await db
     .select({
       amount: reportLineItems.amount,
+      masterCoaId: reportLineItems.masterCoaId,
       rawName: reportLineItems.rawName,
       coaNama: masterCoa.nama,
       isSubtotal: reportLineItems.isSubtotal,
@@ -82,8 +101,9 @@ export async function loadNeracaPembanding(
     .leftJoin(masterCoa, eq(reportLineItems.masterCoaId, masterCoa.id))
     .where(eq(reportLineItems.reportId, report.id))
 
-  const lines: AggLine[] = items.map(it => ({
+  const lines: AggLineAkun[] = items.map(it => ({
     amount: Number(it.amount),
+    masterCoaId: it.masterCoaId,
     // SENGAJA rawName, bukan master_coa.nama — lihat doc AggLine.nama.
     nama: it.rawName,
     displayName: it.coaNama ?? it.rawName,
@@ -94,12 +114,12 @@ export async function loadNeracaPembanding(
     status: it.status,
   }))
 
-  const bs = aggregateBalanceSheet(lines)
   return {
     reportId: report.id,
     periodStart: report.periodStart,
     periodEnd: report.periodEnd,
-    hutangUsahaMinor: rupiahKeSen(bs.hutangUsaha),
+    saldo: saldoNeracaPerAkun(lines, akunIds),
+    hutangUsahaAnalyticsMinor: rupiahKeSen(aggregateBalanceSheet(lines).hutangUsaha),
   }
 }
 
@@ -111,8 +131,12 @@ export async function loadNeracaPembanding(
  * default sebuah supplier. Memakai "semua akun liability" akan menyeret utang
  * pajak dan gaji ke daftar penjelas — baris yang tidak pernah bisa menjelaskan
  * selisih hutang supplier, dan yang membuat orang berhenti membaca daftarnya.
+ *
+ * Himpunan yang SAMA dipakai dua kali: penjelas selisih, dan angka neraca
+ * pembandingnya. Kode + nama ikut dibaca karena panel wajib menyebut akun
+ * mana saja yang dijumlahkan (keputusan Ricko di CP-8). Urut menurut kode.
  */
-export async function loadAkunHutangSupplier(clientId: string): Promise<string[]> {
+export async function loadAkunHutangSupplier(clientId: string): Promise<AkunHutangSupplier[]> {
   const dariInvoice = await db
     .selectDistinct({ id: purchaseInvoices.akunHutangId })
     .from(purchaseInvoices)
@@ -123,11 +147,17 @@ export async function loadAkunHutangSupplier(clientId: string): Promise<string[]
     .where(
       and(eq(masterSupplier.clientId, clientId), sql`${masterSupplier.akunHutangDefaultId} is not null`)
     )
-  return [
+  const ids = [
     ...new Set(
       [...dariInvoice, ...dariSupplier].map(r => r.id).filter((x): x is string => typeof x === 'string')
     ),
   ]
+  if (ids.length === 0) return []
+  return db
+    .select({ id: masterCoa.id, kode: masterCoa.kode, nama: masterCoa.nama })
+    .from(masterCoa)
+    .where(and(eq(masterCoa.clientId, clientId), inArray(masterCoa.id, ids)))
+    .orderBy(asc(masterCoa.kode))
 }
 
 /**
