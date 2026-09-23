@@ -209,3 +209,84 @@ describe('halaman /hutang', () => {
     expect(PAGE).toContain('Rekonsiliasi')
   })
 })
+
+// ══ REKONSILIASI (F3) ════════════════════════════════════════════════════
+describe('GET /api/hutang/reconciliation', () => {
+  const REKON = read('app', 'api', 'hutang', 'reconciliation', 'route.ts')
+  const RQ = read('lib', 'api', 'hutang-reconciliation-queries.ts')
+
+  it('requireInternal lewat penjaga bersama, dan baca-saja', () => {
+    expect(REKON).toContain('guardHutang(req)')
+    expect(GUARD).toContain('requireInternal()')
+    expect(REKON).not.toContain('export async function POST(')
+    for (const tulis of ['db.insert(', 'db.update(', 'db.delete(', 'db.batch(']) {
+      expect(REKON.includes(tulis), tulis).toBe(false)
+      expect(RQ.includes(tulis), `queries — ${tulis}`).toBe(false)
+    }
+  })
+
+  it('totalNeraca lewat lib/financial-agg.ts — bukan agregator kedua (P5)', () => {
+    expect(RQ).toContain("from '@/lib/financial-agg'")
+    expect(RQ).toContain('aggregateBalanceSheet(lines)')
+    // Tidak ada penjumlahan baris neraca sendiri di modul ini.
+    expect(RQ).not.toContain('.reduce((s, l) => s + l.amount')
+  })
+
+  it('memakai HUTANG USAHA, bukan totalHutang yang mencampur pajak & gaji', () => {
+    expect(RQ).toContain('bs.hutangUsaha')
+    expect(RQ).not.toContain('bs.balanceSheet.totalHutang')
+  })
+
+  it('AggLine.nama diisi RAW NAME dari PDF, bukan nama Master COA', () => {
+    // Predikat "dagang" mencocokkan nama ini; mengisinya dengan nama COA
+    // membuat hutang usaha bergeser saat seseorang merapikan label akun.
+    expect(RQ).toContain('nama: it.rawName')
+    expect(RQ).not.toContain('nama: it.coaNama')
+  })
+
+  it('KEDUA sisi dipotong di tanggal neraca yang sama', () => {
+    expect(REKON).toContain('const tanggalPembanding = neraca?.periodEnd ?? g.asOf')
+    expect(REKON).toContain('sampaiTanggal: tanggalPembanding')
+    // Dua kali: sekali untuk invoice/alokasi, sekali untuk penjelas.
+    expect(REKON.split('sampaiTanggal: tanggalPembanding').length - 1).toBe(2)
+  })
+
+  it('pembayaran dipotong menurut tanggal MUTASI, bukan waktu alokasi dicatat', () => {
+    expect(QUERIES).toContain('sql`${cashMutations.tanggal} <= ${opts.sampaiTanggal}`')
+    expect(QUERIES).toContain('sql`${purchaseInvoices.tanggal} <= ${opts.sampaiTanggal}`')
+  })
+
+  it('neraca dipilih: terbaru dengan period_end ≤ asOf', () => {
+    expect(RQ).toContain("eq(financialReports.reportType, 'neraca')")
+    expect(RQ).toContain('${financialReports.periodEnd} <= ${asOf}')
+    expect(RQ).toContain('desc(financialReports.periodEnd)')
+  })
+
+  it('sisi supplier lewat supplierSummary — tidak dihitung ulang di route', () => {
+    expect(REKON).toContain('supplierSummary(invoices, alokasi)')
+    expect(REKON).toContain('reconcileHutang({')
+    expect(REKON).not.toContain('applyPayments(')
+  })
+
+  it('selisih null dikirim sebagai null — bukan "0.00"', () => {
+    expect(REKON).toContain('r.selisihMinor === null ? null')
+    expect(REKON).toContain('r.totalNeracaMinor === null ? null')
+  })
+
+  it('tanggal pembanding ikut dikirim supaya selalu tampil di layar', () => {
+    expect(REKON).toContain('tanggalPembanding,')
+  })
+
+  it('penjelas: jurnal MANUAL, TERPOSTING, ke akun hutang supplier', () => {
+    expect(RQ).toContain("eq(journalEntries.sumber, 'manual')")
+    expect(RQ).toContain("eq(journalEntries.status, 'posted')")
+    expect(RQ).toContain('inArray(journalLines.masterCoaId, [...opts.akunIds])')
+  })
+
+  it('akun hutang supplier didefinisikan dari PEMAKAIANNYA, bukan dari tipe akun', () => {
+    // "Semua akun liability" menyeret utang pajak & gaji ke daftar penjelas.
+    expect(RQ).toContain('purchaseInvoices.akunHutangId')
+    expect(RQ).toContain('masterSupplier.akunHutangDefaultId')
+    expect(RQ).not.toContain("'liability'")
+  })
+})

@@ -58,6 +58,14 @@ export type HutangData = {
 export async function loadHutang(opts: {
   clientId: string
   supplierId?: string
+  /**
+   * Potong invoice dan pembayaran di tanggal ini (inklusif). Dipakai
+   * REKONSILIASI (F3): neraca adalah potret satu tanggal, dan membandingkannya
+   * dengan hutang yang memuat invoice & pembayaran SESUDAH tanggal itu akan
+   * menghasilkan selisih yang sepenuhnya karangan. Dihilangkan = semuanya,
+   * perilaku monitoring hutang yang sudah ada tidak berubah.
+   */
+  sampaiTanggal?: string
 }): Promise<HutangData> {
   const filters = [
     eq(purchaseInvoices.clientId, opts.clientId),
@@ -67,6 +75,8 @@ export async function loadHutang(opts: {
     eq(purchaseInvoices.caraBayar, 'kredit'),
   ]
   if (opts.supplierId) filters.push(eq(purchaseInvoices.supplierId, opts.supplierId))
+  // Perbandingan STRING — 'YYYY-MM-DD' urut leksikografis (P2).
+  if (opts.sampaiTanggal) filters.push(sql`${purchaseInvoices.tanggal} <= ${opts.sampaiTanggal}`)
 
   const rows = await db
     .select({
@@ -111,7 +121,16 @@ export async function loadHutang(opts: {
     })
     .from(cashMutationAllocations)
     .innerJoin(cashMutations, eq(cashMutationAllocations.mutationId, cashMutations.id))
-    .where(eq(cashMutations.clientId, opts.clientId))
+    .where(
+      opts.sampaiTanggal
+        ? // Pembayaran dipotong menurut TANGGAL MUTASINYA — kapan uangnya
+          // bergerak di rekening, bukan kapan alokasinya dicatat di sistem.
+          and(
+            eq(cashMutations.clientId, opts.clientId),
+            sql`${cashMutations.tanggal} <= ${opts.sampaiTanggal}`
+          )
+        : eq(cashMutations.clientId, opts.clientId)
+    )
     .orderBy(asc(cashMutationAllocations.createdAt))
 
   const alokasi: AlokasiHutang[] = alokasiRows.map(a => ({
