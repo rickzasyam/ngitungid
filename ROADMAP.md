@@ -1,7 +1,7 @@
 # NgitungID BI — Development Roadmap
 
 **Last Updated:** 2026-09-16
-**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja) · **Phase 5 Mesin Akuntansi & Jurnal Manual: Fase 1 SELESAI di dev 2026-09-16** (Jurnal Umum + Master Data Supplier; A8 dibatalkan). Belum dirilis ke produksi — lihat "Checklist rilis Phase 5 Fase 1". **Fase 2 C1–C4 ter-commit 2026-09-18 (CP-6 menunggu uji klik); perubahan konsep 2026-09-19 menambah tiga modul (Pembelian, Mutasi Kas/Bank, Monitoring Hutang) yang menunggu jawaban D27–D45**
+**Current Phase:** Phase 1 ✅ · Phase 2 Backend ✅ (2.1–2.6; `/compare` → **Detail Neraca** ✅ 2026-07-14 (dulu Compare Neraca, diganti jadi tabel per-periode gaya P&L), compare P&L belum diminta) · Phase 3 ✅ (3.1 ekstraksi + 3.2 COA Auto-Mapping AI ✅ 2026-07-15) — Phase 4 belum dimulai (sengaja) · **Phase 5 Mesin Akuntansi & Jurnal Manual: Fase 1 SELESAI di dev 2026-09-16** (Jurnal Umum + Master Data Supplier; A8 dibatalkan). Belum dirilis ke produksi — lihat "Checklist rilis Phase 5 Fase 1". **Fase 2 SELESAI di dev 2026-09-23 — diterima Ricko** (Buku Besar & Posting, COA bertipe, Laporan Pembelian, Mutasi Kas/Bank, Monitoring Hutang, Rekonsiliasi Hutang Supplier; migrasi 0010–0018 di dev, **0019 belum dibuat — ada blocker**). Belum dirilis ke produksi — lihat "Checklist rilis Phase 5 (Fase 1 + Fase 2)"
 **Stack:** Next.js App Router · TypeScript · Tailwind CSS v4 · shadcn/ui · PostgreSQL (Neon) · Drizzle ORM · Gemini API
 
 ---
@@ -274,7 +274,7 @@ Keputusan Fase 3–4 lama (D16–D26) tetap **menunggu**.
 - ✅ B5 `task fail` rekonsiliasi (D5) → dikerjakan di 5.5 — **failed TETAP menahan layer backend vendor, lihat Decisions 2026-09-16**
 - ✅ B6 ROADMAP + sync — 12 task fase-1 ditutup, 1 di-fail; backend vendor terkunci di balik yang di-fail
 
-### 5.3 Fase 2 — Buku Besar & Posting (MP §5.A) — **DISETUJUI 2026-09-18** (D11–D13); migrasi **0014**
+### 5.3 Fase 2 — Buku Besar & Posting (MP §5.A) — **DISETUJUI 2026-09-18** (D11–D13); migrasi **0014** · ✅ **DITUTUP 2026-09-20**
 - ✅ C1 `canPost`/`canReverse`/`buildReversalLines`, `lib/ledger.ts` saldo berjalan — 38 test — **CP-5 diterima Ricko 2026-09-18**
 - ✅ C2 Migrasi **0014** (`posted_at`/`posted_by`/`reversal_of_id`, `audit_events`, `journal_lines.supplier_id`); `POST /api/journals/[id]/post` & `/reverse`; `GET /api/ledger` + `/summary` (keduanya `requireAkunting`); riwayat di POST/PATCH jurnal; DELETE memurnikan event di batch yang sama — 57 test baru
 - ✅ C3 Nav `buku-besar` (sesudah Jurnal, `staffOnly`) + `/buku-besar` di `ACCOUNTING_ONLY_PREFIXES`; test menuntut jawaban aksesnya SAMA PERSIS dengan `/jurnal` untuk tiap role
@@ -282,14 +282,14 @@ Keputusan Fase 3–4 lama (D16–D26) tetap **menunggu**.
 - ✅ C5 ROADMAP + sync — §5.A ditutup 2026-09-20. **CP-6 tetap menunggu uji klik Ricko**; penutupan ini soal catatan & sinkronisasi, bukan penerimaan checkpoint
 - ✅ Pemeriksaan konsol & jaringan 2026-09-20 (lewat ekstensi browser, sesi login Ricko, tanpa uji fungsional): **10 halaman, 0 galat konsol, 0 permintaan gagal** — `/dashboard` `/analytics` `/upload` `/jurnal` `/buku-besar` `/laporan` `/coa-mapping` `/settings` `/kontrak` `/admin-overview` `/extraction-review`
 
-### 5.4 Fase 2 — Master COA Bertipe (MP §5.B) — **DISETUJUI 2026-09-18** (D14); migrasi **0015**
+### 5.4 Fase 2 — Master COA Bertipe (MP §5.B) — **DISETUJUI 2026-09-18** (D14); migrasi **0015** · ✅ **DITUTUP 2026-09-21**
 - ✅ E1 Migrasi **0015** (dev): `CREATE TYPE account_type`, `master_coa.tipe_akun` (enum, **nullable**) + `is_kas` (NOT NULL default false) + index parsial akun kas — **`posisi` dan `class_cf` yang ada = normal balance & klasifikasi arus kas, tidak diduplikasi**; penjaga strukturalnya menolak kolom yang menduplikasi keduanya
 - ✅ E2 `lib/coa/account-type.ts`: eksplisit `??` turunan (memakai ulang `classifyBs`/`classifyPnl`, bukan klasifikasi kedua) — 39 test, termasuk akun kontra (Akumulasi Penyusutan kredit tapi tetap `asset`, Prive debit tapi tetap `equity`)
 - ✅ E3 Kolom opsional **Tipe Akun** & **Kas?** di impor/ekspor (round-trip diperluas) · route non-destruktif **`POST /api/clients/[id]/coa/types`** (update by kode, `dryRun`) · `GET /coa` membawa `tipeAkun`/`isKas`/`resolvedType`/`resolvedIsKas` + penyaring `?tipe=`/`?kas=` (R8) · **ganti-massal membawa tipe lama by kode** (keputusan Ricko 2026-09-18, dibuktikan dengan sabotase)
 - ✅ E4 UI: pemilih Tipe Akun berplaceholder "— otomatis: {turunan} —", toggle Akun kas/bank, kolom tabel yang membedakan **eksplisit (tebal)** dari **turunan (redup miring)**, peringatan saat keduanya bertentangan, dan tombol **"Isi tipe dari berkas"** dengan dialog dampak sebelum→sesudah — **CP-7 diterima Ricko 2026-09-21**
 - ✅ E5 ROADMAP + sync — §5.B ditutup 2026-09-21. Dua pilihan desain E3 diterima Ricko: header "Tipe"/"Kas" telanjang **bukan** alias impor, dan `is_kas=false` diekspor sebagai **sel kosong** — konsisten dengan aturan sel-kosong-tidak-menghapus di impor supplier
 
-### 5.5 Fase 2 — **Laporan Pembelian** 🆕 (MP §5.D) — **menunggu D27–D34**
+### 5.5 Fase 2 — **Laporan Pembelian** 🆕 (MP §5.D) — D27–D34 dijawab 2026-09-20 · ✅ **DITUTUP 2026-09-21**
 
 > **Modul baru, perubahan konsep Ricko 2026-09-19.** Pintu masuk tujuan bisnisnya: hutang lahir di sini dan jurnalnya terbentuk otomatis, sehingga akunting tidak menginput dua kali.
 > Header invoice: tanggal · supplier (wajib) · no. invoice vendor · cara bayar Kredit/Tunai · **satu akun COA tujuan, bebas akun apa pun** (persediaan, beban jasa, dll) · akun kas (bila Tunai) · jumlah termin · jatuh tempo akhir (bila Kredit) · PPN opsional terpisah · keterangan. Baris barang = **teks bebas**, tanpa master barang.
@@ -304,7 +304,7 @@ Keputusan Fase 3–4 lama (D16–D26) tetap **menunggu**.
 - ✅ M8 **Setelan "posting bisa diedit" + jejaknya** (D42): `lib/accounting-settings.ts` (**test tiga-keadaan: baris tidak ada · `false` · `true`**), `canEditJournal` menerima sumber+setelan+kunci periode, PATCH/DELETE menulis `nilai_sebelum`/`nilai_sesudah`, lencana "diubah setelah posting", tab Settings "Pembukuan" — ⏸ **CP-16 menunggu uji klik Ricko**
 - ✅ M9 ROADMAP + sync — §5.5 ditutup 2026-09-21; **CP-16 diterima Ricko**, dan penyimpangan §8.15 (blokir) diterima lalu ditulis balik ke MP §8.15
 
-### 5.6 Fase 2 — **Mutasi Kas/Bank** 🆕 (MP §5.E) — **menunggu D35–D38** · **menggantikan MP §6.A**
+### 5.6 Fase 2 — **Mutasi Kas/Bank** 🆕 (MP §5.E) — D35–D38 dijawab 2026-09-20 · **menggantikan MP §6.A** · ✅ **DITUTUP 2026-09-22**
 
 > Mutasi tiap akun kas (bank, marketplace, kas kecil, kas besar, lainnya). **Daftar akunnya dari COA bertanda `is_kas`** — karena itu 5.4 (E1–E3) wajib selesai lebih dulu. Input manual **atau** unggah CSV rekening koran dengan pemetaan kolom; PDF menyusul.
 > Tiap baris diberi **(a)** alokasi ke invoice hutang (boleh beberapa invoice, boleh sebagian) → jurnal D hutang / K kas, atau **(b)** COA lawan bebas → jurnal D/K lawan vs kas. Baris tanpa keduanya berstatus **"belum dijurnal"** dan tampil jelas.
@@ -317,7 +317,7 @@ Keputusan Fase 3–4 lama (D16–D26) tetap **menunggu**.
 - ✅ N6 UI `/mutasi-kas` — pemilih akun kas, wizard impor CSV, panel alokasi dengan **pemilih cicilan opsional** (bawaan "Otomatis (FIFO)", pilihan manual diberi tanda) · **plus tombol "Koreksi di Mutasi Kas" di `/jurnal`** (D32) — ⏸ **CP-17** — status **belum dijurnal** memakai warna kritis (bukan abu-abu netral), sisa & status DIPAKAI apa adanya dari server, pemilih akun kas dari `?kas=1`, dan tautan "Koreksi di …" lewat `sumberDokumenHref` — satu sumber untuk semua modul — ⏸ **CP-17 menunggu uji klik Ricko**
 - ✅ N7 ROADMAP + sync — §5.6 ditutup 2026-09-22; **CP-17 diterima Ricko**, plus dua tambahannya (penolakan MM/DD/YYYY dan peringatan arah di pratinjau). **⚠️ Satu hal belum dijawab:** konfirmasi pembalikan kolom rekening koran — alias header dibiarkan apa adanya sampai Ricko memilih
 
-### 5.7 Fase 2 — **Monitoring Hutang** 🆕 (MP §5.F) — **menunggu D39–D40**
+### 5.7 Fase 2 — **Monitoring Hutang** 🆕 (MP §5.F) — D39–D40 dijawab 2026-09-20 · ✅ **DITUTUP 2026-09-22**
 
 > Menu **`/hutang`**, sejajar Jurnal & Buku Besar — **bukan di Settings**. Semua angkanya diturunkan dari invoice + alokasi; tanpa tabel saldo, tanpa kolom status (P3/P4).
 
@@ -609,6 +609,7 @@ Keputusan Fase 3–4 lama (D16–D26) tetap **menunggu**.
 | **2026-09-20** | **E1 & E2 selesai — migrasi 0015 dan mesin tipe akun.** `CREATE TYPE account_type` (lima golongan, tertutup jadi enum) + `master_coa.tipe_akun` **nullable** dan `is_kas` NOT NULL default false, plus index PARSIAL untuk daftar akun kas. `lib/coa/account-type.ts` memakai ulang `classifyBs`/`classifyPnl` yang sudah menopang Dashboard & Analytics, bukan menulis klasifikasi kedua | `tipe_akun` nullable supaya perbedaan antara "dipilih akunting" dan "ditebak sistem" tidak hilang — kalau NOT NULL dengan default, seluruh COA yang sudah ada mengaku punya tipe eksplisit yang tak pernah dipilih siapa pun. Tipe TIDAK diturunkan dari `posisi`, dan akun kontra yang membuktikannya dikunci test: Akumulasi Penyusutan bersaldo kredit tapi tetap `asset`, Prive bersaldo debit tapi tetap `equity`. Kelompok diperiksa sebelum sub kelompok karena kata "tetap" ada di Aktiva Tetap maupun Biaya Tetap |
 | **2026-09-20** | **E3 selesai — kolom Tipe Akun & Kas? di impor/ekspor, route isi-dari-berkas, dan carry-over ganti-massal.** Impor mengenali alias Indonesia maupun Inggris; sel kosong = tidak diisi, nilai terisi yang tak dikenali = galat yang menyebut barisnya. Ekspor menulis keduanya dan round-trip diperluas. Route baru `POST /api/clients/[id]/coa/types` HANYA meng-UPDATE dua kolom by kode — tanpa insert, tanpa delete. `GET /coa` membawa `resolvedType`/`resolvedIsKas` + penyaring `?tipe=`/`?kas=` (R8) | **Ganti-massal kini membawa `tipe_akun`/`is_kas` lama by kode** (keputusan Ricko 2026-09-18). Tanpa itu, impor ulang COA — yang rutin dilakukan — menghapus seluruh tipe akun yang diisi manual, tanpa galat. Dibuktikan dengan menyabotasenya: dua penjaga jatuh, lalu dipulihkan. Header "Tipe" dan "Kas" TELANJANG sengaja bukan alias: di sheet akuntansi keduanya lebih mungkin kolom lain (tipe transaksi, nominal saldo kas). Nilai `false` diekspor sebagai sel KOSONG, bukan "Tidak", supaya impor ulang tidak menimpa penanda kas yang sudah disetel |
 | **2026-09-20** | **E4 selesai — UI tipe akun.** Pemilih berplaceholder "— otomatis: {turunan} —" yang dihitung dari isi form saat itu (bukan baris tersimpan), toggle akun kas/bank, kolom tabel yang membedakan eksplisit (tebal) dari turunan (redup miring), dan tombol "Isi tipe dari berkas" berdialog dampak sebelum→sesudah per kode. `classificationWarnings` bertambah field `tipeAkun` | Placeholder menunjukkan turunannya karena pilihan bawaannya adalah "biarkan sistem menentukan" — pengguna berhak tahu apa yang dipakai kalau ia tidak memilih apa pun. Input berkasnya SENGAJA terpisah dari tombol Ganti Excel: keduanya menerima .xlsx tapi tujuannya berlawanan, dan satu input bergantian bisa mengirim berkas ke jalur ganti-massal. Peringatan tipe diam saat turunannya tak bisa ditentukan — sub kelompok tak dikenali sudah punya peringatannya sendiri, dan dua pesan untuk satu masalah melatih orang mengabaikannya |
+| **2026-09-23** | **FASE 2 SELESAI — diterima Ricko** ("F5 dan keempat perbaikan diterima. Fase 2 selesai."). Enam bagian (§5.3–§5.8, 36 langkah: C1–C5, E1–E5, M1–M9, N1–N7, U1–U5, F1–F5) ditutup; checkpoint diterima CP-5, CP-6, CP-7, CP-16, CP-17, CP-18, CP-8. Dev di **19 migrasi (0000–0018)**. Checklist rilis gabungan Fase 1 + Fase 2 ditulis. Gerbang penutupan: tsc bersih · vitest 60 berkas / 1754 test · eslint 0/24 · `pnpm build` sukses & `@keyframes` ada. Tidak ada fase baru yang dimulai | **Satu blocker rilis ditemukan saat menyusun checklist:** 0019 (DROP `termin_pembayaran`, D43) belum bisa dibuat karena kode supplier — schema, `lib/supplier*`, route daftar/impor/ekspor, dan form Settings — masih membaca-tulis kolom itu, sementara kolom pengganti `bank_*` dari 0017 belum punya UI/API. Tidak ada langkah MP yang mengerjakannya. Dicatat di langkah 0 checklist; keputusan Ricko diperlukan. Juga dianjurkan gladi `db:migrate` di branch Neon dari main: di dev 0010–0018 diterapkan bertahap, di main akan sekali jalan |
 | **2026-09-23** | **Uji klik mandiri sesudah CP-8 — jalur rekonsiliasi yang saldonya TERISI kini terbukti di layar.** Dijalankan lewat ekstensi Chrome atas izin Ricko (termasuk menulis ke dev), di klien **Graphicook** — belum punya data Fase 2, dan neraca 31 Jan 2026-nya sudah memetakan "Biaya Yang Masih Harus Dibayar" Rp 3.000.000 ke **14-0005**, jadi **tidak satu pun pemetaan COA atau data lama diubah**; semuanya penambahan. Hasil: (a) saldo neraca **Rp 3.000.000**, bukan "belum bisa dihitung"; (b) sisa supplier Rp 1.250.000,50 → selisih **Rp 1.749.999,50**; (c) "LEBIH BESAR", lalu setelah invoice kedua sisa Rp 3.250.000,50 → selisih **(Rp 250.000,50)** "LEBIH KECIL"; (d) akun dijumlahkan "14-0005 Biaya Yang Masih Harus Dibayar Rp 3.000.000" = baris neraca & `totalHutang` API Analytics; (e) catatan beda cakupan dengan angka Analytics Rp 0 = `dpo: 0` API Analytics Jan 2026; (f) "Akun hutang supplier yang tidak ditemukan di neraca ini: 14-0002 Hutang Dagang"; (g) tabel `/mutasi-kas` menampilkan Keluar & Belum dialokasikan "Rp 12.345,67". Bonus: keadaan kosong ketiga ("Belum ada akun hutang supplier") terlihat sebelum supplier dibuat | **Data yang DIBUAT di dev (Graphicook):** supplier "UJI CP-8 SUPPLIER TERPETAKAN" (akun default 14-0005) dan "UJI CP-8 SUPPLIER TAK TERPETAKAN" (14-0002 Hutang Dagang); invoice kredit **UJI-CP8-GC-1** (20 Jan 2026, Rp 1.250.000,50) dan **UJI-CP8-GC-2** (25 Jan 2026, Rp 2.000.000), masing-masing dengan jurnal pembelian draf; mutasi manual Bank BCA 15 Sep 2026 "UJI CP-8 BIAYA BANK BERSEN" keluar Rp 12.345,67 tanpa akun lawan; 5 `audit_events`. Rasyuka tidak berubah (2 supplier, 3 invoice, 8 mutasi, 2 alokasi, 13 jurnal). Klien aktif diganti ke Graphicook dengan sengaja lalu dikembalikan ke Rasyuka. Selektor dipakai per `aria-label`/teks penuh, tanpa koordinat |
 | **2026-09-23** | **Task vendor rekonsiliasi di-`reset` atas perintah Ricko; layer backend TETAP terkunci.** `bangun-halaman-rekonsiliasi-hutang-supplier`: `failed` → `todo` (alasan dicatat di log task). `task next` sesudahnya: task yang sama, `layer: frontend`, `remainingInLayer: 1` | Sesuai temuan 2026-09-16: `todo` dihitung sebagai sisa layer, sama seperti `failed`. Membukanya butuh `task complete` atas task itu — halamannya memang sudah ada, tapi langkah itu tidak ada di perintah Ricko, jadi tidak dijalankan. Task backend F01/F15 karena itu belum bisa diverifikasi-lalu-ditutup |
 | **2026-09-23** | **TECH DEBT (ditunda atas keputusan Ricko, JANGAN dikerjakan tanpa perintah):** sisa a11y `components/date-range-picker.tsx` di luar sel tanggal — (1) tombol clear "X" adalah `<span onClick>` bersarang DI DALAM tombol pemicu: tidak terjangkau keyboard dan HTML-nya tidak sah, memperbaikinya berarti merombak pemicu; (2) hover tombol bulan dan Batal/Terapkan masih `onMouseEnter`/`onMouseLeave` inline (gotcha #4); (3) belum ada navigasi panah antar-tanggal (pola grid roving tabindex) — kini Tab melewati tiap tanggal satu per satu | Sel tanggal sendiri sudah beres di `e3818b6`. Tiga sisanya dicatat supaya tidak "dirapikan" diam-diam di tengah pekerjaan lain, dan supaya siapa pun yang menyentuh pemicunya tahu ada tombol bersarang di sana |
@@ -782,7 +783,9 @@ yang sama sama-sama tersimpan, tabel menampilkan "—". Seluruh daftar klik CP-3
 
 **Fase 2 — C1–C4 ter-commit 2026-09-18, CP-6 menunggu uji klik.** Migrasi **0014** (posting/`audit_events`/`supplier_id`) diterapkan ke **dev saja**. Yang jadi: predikat posting & jurnal balik, mesin saldo berjalan, route posting/pembalikan/buku besar, nav Buku Besar, dan UI-nya. Gerbang saat ditutup: tsc bersih · vitest **45 berkas / 1072 test** · eslint 0 error / 24 warning · `pnpm build` sukses. **R2 diambil**: riwayat memakai satu tabel `audit_events` generik, bukan `journal_events`.
 
-**🆕 Perubahan konsep 2026-09-19 — Fase 2 bertambah tiga modul.** Laporan Pembelian, Mutasi Kas/Bank, dan Monitoring Hutang (5.5–5.7); rekonsiliasi dirancang ulang (5.8); **Impor Bank Fase 3 dibatalkan** karena diserap Mutasi Kas/Bank. Rinciannya di 5.5–5.8 dan MP §3.4/§3.5. **Belum ada kode untuk ketiganya — D27–D45 belum dijawab.**
+**🆕 Perubahan konsep 2026-09-19 — Fase 2 bertambah tiga modul.** Laporan Pembelian, Mutasi Kas/Bank, dan Monitoring Hutang (5.5–5.7); rekonsiliasi dirancang ulang (5.8); **Impor Bank Fase 3 dibatalkan** karena diserap Mutasi Kas/Bank. Rinciannya di 5.5–5.8 dan MP §3.4/§3.5. _(Kalimat lama "belum ada kode" tidak berlaku lagi — lihat paragraf berikut.)_
+
+**✅ Fase 2 SELESAI di dev 2026-09-23 — diterima Ricko** ("F5 dan keempat perbaikan diterima. Fase 2 selesai."). Enam bagian: §5.3 Buku Besar & Posting (C1–C5), §5.4 COA bertipe (E1–E5), §5.5 Laporan Pembelian (M1–M9), §5.6 Mutasi Kas/Bank (N1–N7), §5.7 Monitoring Hutang (U1–U5), §5.8 Rekonsiliasi Hutang Supplier (F1–F5). Checkpoint yang diterima: CP-5, CP-6, CP-7, CP-16, CP-17, CP-18, CP-8. Migrasi **0014–0018** menyusul 0010–0013 Fase 1 — dev kini di **19 migrasi (0000–0018)**; **0019 belum dibuat** dan punya blocker kode (lihat checklist rilis). Gerbang penutupan: tsc bersih · vitest **60 berkas / 1754 test** · eslint 0 error / 24 warning · `pnpm build` sukses, `@keyframes` ada. **Tidak ada fase baru yang dimulai.**
 
 **⚠️ Status task vendor NgodingPakeAI — Fase 1 TIDAK bisa 14/14.**
 13 task frontend fase 1 sudah diselesaikan: 12 `complete` (7 Jurnal Umum, 5 Supplier) dan
@@ -801,9 +804,11 @@ Rinciannya di baris Decisions 2026-09-16.
 **Pembaruan 2026-09-23:** halaman rekonsiliasi yang menjadi alasan `failed` itu kini SUDAH dibangun (§5.8, F1–F4, bagian Rekonsiliasi di `/hutang`). **`task reset` dijalankan atas perintah Ricko → statusnya `todo`. Layer backend TETAP terkunci:** `task next` masih menyajikan task yang sama dengan `layer: frontend`, `remainingInLayer: 1` — `todo` dihitung sebagai sisa layer, sama seperti `failed`. Yang akan membukanya hanyalah `task complete` atas task itu; itu TIDAK dijalankan (perintah Ricko: bila masih terkunci, laporkan, jangan paksakan). `task list` kini ditolak server ("Task listing is no longer available").
 
 ### Next Sprint
-**Sprint berikutnya (2026-09-20): Fase 2 jalan penuh — seluruh keputusan sudah dijawab.**
+**Sprint berikutnya (per 2026-09-23): TIDAK ADA fase baru yang dimulai — Fase 2 selesai, menunggu keputusan rilis Ricko.**
 
-Satu-satunya yang masih menunggu Ricko: **uji klik CP-6** (posting, jurnal balik, riwayat, `/buku-besar`). Daftarnya ada di laporan CP-6.
+Yang menunggu Ricko: (1) blocker 0019 — kode supplier masih memakai `termin_pembayaran` dan kolom rekening `bank_*` belum punya UI; (2) keputusan data uji dev mana yang dibersihkan; (3) rilis ke produksi lewat "Checklist rilis Phase 5 (Fase 1 + Fase 2)"; (4) status task vendor rekonsiliasi (`todo`, layer backend terkunci sampai ia di-`complete`).
+
+_(Catatan lama 2026-09-20, sudah lewat: "Fase 2 jalan penuh"; uji klik CP-6 diterima 2026-09-21.)_
 
 **Urutan langkah Fase 2 (final):**
 **C5** → **E1–E5** (COA bertipe, migrasi 0015) → **M1–M9** (Pembelian, 0016+0017) → **N1–N7** (Mutasi Kas/Bank, 0018) → **U1–U5** (Monitoring Hutang) → **F1–F5** (Rekonsiliasi) → **0019** (DROP termin supplier, satu jendela rilis dengan 0015–0018).
@@ -848,7 +853,92 @@ klien nyata sampai kuncinya naik ke paid tier. Kalau kelak perlu dibatasi lebih 
 sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache saran per
 (klien, keterangan-ternormalisasi).
 
+## Checklist rilis Phase 5 (Fase 1 + Fase 2) ke produksi (hanya Ricko)
+
+Ditulis 2026-09-23 saat Fase 2 ditutup. Fase 1 belum pernah dirilis, jadi rilisnya SATU: migrasi **0010–0019** + kode
+`main` lokal. Checklist ini **menggantikan** urutan migrasi checklist Fase 1 di bawah; langkah 0 (skrip cek migrasi) dan
+langkah 5 (Gemini) di sana tetap dirujuk. **Jangan dibalik urutannya.**
+
+### ⛔ 0. Blocker — 0019 belum bisa dibuat tanpa satu perubahan kode
+
+0019 men-DROP `master_supplier.termin_pembayaran` (D43). Tapi kode supplier **masih membaca dan menulis kolom itu**:
+`lib/db/schema.ts`, `lib/supplier.ts`, `lib/supplier-import.ts`, `lib/supplier-export.ts`, route
+`app/api/clients/[id]/suppliers` (daftar, impor, ekspor), dan form Settings → Supplier ("Termin pembayaran"). Kolom
+penggantinya (`bank_nama`, `bank_rekening`, `bank_atas_nama`) sudah ada sejak 0017, tapi **belum punya UI, API, impor,
+maupun ekspor**. Tidak ada langkah MP yang mengerjakan pemindahan ini — ia jatuh di antara M1 (kolom bank) dan 0019.
+
+- 0019 tanpa perubahan kode → setiap route supplier gagal (kolomnya hilang).
+- 0010–0018 tanpa 0019 → melanggar syarat D43: termin sempat diisi di produksi lalu terbuang saat 0019 menyusul.
+
+**Keputusan Ricko diperlukan** sebelum rilis: satu langkah kecil — kode berhenti memakai `termin_pembayaran` (plus form
+rekening supplier bila diinginkan), `pnpm db:generate`, BACA SQL 0019 (harus hanya `DROP COLUMN`; gotcha #8), terapkan ke
+dev, gerbang hijau, uji klik Settings → Supplier. Di dev, 1 supplier (Budi) masih bertermin 60 hari; simpan dulu bila perlu:
+`SELECT id, nama, termin_pembayaran FROM master_supplier WHERE termin_pembayaran IS NOT NULL`.
+
+### 1. Cek main ada di migrasi mana
+
+Skrip langkah 0 checklist Fase 1 di bawah (baca-saja, tidak mencetak kredensial). **Harus 10 (0000–0009).** Lebih dari 10 =
+seseorang sudah menerapkan sebagian Phase 5 — berhenti dan periksa.
+
+### 2. Gladi di branch Neon baru dari main (dianjurkan)
+
+Di dev, 0010–0018 diterapkan BERTAHAP (2026-09-16 s/d 09-21). Di main semuanya jalan dalam SATU `db:migrate` — urutan ini
+belum pernah diuji sekali jalan. Buat branch Neon dari `main`, arahkan `.env.local` ke branch itu, `pnpm db:migrate`, lalu
+jalankan smoke test langkah 7 di atasnya. Hapus branch gladi sesudahnya. Yang sudah diperiksa dari berkasnya: 0016
+(`ALTER TYPE … ADD VALUE`) berdiri sendiri dan 0017/0018 tidak memakai nilai enum baru itu, jadi aman satu jalan.
+
+### 3. Backup branch Neon dari main
+
+Sebelum menyentuh apa pun. 0019 adalah satu-satunya migrasi non-aditif di seluruh Phase 5.
+
+### 4. Terapkan 0010–0019 ke main
+
+`.env.local` → main, `pnpm db:migrate`, lalu ulangi skrip langkah 1: **harus 20**.
+
+| # | Isi | Sifat |
+|---|---|---|
+| **0010** | `journal_entries` + `journal_lines` + 2 enum | menambah — **dipangkas tangan, jangan di-generate ulang** (gotcha #8) |
+| **0011** | `no_bukti` & `keterangan` jurnal jadi NULL-able | melonggarkan |
+| **0012** | `master_supplier` | menambah |
+| **0013** | nama supplier unik tanpa peduli besar-kecil huruf | mengganti batasan — di main tabelnya lahir kosong di 0012, jadi tidak bisa gagal karena duplikat |
+| **0014** | posting (`posted_at`/`posted_by`/`reversal_of_id`), `audit_events`, `journal_lines.supplier_id` | menambah |
+| **0015** | enum `account_type`, `master_coa.tipe_akun` (nullable) + `is_kas` (default false) | menambah |
+| **0016** | `ADD VALUE` `journal_source` (pembelian, mutasi_kas) & `audit_entity_type` (purchase_invoice, cash_mutation) | menambah nilai enum — berkas tersendiri |
+| **0017** | `client_accounting_settings`, `purchase_invoices`, `purchase_invoice_lines`, `audit_events.nilai_sebelum/sesudah`, `master_supplier.bank_*` | menambah |
+| **0018** | `cash_mutation_imports`, `cash_mutations`, `cash_mutation_allocations` | menambah |
+| **0019** | `master_supplier` DROP `termin_pembayaran` | ⚠️ **NON-ADITIF** — belum dibuat, lihat langkah 0. Di main kolomnya lahir di 0012 dan mati di 0019 dalam jendela yang sama, jadi tidak ada data yang hilang |
+
+### 5. BARU merge/push kode ke `main`
+
+Migrasi duluan aman: 0010–0018 hanya menambah atau melonggarkan, dan 0019 membuang kolom yang (sesudah langkah 0) tidak lagi
+dipakai kode. Kode duluan = Jurnal, Buku Besar, Pembelian, Mutasi Kas, dan Hutang menanyakan tabel yang belum ada.
+
+### 6. Setelan per klien sesudah rilis
+
+- **Master COA** — periksa kolom Tipe Akun & Kas? (turunan). Akun kas yang tidak terdeteksi tidak muncul di Mutasi Kas.
+- **Settings → Pembukuan** — akun PPN Masukan (tanpa itu invoice ber-PPN ditolak 409, D33); "posting bisa diedit" bawaannya
+  MATI (D42).
+- **Settings → Supplier** — akun hutang default tiap supplier (tanpa itu invoice kredit ditolak 409).
+
+### 7. Smoke test di produksi (owner/akunting)
+
+- `/jurnal` — buat jurnal draf seimbang, cek daftar, hapus lagi. **Jangan posting** di smoke test: jurnal terposting tidak
+  bisa dihapus, hanya dibalik. `/buku-besar` terbuka.
+- `/pembelian` — form invoice kredit 2 termin: pratinjau termin & jurnal tampil persis sampai sen; batalkan tanpa simpan
+  (atau simpan lalu hapus — jurnalnya draf).
+- `/mutasi-kas` — pratinjau impor CSV (`Pratinjau` saja, tanpa `Impor`).
+- `/hutang` — kartu umur, jatuh tempo, bagian Rekonsiliasi (catatan tanggal pembanding + daftar akun yang dijumlahkan).
+- Akses — finance melihat Pembelian/Mutasi Kas/Hutang baca-saja; akun klien tidak melihat satu pun menu internal.
+
+### 8. Sesudah rilis
+
+- Gemini paid tier sebelum "Sarankan akun (AI)" dipakai data nyata (langkah 5 checklist Fase 1).
+- Vendor NgodingPakeAI: `sync` final hanya atas perintah Ricko; task rekonsiliasi masih `todo` (blok status vendor di atas).
+- Data uji dev TIDAK ikut ke produksi — yang dimigrasi hanya skema.
+
 ## Checklist rilis Phase 5 Fase 1 ke produksi (hanya Ricko)
+
+> **Digantikan 2026-09-23** oleh checklist gabungan di atas bila Fase 1 dan 2 dirilis bersama (dianjurkan). Skrip langkah 0 dan catatan Gemini di langkah 5 di bawah tetap dirujuk.
 
 Ditulis 2026-09-16 setelah Fase 1 selesai di dev. **Jangan dibalik urutannya.**
 Setiap langkah punya alasan; yang paling mahal kalau tertukar ditandai.
