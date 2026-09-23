@@ -383,3 +383,69 @@ describe('replace-all sadar mutasi kas', () => {
     expect(body).toContain('update ${cashMutationImports} as ci')
   })
 })
+
+// ══ E6 (F03-14): riwayat tipe akun & penanda kas ═══════════════════════
+// Ketiga jalan yang mengubah tipe_akun/is_kas menulis audit_events DI BATCH
+// YANG SAMA dengan perubahannya (P10). Riwayat mengikuti KODE saat
+// ganti-massal memberi setiap akun id baru.
+describe('riwayat tipe & kas — ditulis bersama perubahannya (E6)', () => {
+  const ROW_PATCH = handler(ROW, 'PATCH')
+  const ROW_GET = handler(ROW, 'GET')
+  const TYPES_POST = handler(TYPES, 'POST')
+
+  it('form baris: event hanya bila tipe/kas berubah, di db.batch yang sama dengan UPDATE', () => {
+    expect(ROW_PATCH).toContain('tipeKasBerubah(sebelum, sesudah)')
+    expect(ROW_PATCH).toContain('catatan: SUMBER_PERUBAHAN_TIPE.form')
+    expect(ROW_PATCH).toContain('db.batch([ubah, riwayat])')
+    // UPDATE tidak lagi dijalankan sendiri di luar batch.
+    expect(ROW_PATCH).not.toMatch(/await db\s*\.update\(masterCoa\)/)
+  })
+
+  it('isi tipe dari berkas: satu INSERT riwayat untuk akun yang berubah, sebelum db.batch', () => {
+    const catat = TYPES_POST.indexOf('recordCoaTypeEvents(')
+    const dorong = TYPES_POST.indexOf('if (riwayat) statements.push(riwayat)')
+    const batch = TYPES_POST.indexOf('await db.batch(')
+    expect(catat).toBeGreaterThan(-1)
+    expect(dorong).toBeGreaterThan(catat)
+    expect(batch).toBeGreaterThan(dorong)
+    expect(TYPES_POST).toContain('catatan: SUMBER_PERUBAHAN_TIPE.berkas')
+  })
+
+  it('ganti-massal: sambung riwayat by kode, hapus yang kodenya hilang, catat perubahan — sebelum db.batch', () => {
+    const potong = REPLACE_POST.indexOf('rencanaRiwayatGantiMassal(oldAccounts, newKodeToId)')
+    const batch = REPLACE_POST.lastIndexOf('await db.batch(')
+    expect(potong).toBeGreaterThan(-1)
+    expect(batch).toBeGreaterThan(potong)
+    const blok = REPLACE_POST.slice(potong, batch)
+    expect(blok).toContain("relinkAuditEvents('master_coa', nasibRiwayat.sambung)")
+    expect(blok).toContain("purgeAuditEventsMany('master_coa', nasibRiwayat.hapus)")
+    expect(blok).toContain('perubahanTipeGantiMassal(oldAccounts, values)')
+    expect(blok).toContain('catatan: SUMBER_PERUBAHAN_TIPE.ganti_massal')
+    expect(blok).toContain('statements.push(st)')
+  })
+
+  it('hapus satu baris: riwayatnya ikut dihapus di batch yang sama', () => {
+    const hapusAkun = ROW_DELETE.indexOf('db.delete(masterCoa).where(eq(masterCoa.id, g.coaId))')
+    const hapusRiwayat = ROW_DELETE.indexOf("purgeAuditEvents('master_coa', g.coaId)")
+    const batch = ROW_DELETE.indexOf('await db.batch(')
+    expect(hapusAkun).toBeGreaterThan(-1)
+    expect(hapusRiwayat).toBeGreaterThan(-1)
+    expect(batch).toBeGreaterThan(hapusRiwayat)
+  })
+
+  it('GET riwayat: penjaga baris yang sama, disaring ke akun & klien ini, kalimat dari lib', () => {
+    expect(ROW_GET).toContain('await guard(params)')
+    expect(ROW_GET).toContain("eq(auditEvents.entityType, 'master_coa')")
+    expect(ROW_GET).toContain('eq(auditEvents.entityId, g.coaId)')
+    expect(ROW_GET).toContain('eq(auditEvents.clientId, g.clientId)')
+    expect(ROW_GET).toContain('ringkasPerubahanTipe(r.nilaiSebelum, r.nilaiSesudah)')
+    expect(ROW_GET).not.toContain('db.insert(')
+  })
+
+  it('form akun menampilkan riwayat dari server, tanpa menafsirkan jsonb sendiri', () => {
+    const FORM = read('components', 'settings', 'coa-row-editor.tsx')
+    expect(FORM).toContain('/coa/rows/${editingId}')
+    expect(FORM).toContain("r.perubahan.join(' · ')")
+    expect(FORM).not.toContain('nilaiSebelum')
+  })
+})

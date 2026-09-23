@@ -67,7 +67,7 @@ export function fmtTanggal(ymd: string): string {
 
 /** Timestamp ISO dari server → '15 Sep 2026, 14:30'. Ini JAM, bukan tanggal
  *  kalender, jadi Date memang alat yang benar di sini — beda dari `tanggal`. */
-function fmtWaktu(iso: string): string {
+export function fmtWaktu(iso: string): string {
   const dt = new Date(iso)
   if (Number.isNaN(dt.getTime())) return '—'
   const jam = String(dt.getHours()).padStart(2, '0')

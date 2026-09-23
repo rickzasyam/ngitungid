@@ -1,9 +1,10 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { auditEvents } from '@/lib/db/schema'
 import type { AuditEntityType } from '@/lib/audit'
 import type { JournalEvent } from '@/lib/journal'
+import type { CoaEvent, TipeKas } from '@/lib/coa/type-history'
 
 // Penyusun STATEMENT untuk audit_events — bukan penulis.
 //
@@ -88,4 +89,70 @@ export function purgeAuditEvents(
   return db
     .delete(auditEvents)
     .where(and(eq(auditEvents.entityType, entityType), eq(auditEvents.entityId, entityId)))
+}
+
+/**
+ * Riwayat perubahan tipe akun / penanda kas (E6) — SATU INSERT untuk banyak
+ * akun sekaligus. "Isi tipe dari berkas" dan ganti-massal bisa mengubah
+ * ratusan akun; satu statement per akun akan membuat batch-nya satu permintaan
+ * HTTP raksasa. Kosong → null: pemanggil tidak perlu menyaringnya sendiri.
+ */
+export function recordCoaTypeEvents(
+  v: readonly {
+    clientId: string
+    coaId: string
+    event: CoaEvent
+    userId: string | null
+    catatan: string
+    nilaiSebelum: TipeKas
+    nilaiSesudah: TipeKas
+  }[]
+): BatchItem<'pg'> | null {
+  if (v.length === 0) return null
+  return db.insert(auditEvents).values(
+    v.map(e => ({
+      clientId: e.clientId,
+      entityType: 'master_coa' as const,
+      entityId: e.coaId,
+      event: e.event,
+      userId: e.userId,
+      catatan: e.catatan,
+      nilaiSebelum: e.nilaiSebelum,
+      nilaiSesudah: e.nilaiSesudah,
+    }))
+  )
+}
+
+/**
+ * Pindahkan riwayat dari id lama ke id baru — untuk entitas yang id-nya
+ * diganti tanpa identitasnya berubah (ganti-massal Master COA: DELETE-all +
+ * INSERT-all, dicocokkan by kode). Satu UPDATE … FROM (VALUES …), pola yang
+ * sama dengan relink baris jurnal. Kosong → null.
+ */
+export function relinkAuditEvents(
+  entityType: AuditEntityType,
+  pasangan: readonly { idLama: string; idBaru: string }[]
+): BatchItem<'pg'> | null {
+  if (pasangan.length === 0) return null
+  const tuples = sql.join(
+    pasangan.map(p => sql`(${p.idLama}::uuid, ${p.idBaru}::uuid)`),
+    sql`, `
+  )
+  return db.execute(sql`
+    update ${auditEvents} as ae
+    set entity_id = v.id_baru
+    from (values ${tuples}) as v(id_lama, id_baru)
+    where ae.entity_type = ${entityType}::audit_entity_type and ae.entity_id = v.id_lama
+  `)
+}
+
+/** purgeAuditEvents untuk banyak entitas sekaligus. Kosong → null. */
+export function purgeAuditEventsMany(
+  entityType: AuditEntityType,
+  entityIds: readonly string[]
+): BatchItem<'pg'> | null {
+  if (entityIds.length === 0) return null
+  return db
+    .delete(auditEvents)
+    .where(and(eq(auditEvents.entityType, entityType), inArray(auditEvents.entityId, [...entityIds])))
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Info, Loader2, Plus } from 'lucide-react'
+import { AlertTriangle, History, Info, Loader2, Plus } from 'lucide-react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect } from '@/components/ui/styled-select'
 import { classificationWarnings } from '@/lib/coa/classification-health'
@@ -15,6 +15,16 @@ import {
 } from '@/lib/coa/account-type'
 import type { CoaImpact } from './coa-replace-dialog'
 import { TANPA_NO_BUKTI } from '@/lib/journal'
+import { fmtWaktu } from '@/components/jurnal/journal-detail'
+
+/** Satu baris riwayat tipe/kas dari GET /coa/rows/[coaId] (E6). */
+interface RiwayatTipeRow {
+  at: string
+  catatan: string | null
+  oleh: string | null
+  /** Kalimat jadi, mis. "Tipe: otomatis (turunan) → Liabilitas". */
+  perubahan: string[]
+}
 
 export interface CoaAccountRow {
   id: string
@@ -172,6 +182,34 @@ export function CoaRowForm({
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
   const cancelRef = useRef<HTMLButtonElement>(null)
+
+  // Riwayat tipe akun & penanda kas (E6) — hanya untuk akun yang sudah ada.
+  // Kalimatnya datang jadi dari server (ringkasPerubahanTipe); form tidak
+  // menafsirkan nilai_sebelum/nilai_sesudah sendiri.
+  const [riwayat, setRiwayat] = useState<RiwayatTipeRow[] | null>(null)
+  const [riwayatGagal, setRiwayatGagal] = useState(false)
+  const editingId = editing?.id ?? null
+  useEffect(() => {
+    if (editingId === null) return
+    let batal = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/clients/${clientId}/coa/rows/${editingId}`)
+        const payload = (await res.json().catch(() => null)) as { riwayat?: RiwayatTipeRow[] } | null
+        if (batal) return
+        if (!res.ok) {
+          setRiwayatGagal(true)
+          return
+        }
+        setRiwayat(payload?.riwayat ?? [])
+      } catch {
+        if (!batal) setRiwayatGagal(true)
+      }
+    })()
+    return () => {
+      batal = true
+    }
+  }, [clientId, editingId])
 
   const kelompokOpts = useMemo(() => distinctOf(rows, 'kelompok'), [rows])
   const subOpts = useMemo(() => distinctOf(rows, 'subKelompok'), [rows])
@@ -425,6 +463,39 @@ export function CoaRowForm({
               Perubahan klasifikasi berlaku untuk <strong>semua periode</strong>, termasuk laporan
               yang sudah selesai — ini disengaja, supaya koreksi klasifikasi ikut merapikan angka historis.
             </p>
+          )}
+
+          {/* ── Riwayat tipe akun & penanda kas (E6) — append-only ── */}
+          {editing && (
+            <section aria-labelledby="coa-riwayat-tipe" className="rounded-xl px-3 py-2.5" style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}>
+              <h3 id="coa-riwayat-tipe" className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: 'var(--color-text-muted)' }}>
+                <History className="w-3.5 h-3.5" /> Riwayat tipe akun &amp; akun kas
+              </h3>
+              {riwayatGagal ? (
+                <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>Riwayat tidak bisa dimuat.</p>
+              ) : riwayat === null ? (
+                <p className="text-[11px] mt-1 flex items-center gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                  <Loader2 className="w-3 h-3 animate-spin" /> Memuat riwayat…
+                </p>
+              ) : riwayat.length === 0 ? (
+                <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                  Belum ada perubahan tipe akun atau penanda kas yang tercatat.
+                </p>
+              ) : (
+                <ol className="flex flex-col gap-1.5 mt-1.5" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {riwayat.map((r, i) => (
+                    <li key={`${r.at}-${i}`} className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                      <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        {r.perubahan.length > 0 ? r.perubahan.join(' · ') : 'Tipe/kas diubah'}
+                      </span>
+                      <br />
+                      {fmtWaktu(r.at)} · {r.oleh ?? 'pengguna yang sudah dihapus'}
+                      {r.catatan && ` · ${r.catatan}`}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
           )}
 
           {errors.length > 0 && (

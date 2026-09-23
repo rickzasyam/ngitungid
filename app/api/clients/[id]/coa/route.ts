@@ -17,6 +17,13 @@ import {
   reportLineItems,
 } from '@/lib/db/schema'
 import { requireAkunting, requireUser } from '@/lib/api/guards'
+import { resolveUserId } from '@/lib/api/journal-queries'
+import { purgeAuditEventsMany, recordCoaTypeEvents, relinkAuditEvents } from '@/lib/api/audit'
+import {
+  perubahanTipeGantiMassal,
+  rencanaRiwayatGantiMassal,
+  SUMBER_PERUBAHAN_TIPE,
+} from '@/lib/coa/type-history'
 import { canAccessClientData } from '@/lib/roles'
 import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
@@ -669,6 +676,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .where(inArray(financialReports.id, plan.demotedReportIds))
     )
   }
+
+  // 7) Riwayat tipe akun & penanda kas (E6). Id seluruh akun berganti di
+  //    langkah 2, jadi riwayat akun yang KODENYA BERTAHAN disambung ke id
+  //    barunya — tanpa ini riwayatnya lenyap dari form setiap kali COA diimpor
+  //    ulang. Riwayat akun yang kodenya hilang dihapus bersama barisnya.
+  //    Perubahan tipe/kas oleh berkas ini sendiri dicatat dengan id BARU.
+  //    Semuanya di batch yang sama (P10); audit_events tidak ber-FK ke
+  //    master_coa, jadi urutannya terhadap langkah 2 tidak berpengaruh.
+  const nasibRiwayat = rencanaRiwayatGantiMassal(oldAccounts, newKodeToId)
+  const userId = await resolveUserId(g.user.email)
+  const riwayatStatements = [
+    relinkAuditEvents('master_coa', nasibRiwayat.sambung),
+    purgeAuditEventsMany('master_coa', nasibRiwayat.hapus),
+    recordCoaTypeEvents(
+      perubahanTipeGantiMassal(oldAccounts, values).map(p => ({
+        clientId: id,
+        coaId: p.entityId,
+        event: 'tipe_diubah' as const,
+        userId,
+        catatan: SUMBER_PERUBAHAN_TIPE.ganti_massal,
+        nilaiSebelum: p.sebelum,
+        nilaiSesudah: p.sesudah,
+      }))
+    ),
+  ]
+  for (const st of riwayatStatements) if (st) statements.push(st)
 
   try {
     await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])

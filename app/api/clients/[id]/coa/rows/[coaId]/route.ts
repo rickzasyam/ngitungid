@@ -1,20 +1,30 @@
 import { NextResponse } from 'next/server'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
+  auditEvents,
   coaMappingHistory,
   financialReports,
   journalEntries,
   journalLines,
   masterCoa,
   reportLineItems,
+  users,
 } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { parseCoaRowInput } from '@/lib/coa/row-input'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
 import { buildReplacePlan } from '@/lib/coa/replace-plan'
 import { TANPA_NO_BUKTI } from '@/lib/journal'
+import { resolveUserId } from '@/lib/api/journal-queries'
+import { purgeAuditEvents, recordCoaTypeEvents } from '@/lib/api/audit'
+import {
+  ringkasPerubahanTipe,
+  snapshotTipeKas,
+  SUMBER_PERUBAHAN_TIPE,
+  tipeKasBerubah,
+} from '@/lib/coa/type-history'
 
 export const runtime = 'nodejs'
 
@@ -32,14 +42,60 @@ async function guard(params: Promise<{ id: string; coaId: string }>) {
   // Akun HARUS milik klien di URL — tanpa ini, id akun klien lain bisa diedit
   // lewat path klien mana pun.
   const [row] = await db
-    .select({ id: masterCoa.id, kode: masterCoa.kode, nama: masterCoa.nama })
+    .select({
+      id: masterCoa.id,
+      kode: masterCoa.kode,
+      nama: masterCoa.nama,
+      tipeAkun: masterCoa.tipeAkun,
+      isKas: masterCoa.isKas,
+    })
     .from(masterCoa)
     .where(and(eq(masterCoa.id, coaId), eq(masterCoa.clientId, id)))
     .limit(1)
   if (!row) {
     return { error: NextResponse.json({ error: 'Akun COA tidak ditemukan untuk klien ini.' }, { status: 404 }) }
   }
-  return { clientId: id, coaId, row }
+  return { clientId: id, coaId, row, email: g.user.email }
+}
+
+// GET /api/clients/[id]/coa/rows/[coaId] — riwayat tipe akun & penanda kas
+// satu akun (E6), terbaru dulu. Penjaganya SAMA dengan PATCH: riwayat ini
+// tampil di form sunting akun, yang memang hanya dibuka penulis Master COA.
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string; coaId: string }> }) {
+  const g = await guard(params)
+  if ('error' in g) return g.error
+
+  const rows = await db
+    .select({
+      at: auditEvents.at,
+      event: auditEvents.event,
+      catatan: auditEvents.catatan,
+      nilaiSebelum: auditEvents.nilaiSebelum,
+      nilaiSesudah: auditEvents.nilaiSesudah,
+      oleh: users.name,
+    })
+    .from(auditEvents)
+    .leftJoin(users, eq(auditEvents.userId, users.id))
+    .where(
+      and(
+        eq(auditEvents.clientId, g.clientId),
+        eq(auditEvents.entityType, 'master_coa'),
+        eq(auditEvents.entityId, g.coaId)
+      )
+    )
+    .orderBy(desc(auditEvents.at))
+    .limit(50)
+
+  return NextResponse.json({
+    riwayat: rows.map(r => ({
+      at: r.at.toISOString(),
+      event: r.event,
+      catatan: r.catatan,
+      oleh: r.oleh,
+      // Kalimat jadi dari lib — form tidak menafsirkan jsonb sendiri.
+      perubahan: ringkasPerubahanTipe(r.nilaiSebelum, r.nilaiSesudah),
+    })),
+  })
 }
 
 // PATCH /api/clients/[id]/coa/rows/[coaId] — EDIT satu baris.
@@ -58,12 +114,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Data akun belum lengkap.', details: parsed.errors }, { status: 400 })
   }
 
+  // Riwayat tipe & kas (E6) — HANYA bila salah satunya berubah, dan di
+  // db.batch yang SAMA dengan UPDATE-nya (P10): perubahan tanpa riwayat, atau
+  // riwayat tanpa perubahan, sama-sama tidak boleh bisa terjadi.
+  const sebelum = snapshotTipeKas({ tipeAkun: g.row.tipeAkun, isKas: g.row.isKas })
+  const sesudah = snapshotTipeKas({ tipeAkun: parsed.value.tipeAkun, isKas: parsed.value.isKas })
+  const riwayat = tipeKasBerubah(sebelum, sesudah)
+    ? recordCoaTypeEvents([
+        {
+          clientId: g.clientId,
+          coaId: g.coaId,
+          event: 'tipe_diubah',
+          userId: await resolveUserId(g.email),
+          catatan: SUMBER_PERUBAHAN_TIPE.form,
+          nilaiSebelum: sebelum,
+          nilaiSesudah: sesudah,
+        },
+      ])
+    : null
+
+  const ubah = db
+    .update(masterCoa)
+    .set({ ...parsed.value, updatedAt: new Date() })
+    .where(eq(masterCoa.id, g.coaId))
+    .returning({ id: masterCoa.id, kode: masterCoa.kode, nama: masterCoa.nama })
+
   try {
-    const [row] = await db
-      .update(masterCoa)
-      .set({ ...parsed.value, updatedAt: new Date() })
-      .where(eq(masterCoa.id, g.coaId))
-      .returning({ id: masterCoa.id, kode: masterCoa.kode, nama: masterCoa.nama })
+    const hasil = riwayat ? await db.batch([ubah, riwayat]) : await db.batch([ubah])
+    const [row] = hasil[0]
     return NextResponse.json({ account: row, kodeChanged: row.kode !== g.row.kode })
   } catch (e) {
     if (isUniqueViolation(e)) {
@@ -221,6 +299,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   //    lewat FK CASCADE — beda dengan replace, di sini TIDAK ada yang disisipkan
   //    ulang: history akun lain tidak tersentuh sama sekali.
   statements.push(db.delete(masterCoa).where(eq(masterCoa.id, g.coaId)))
+  // Riwayat tipe & kas ikut dihapus bersama akunnya (pengganti FK cascade,
+  // lib/api/audit.ts) — di batch yang sama.
+  statements.push(purgeAuditEvents('master_coa', g.coaId))
 
   // 4) Demote laporan yang jadi tidak lengkap ('confirmed' tidak disentuh —
   //    lihat buildReplacePlan).

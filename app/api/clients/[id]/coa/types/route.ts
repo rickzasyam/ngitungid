@@ -8,6 +8,9 @@ import { canAccessClientData } from '@/lib/roles'
 import { parseCoaWorkbook } from '@/lib/coa-import'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import type { AccountType } from '@/lib/coa/account-type'
+import { resolveUserId } from '@/lib/api/journal-queries'
+import { recordCoaTypeEvents } from '@/lib/api/audit'
+import { SUMBER_PERUBAHAN_TIPE } from '@/lib/coa/type-history'
 
 export const runtime = 'nodejs'
 
@@ -101,6 +104,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const byKode = new Map(existing.map(a => [a.kode, a]))
 
   type Perubahan = {
+    /** Id akun — sasaran riwayatnya (E6). Tidak ikut dikirim ke layar. */
+    id: string
     kode: string
     before: { tipeAkun: AccountType | null; isKas: boolean }
     after: { tipeAkun: AccountType | null; isKas: boolean }
@@ -127,6 +132,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       continue
     }
     updated.push({
+      id: row.id,
       kode: r.kode,
       before: { tipeAkun: row.tipeAkun, isKas: row.isKas },
       after: { tipeAkun, isKas },
@@ -139,7 +145,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const unknownUnik = [...new Set(unknownKode)].sort()
 
   const ringkasan = {
-    updated,
+    updated: updated.map(u => ({ kode: u.kode, before: u.before, after: u.after })),
     unknownKode: unknownUnik,
     unchanged,
     totalBaris: rows.length,
@@ -169,6 +175,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .set({ tipeAkun: gr.tipeAkun, isKas: gr.isKas, updatedAt: now })
       .where(and(eq(masterCoa.clientId, id), inArray(masterCoa.kode, gr.kode)))
   )
+
+  // Riwayat tipe & kas (E6): satu baris per akun yang BERUBAH — daftar
+  // `updated` sudah menyaring yang tidak berubah — dalam SATU INSERT, di batch
+  // yang sama dengan UPDATE-nya (P10).
+  const userId = await resolveUserId(g.user.email)
+  const riwayat = recordCoaTypeEvents(
+    updated.map(u => ({
+      clientId: id,
+      coaId: u.id,
+      event: 'tipe_diubah' as const,
+      userId,
+      catatan: SUMBER_PERUBAHAN_TIPE.berkas,
+      nilaiSebelum: u.before,
+      nilaiSesudah: u.after,
+    }))
+  )
+  if (riwayat) statements.push(riwayat)
 
   try {
     await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
