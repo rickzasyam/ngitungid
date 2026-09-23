@@ -80,6 +80,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
 
+  // ══ SUPPLIER DICERMINKAN, BUKAN DIPUTUSKAN ULANG (F1) ════════════════
+  // validateJournalInput di atas dipanggil TANPA peta tipe akun, jadi ia
+  // membuang supplierId — perilaku aman untuk pemanggil sembarang. Pembalik
+  // bukan pemanggil sembarang: ia cermin persis dari baris yang sudah
+  // terposting, dan suppliernya sudah diperiksa saat baris aslinya ditulis.
+  //
+  // Memeriksanya ulang di sini akan MEMBLOKIR pembalikan hanya karena tipe
+  // akunnya diubah sesudah posting — kebuntuan yang tidak ada hubungannya
+  // dengan benar-tidaknya pembalik. Karena itu supplierId dipasang kembali
+  // dari baris asli, menurut urutan (validator mempertahankan urutan & jumlah).
+  const barisPembalik = check.value.lines.map((l, i) => ({
+    ...l,
+    supplierId: lines[i]?.supplierId ?? null,
+  }))
+
   const createdBy = await resolveUserId(g.user.email)
   if (!createdBy) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -95,13 +110,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       createdBy,
     }),
     db.insert(journalLines).values(
-      check.value.lines.map(l => ({
+      barisPembalik.map(l => ({
         journalId: pembalikId,
         masterCoaId: l.masterCoaId,
         debit: l.debit,
         kredit: l.kredit,
         keterangan: l.keterangan,
         lineOrder: l.lineOrder,
+        supplierId: l.supplierId,
       }))
     ),
     // DUA baris riwayat, di dua entitas berbeda: yang baru lahir, dan yang lama

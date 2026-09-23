@@ -728,3 +728,32 @@ describe('POST & PATCH jurnal menegakkan aturan supplier', () => {
     expect(QUERIES).toContain('resolveAccountType(r)')
   })
 })
+
+// ══ supplierId TIDAK HILANG DI JALUR BACA & PEMBALIK (celah F1) ═════════
+describe('supplierId bertahan melewati edit dan jurnal balik', () => {
+  it('detail jurnal membawa supplierId — form edit tidak menghapusnya diam-diam', () => {
+    // PATCH mengganti SELURUH baris. Detail tanpa supplierId berarti form edit
+    // dibuka tanpa tanda supplier, lalu simpan menghapusnya.
+    const mulai = QUERIES.indexOf('export async function loadJournalDetail')
+    const blok = QUERIES.slice(mulai, QUERIES.indexOf('export async function', mulai + 10))
+    expect(blok).toContain('supplierId: journalLines.supplierId')
+    expect(blok).toContain('.leftJoin(masterSupplier, eq(journalLines.supplierId, masterSupplier.id))')
+  })
+
+  it('nilai baris (bahan pembalik & snapshot D42) membawa supplierId', () => {
+    const mulai = QUERIES.indexOf('export async function loadJournalLineValues')
+    const blok = QUERIES.slice(mulai, mulai + 900)
+    expect(blok).toContain('supplierId: journalLines.supplierId')
+  })
+
+  it('pembalik MENCERMINKAN supplier dari baris asli, lalu menyimpannya', () => {
+    const body = handler(REVERSE, 'POST')
+    expect(body).toContain('supplierId: lines[i]?.supplierId ?? null')
+    expect(body).toContain('barisPembalik.map(l => ({')
+    expect(body).toContain('supplierId: l.supplierId,')
+    // Yang disimpan adalah baris yang sudah dicerminkan, bukan keluaran
+    // validator yang membuang supplierId.
+    const insert = body.indexOf('db.insert(journalLines)')
+    expect(body.slice(insert, insert + 120)).toContain('barisPembalik')
+  })
+})

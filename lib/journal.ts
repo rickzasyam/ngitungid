@@ -502,6 +502,10 @@ export function buildReversalLines(
     kredit: l.debit,
     keterangan: l.keterangan,
     lineOrder: l.lineOrder,
+    // Supplier IKUT dicerminkan (F1). Pembalik tanpa supplier atas baris asli
+    // yang bersupplier akan membelah pasangan itu ke dua kelompok penjelas
+    // rekonsiliasi — padahal keduanya saling meniadakan.
+    supplierId: l.supplierId ?? null,
   }))
 }
 

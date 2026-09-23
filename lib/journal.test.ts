@@ -635,10 +635,25 @@ describe('canReverse', () => {
 })
 
 describe('buildReversalLines', () => {
+  // Bentuk NYATA dari loadJournalLineValues — sejak F1 ia selalu membawa
+  // supplierId (null bila baris tidak bersupplier).
   const lines = [
-    { masterCoaId: 'A1', debit: '100.00', kredit: '0.00', keterangan: 'sewa', lineOrder: 0 },
-    { masterCoaId: 'A2', debit: '0.00', kredit: '100.00', keterangan: null, lineOrder: 1 },
+    { masterCoaId: 'A1', debit: '100.00', kredit: '0.00', keterangan: 'sewa', lineOrder: 0, supplierId: null },
+    { masterCoaId: 'A2', debit: '0.00', kredit: '100.00', keterangan: null, lineOrder: 1, supplierId: 'SUP-1' },
   ]
+
+  it('supplierId IKUT dicerminkan — bukan dibuang (F1)', () => {
+    // Pembalik tanpa supplier atas baris asli yang bersupplier membelah
+    // pasangan itu ke dua kelompok penjelas rekonsiliasi, padahal keduanya
+    // saling meniadakan.
+    const balik = buildReversalLines(lines)
+    expect(balik.map(l => l.supplierId)).toEqual([null, 'SUP-1'])
+  })
+
+  it('baris tanpa kolom supplierId sama sekali tetap dibalik, dengan supplierId null', () => {
+    const lama = [{ masterCoaId: 'A1', debit: '5.00', kredit: '0.00', keterangan: null, lineOrder: 0 }]
+    expect(buildReversalLines(lama)[0].supplierId).toBeNull()
+  })
 
   it('menukar sisi debit dan kredit', () => {
     const balik = buildReversalLines(lines)

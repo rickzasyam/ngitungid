@@ -169,9 +169,14 @@ export async function loadJournalDetail(journalId: string) {
       kredit: journalLines.kredit,
       keterangan: journalLines.keterangan,
       lineOrder: journalLines.lineOrder,
+      // F1. Tanpa ini, form edit dibuka TANPA tanda supplier, lalu PATCH —
+      // yang mengganti seluruh baris — menghapusnya diam-diam.
+      supplierId: journalLines.supplierId,
+      supplierNama: masterSupplier.nama,
     })
     .from(journalLines)
     .innerJoin(masterCoa, eq(journalLines.masterCoaId, masterCoa.id))
+    .leftJoin(masterSupplier, eq(journalLines.supplierId, masterSupplier.id))
     .where(eq(journalLines.journalId, journalId))
     .orderBy(asc(journalLines.lineOrder))
 
@@ -298,6 +303,9 @@ export async function loadJournalLineValues(journalId: string): Promise<JournalL
       kredit: journalLines.kredit,
       keterangan: journalLines.keterangan,
       lineOrder: journalLines.lineOrder,
+      // Dipakai pembalik (dicerminkan) dan snapshot nilai_sebelum D42 — dua
+      // tempat yang sama-sama kehilangan supplier kalau kolom ini tidak ikut.
+      supplierId: journalLines.supplierId,
     })
     .from(journalLines)
     .where(eq(journalLines.journalId, journalId))
