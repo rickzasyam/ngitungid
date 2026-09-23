@@ -273,3 +273,32 @@ describe('DELETE supplier yang masih dirujuk', () => {
     expect(body).toContain('isFkViolation(e)')
   })
 })
+
+// ══ UI hapus supplier (keputusan CP-8 #3) ═══════════════════════════════
+// Uji klik CP-8: 409 "masih dipakai…" tampil di banner halaman, tapi dialog
+// konfirmasi tetap terbuka dan lapisan gelapnya menutupi banner itu — tombol
+// "Hapus" terlihat tidak melakukan apa-apa.
+describe('dialog hapus supplier', () => {
+  const UI = read('components', 'settings', 'supplier-manager.tsx').replace(/\r\n/g, '\n')
+  const mulai = UI.indexOf('async function hapus()')
+  const HAPUS = UI.slice(mulai, UI.indexOf('\n  }\n', mulai))
+
+  it('dialog DITUTUP di setiap akhir — termasuk saat 409 — supaya galatnya terlihat', () => {
+    const fin = HAPUS.indexOf('} finally {')
+    expect(fin).toBeGreaterThan(-1)
+    expect(HAPUS.slice(fin)).toContain('setHapusTarget(null)')
+    // Hanya di finally: jalur galat tidak boleh punya jalan pulang lain yang
+    // membiarkan dialognya terbuka.
+    expect(HAPUS.split('setHapusTarget(null)').length - 1).toBe(1)
+  })
+
+  it('pesan galat server dipakai apa adanya — ia yang menyebut jumlah pemakaian', () => {
+    expect(HAPUS).toContain("setError(payload?.error ?? 'Gagal menghapus supplier.')")
+  })
+
+  it('teks konfirmasi mengatakan jurnal MEMBLOKIR, bukan "tidak terpengaruh"', () => {
+    expect(UI).not.toContain('Master COA dan jurnal tidak terpengaruh')
+    expect(UI).toContain('Supplier yang masih dipakai invoice pembelian atau baris jurnal')
+    expect(UI).toContain('tidak bisa dihapus')
+  })
+})

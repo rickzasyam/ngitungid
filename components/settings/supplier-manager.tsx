@@ -214,9 +214,14 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
     }
   }
 
+  // Dialog konfirmasi DITUTUP di setiap akhir — berhasil maupun gagal. Pesan
+  // galat (mis. 409 "masih dipakai N invoice pembelian dan M baris jurnal")
+  // tampil di banner halaman, dan banner itu tertutup lapisan gelap selama
+  // dialognya masih terbuka: tombol "Hapus" terlihat tidak melakukan apa-apa.
   async function hapus() {
     if (!hapusTarget) return
     setHapusBusy(true)
+    setError(null)
     try {
       const res = await fetch(`/api/clients/${clientId}/suppliers/${hapusTarget.id}`, {
         method: 'DELETE',
@@ -226,11 +231,11 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
         setError(payload?.error ?? 'Gagal menghapus supplier.')
         return
       }
-      setHapusTarget(null)
       await muat()
     } catch {
       setError('Gagal menghubungi server.')
     } finally {
+      setHapusTarget(null)
       setHapusBusy(false)
     }
   }
@@ -628,7 +633,9 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
             </h2>
             <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
               <strong style={{ color: 'var(--color-text-primary)' }}>{hapusTarget.nama}</strong> dihapus
-              permanen. Master COA dan jurnal tidak terpengaruh.
+              permanen. Supplier yang masih dipakai invoice pembelian atau baris jurnal{' '}
+              <strong style={{ color: 'var(--color-text-primary)' }}>tidak bisa dihapus</strong> — permintaan ini
+              akan ditolak beserta jumlah pemakaiannya. Master COA tidak terpengaruh.
             </p>
           </div>
           <div
