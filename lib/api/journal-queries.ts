@@ -6,10 +6,12 @@ import {
   journalEntries,
   journalLines,
   masterCoa,
+  masterSupplier,
   purchaseInvoices,
   users,
 } from '@/lib/db/schema'
 import type { JournalLineValue } from '@/lib/journal'
+import { resolveAccountType } from '@/lib/coa/account-type'
 import { diubahSetelahPosting } from '@/lib/accounting-settings'
 
 // Query & penjaga yang dipakai BERSAMA oleh route daftar jurnal dan route
@@ -52,6 +54,66 @@ export async function assertAccountsBelongToClient(
   if (found.length !== ids.length) {
     return NextResponse.json(
       { error: 'Ada akun yang tidak ditemukan pada Master COA klien ini.' },
+      { status: 400 }
+    )
+  }
+  return null
+}
+
+/**
+ * Tipe akun per `master_coa_id`, untuk aturan "supplier hanya pada baris
+ * liability" (F1).
+ *
+ * Memakai `resolveAccountType` — eksplisit ?? turunan (E2), aturan yang sama
+ * dengan yang dipakai layar dan ekspor. Akun yang tidak ditemukan sengaja TIDAK
+ * masuk peta: pemanggil sudah memeriksa kepemilikan klien lewat
+ * assertAccountsBelongToClient, dan id yang lolos ke sini tapi tidak ada di
+ * COA berarti sesuatu yang lebih besar sedang salah.
+ */
+export async function loadTipeAkunById(
+  clientId: string,
+  masterCoaIds: readonly string[]
+): Promise<Record<string, string | null>> {
+  const ids = [...new Set(masterCoaIds)].filter(Boolean)
+  if (ids.length === 0) return {}
+  const rows = await db
+    .select({
+      id: masterCoa.id,
+      nama: masterCoa.nama,
+      posisi: masterCoa.posisi,
+      kelompok: masterCoa.kelompok,
+      subKelompok: masterCoa.subKelompok,
+      classCf: masterCoa.classCf,
+      tipeAkun: masterCoa.tipeAkun,
+    })
+    .from(masterCoa)
+    .where(and(eq(masterCoa.clientId, clientId), inArray(masterCoa.id, ids)))
+
+  const out: Record<string, string | null> = {}
+  for (const r of rows) out[r.id] = resolveAccountType(r)
+  return out
+}
+
+/**
+ * Supplier yang ditandai di baris jurnal HARUS milik klien yang sama.
+ *
+ * Pola yang sama dengan assertAccountsBelongToClient: satu query, bandingkan
+ * panjang. Tanpa ini, id supplier klien lain bisa diselundupkan lewat body dan
+ * muncul di rekonsiliasi klien ini sebagai penjelas selisih yang mengarang.
+ */
+export async function assertSuppliersBelongToClient(
+  supplierIds: readonly (string | null | undefined)[],
+  clientId: string
+): Promise<NextResponse | null> {
+  const ids = [...new Set(supplierIds.filter((x): x is string => typeof x === 'string' && x !== ''))]
+  if (ids.length === 0) return null
+  const found = await db
+    .select({ id: masterSupplier.id })
+    .from(masterSupplier)
+    .where(and(eq(masterSupplier.clientId, clientId), inArray(masterSupplier.id, ids)))
+  if (found.length !== ids.length) {
+    return NextResponse.json(
+      { error: 'Ada supplier yang tidak ditemukan pada klien ini.' },
       { status: 400 }
     )
   }

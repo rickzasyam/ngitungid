@@ -21,11 +21,24 @@ import {
   findPostedReversal,
   loadJournalDetail,
   loadJournalLineValues,
+  loadTipeAkunById,
+  assertSuppliersBelongToClient,
   resolveUserId,
 } from '@/lib/api/journal-queries'
 import { purgeAuditEvents, recordJournalEvent } from '@/lib/api/audit'
 
 export const runtime = 'nodejs'
+
+/** Id akun dari body MENTAH — lihat catatan di app/api/journals/route.ts. */
+function idAkunDariBody(lines: unknown): string[] {
+  if (!Array.isArray(lines)) return []
+  const out: string[] = []
+  for (const l of lines) {
+    const id = (l as { masterCoaId?: unknown })?.masterCoaId
+    if (typeof id === 'string' && id.trim() !== '') out.push(id.trim())
+  }
+  return out
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -189,15 +202,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const raw = (body ?? {}) as Record<string, unknown>
 
+  // Tipe akun dibaca SEBELUM validasi (F1) — aturan "supplier hanya pada baris
+  // liability" butuh tahu tipenya, dan modul murni tidak menyentuh DB.
+  const tipeAkunById = await loadTipeAkunById(g.row.clientId, idAkunDariBody(raw.lines))
+
   const check = validateJournalInput({
     tanggal: raw.tanggal,
     noBukti: raw.noBukti,
     keterangan: raw.keterangan,
     lines: raw.lines,
+    tipeAkunById,
   })
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+
+  const guardSupplier = await assertSuppliersBelongToClient(
+    check.value.lines.map(l => l.supplierId),
+    g.row.clientId
+  )
+  if (guardSupplier) return guardSupplier
 
   // clientId TIDAK diambil dari body — ia melekat pada jurnalnya dan tidak
   // boleh berpindah. Akunnya divalidasi terhadap klien milik barisnya.
@@ -241,6 +265,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         kredit: l.kredit,
         keterangan: l.keterangan,
         lineOrder: l.lineOrder,
+        supplierId: l.supplierId ?? null,
       }))
     ),
     recordJournalEvent({

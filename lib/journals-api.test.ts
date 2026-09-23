@@ -693,3 +693,38 @@ describe('D42 — sakelar posting dan ketiga mitigasinya', () => {
     }
   })
 })
+
+// ══ supplierId DI JALUR TULIS JURNAL (F1) ════════════════════════════════
+describe('POST & PATCH jurnal menegakkan aturan supplier', () => {
+  const JALUR = [
+    ['POST', handler(LIST, 'POST')],
+    ['PATCH', handler(DETAIL, 'PATCH')],
+  ] as const
+
+  it('tipe akun dibaca dan DIOPER ke validator — tanpa itu supplier diabaikan', () => {
+    for (const [nama, body] of JALUR) {
+      expect(body.includes('loadTipeAkunById('), nama).toBe(true)
+      expect(body.includes('tipeAkunById,'), nama).toBe(true)
+      // Dibaca SEBELUM validasi, karena validasinya bergantung padanya.
+      expect(body.indexOf('loadTipeAkunById('), nama).toBeLessThan(body.indexOf('validateJournalInput('))
+    }
+  })
+
+  it('supplier diperiksa milik klien yang sama, SEBELUM db.batch', () => {
+    for (const [nama, body] of JALUR) {
+      const cek = body.indexOf('assertSuppliersBelongToClient(')
+      expect(cek, nama).toBeGreaterThan(-1)
+      expect(cek, nama).toBeLessThan(body.indexOf('await db.batch('))
+    }
+  })
+
+  it('supplierId benar-benar ikut TERSIMPAN di baris jurnal', () => {
+    for (const [nama, body] of JALUR) {
+      expect(body.includes('supplierId: l.supplierId ?? null'), nama).toBe(true)
+    }
+  })
+
+  it('tipe akun memakai resolveAccountType — eksplisit ?? turunan (E2)', () => {
+    expect(QUERIES).toContain('resolveAccountType(r)')
+  })
+})

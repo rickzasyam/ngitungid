@@ -167,6 +167,17 @@ export type JournalLineInput = {
   debit?: unknown
   kredit?: unknown
   keterangan?: unknown
+  /**
+   * Supplier yang dirujuk baris ini (F1, D41). HANYA sah pada baris yang
+   * akunnya bertipe `liability`.
+   *
+   * Sesudah Modul 1, sebagian besar baris hutang lahir dari invoice yang sudah
+   * membawa suppliernya sendiri. Kolom ini untuk jurnal MANUAL yang menyentuh
+   * akun hutang di luar modul pembelian — dan gunanya bukan menghitung hutang,
+   * melainkan MENJELASKAN SELISIH saat rekonsiliasi menemukan angka neraca
+   * berbeda dari total per supplier.
+   */
+  supplierId?: unknown
 }
 
 export type JournalInput = {
@@ -174,6 +185,22 @@ export type JournalInput = {
   noBukti?: unknown
   keterangan?: unknown
   lines?: unknown
+  /**
+   * Tipe akun per `master_coa_id`, dibaca pemanggil dari Master COA klien.
+   *
+   * ══ KENAPA DIOPER, BUKAN DIBACA DI SINI ═══════════════════════════════
+   * Modul ini MURNI: ia tidak boleh menyentuh database. Aturan "supplier hanya
+   * pada baris liability" butuh tahu tipe akunnya, dan satu-satunya yang tahu
+   * adalah pemanggil yang memang sudah membaca COA untuk memeriksa kepemilikan
+   * klien. Dioper sebagai peta, bukan dibaca ulang — dua pembacaan berarti dua
+   * jawaban yang bisa berbeda di antara keduanya.
+   *
+   * Dihilangkan = aturan supplier tidak ditegakkan dan `supplierId` diabaikan.
+   * Itu bentuk yang sengaja: pemanggil lama dan test lama tidak berubah sama
+   * sekali, dan tidak ada jalur yang diam-diam mulai menerima supplier tanpa
+   * pemeriksaan.
+   */
+  tipeAkunById?: Record<string, string | null | undefined>
 }
 
 /** Bentuk yang siap ditulis: nominal sudah string 2 desimal, keterangan sudah
@@ -184,6 +211,8 @@ export type JournalLineValue = {
   kredit: string
   keterangan: string | null
   lineOrder: number
+  /** null = baris ini tidak menunjuk supplier mana pun. */
+  supplierId?: string | null
 }
 
 export type JournalValue = {
@@ -262,6 +291,11 @@ export function validateJournalInput(input: JournalInput): JournalCheck {
       errors.push(`Baris ${n}: akun belum dipilih.`)
     }
 
+    // `undefined` = pemanggil tidak mengoper peta tipe akun sama sekali; aturan
+    // supplier tidak ditegakkan. `null` = akunnya ADA tapi tipenya belum
+    // disetel — itu BUKAN liability, jadi supplier di sana ditolak.
+    const tipeAkun = input.tipeAkunById === undefined ? undefined : (input.tipeAkunById[masterCoaId] ?? null)
+
     // Kosong (''/null/undefined) BUKAN galat — itu sisi yang memang tidak
     // dipakai baris ini. Yang galat adalah nilai terisi yang bentuknya salah.
     const debitKosong = l.debit === '' || l.debit === null || l.debit === undefined
@@ -280,6 +314,30 @@ export function validateJournalInput(input: JournalInput): JournalCheck {
       }
     }
 
+    // ══ SUPPLIER HANYA PADA BARIS LIABILITY (F1) ════════════════════════
+    // Baris beban atau kas yang ditandai supplier akan muncul di daftar
+    // penjelas rekonsiliasi sebagai "jurnal manual ke akun hutang" — padahal
+    // ia tidak menyentuh hutang sama sekali. Selisih yang dijelaskan oleh
+    // baris yang tidak relevan lebih buruk daripada selisih yang tidak
+    // dijelaskan: yang pertama membuat orang berhenti mencari.
+    //
+    // Tanpa peta tipe akun (`tipeAkun === undefined`), supplierId DIABAIKAN —
+    // bukan diterima tanpa pemeriksaan. Bentuk sebaliknya membuat pemanggil yang
+    // lupa mengoper peta diam-diam menerima supplier di baris apa pun.
+    let supplierId: string | null = null
+    const supplierRaw = typeof l.supplierId === 'string' ? l.supplierId.trim() : ''
+    if (supplierRaw !== '' && tipeAkun !== undefined) {
+      if (!UUID_RE.test(supplierRaw)) {
+        errors.push(`Baris ${n}: supplier tidak valid.`)
+      } else if (tipeAkun !== 'liability') {
+        errors.push(
+          `Baris ${n}: supplier hanya bisa ditandai pada baris berakun hutang (liability).`
+        )
+      } else {
+        supplierId = supplierRaw
+      }
+    }
+
     const ketRaw = typeof l.keterangan === 'string' ? l.keterangan.trim() : ''
     lines.push({
       masterCoaId,
@@ -287,6 +345,7 @@ export function validateJournalInput(input: JournalInput): JournalCheck {
       kredit: fromMinorUnits(kredit ?? 0),
       keterangan: ketRaw === '' ? null : ketRaw,
       lineOrder: i,
+      supplierId,
     })
   })
 

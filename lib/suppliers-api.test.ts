@@ -233,3 +233,43 @@ describe('keunikan nama di DB ikut case-insensitive', () => {
     expect(M).toContain('lower("nama")')
   })
 })
+
+// ══ DELETE SUPPLIER YANG MASIH DIRUJUK → 409, BUKAN set null (F1) ═══════
+// Invoice & baris jurnal bersupplier adalah catatan yang SUDAH TERJADI.
+// Memutus suppliernya jadi null menyisakan hutang tanpa pemilik: rekonsiliasi
+// kehilangan barisnya, dan tidak ada satu galat pun yang memberi tahu.
+describe('DELETE supplier yang masih dirujuk', () => {
+  const body = handler(ROW, 'DELETE')
+
+  it('menghitung invoice DAN baris jurnal yang merujuknya', () => {
+    expect(body).toContain('.from(purchaseInvoices)')
+    expect(body).toContain('eq(purchaseInvoices.supplierId, g.supplierId)')
+    expect(body).toContain('.from(journalLines)')
+    expect(body).toContain('eq(journalLines.supplierId, g.supplierId)')
+  })
+
+  it('pemeriksaannya terjadi SEBELUM penghapusan', () => {
+    const cek = body.indexOf('.from(purchaseInvoices)')
+    const hapus = body.indexOf('db.delete(masterSupplier)')
+    expect(cek).toBeGreaterThan(-1)
+    expect(cek).toBeLessThan(hapus)
+  })
+
+  it('menolak 409 dengan menyebut BERAPA yang menghalangi', () => {
+    expect(body).toContain('status: 409')
+    expect(body).toContain('invoice pembelian')
+    expect(body).toContain('baris jurnal')
+  })
+
+  it('TIDAK memutus suppliernya jadi null di mana pun', () => {
+    // Pemeriksaan ini yang merah kalau seseorang kelak "memudahkan" hapus
+    // supplier dengan mengosongkan rujukannya lebih dulu.
+    expect(body).not.toContain('supplierId: null')
+    expect(body).not.toContain('.update(purchaseInvoices)')
+    expect(body).not.toContain('.update(journalLines)')
+  })
+
+  it('isFkViolation tetap dipasang sebagai JARING TERAKHIR', () => {
+    expect(body).toContain('isFkViolation(e)')
+  })
+})

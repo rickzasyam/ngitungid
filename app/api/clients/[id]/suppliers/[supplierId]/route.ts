@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { masterSupplier } from '@/lib/db/schema'
+import { journalLines, masterSupplier, purchaseInvoices } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
-import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
+import { dbWriteErrorResponse, isFkViolation, isUniqueViolation } from '@/lib/api/db-errors'
 import { validateSupplierInput } from '@/lib/supplier'
 import { assertAkunHutangMilikKlien } from '@/lib/api/supplier-queries'
 
@@ -85,13 +85,60 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 // itu penghapusannya berubah jadi menolak 409 kalau masih dirujuk. Kalau kolom
 // itu ditambahkan tanpa mengubah handler ini, penghapusan akan gagal di DB
 // dengan galat FK mentah alih-alih pesan yang bisa dibaca — catat di sana.
+// DELETE /api/clients/[id]/suppliers/[supplierId]
+//
+// ══ SUPPLIER YANG MASIH DIRUJUK MENOLAK DIHAPUS — 409, BUKAN set null ═════
+// Invoice pembelian dan baris jurnal bersupplier adalah catatan yang SUDAH
+// TERJADI. Memutus suppliernya jadi null akan menyisakan hutang yang tidak
+// diketahui milik siapa: rekonsiliasi kehilangan pemiliknya, umur hutang
+// kehilangan barisnya di rekap per supplier, dan tidak ada satu pun galat yang
+// muncul. Ditolak di sini dengan menyebut BERAPA yang menghalangi, supaya
+// akunting tahu yang harus dibereskan.
+//
+// `isFkViolation` di bawah tetap ada sebagai JARING TERAKHIR: FK-nya memang
+// restrict, tapi pemeriksaan eksplisit yang menghasilkan pesan berguna jauh
+// lebih baik daripada galat database yang tidak menyebut apa pun.
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string; supplierId: string }> }) {
   const g = await guard(params)
   if ('error' in g) return g.error
 
+  const [invoice] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(purchaseInvoices)
+    .where(eq(purchaseInvoices.supplierId, g.supplierId))
+  const [jurnal] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(journalLines)
+    .where(eq(journalLines.supplierId, g.supplierId))
+
+  const nInvoice = invoice?.n ?? 0
+  const nJurnal = jurnal?.n ?? 0
+  if (nInvoice > 0 || nJurnal > 0) {
+    const sebab: string[] = []
+    if (nInvoice > 0) sebab.push(`${nInvoice} invoice pembelian`)
+    if (nJurnal > 0) sebab.push(`${nJurnal} baris jurnal`)
+    return NextResponse.json(
+      {
+        error: `Supplier "${g.row.nama}" masih dipakai ${sebab.join(' dan ')} — tidak bisa dihapus.`,
+        details: [
+          'Hapus atau pindahkan dokumen yang merujuknya lebih dulu.',
+          'Suppliernya TIDAK diputus jadi kosong: hutang tanpa pemilik tidak bisa direkonsiliasi, dan tidak ada galat yang akan memberi tahu.',
+        ],
+      },
+      { status: 409 }
+    )
+  }
+
   try {
     await db.delete(masterSupplier).where(eq(masterSupplier.id, g.supplierId))
   } catch (e) {
+    // Jaring terakhir: ada perujuk baru yang belum diperiksa di atas.
+    if (isFkViolation(e)) {
+      return NextResponse.json(
+        { error: `Supplier "${g.row.nama}" masih dipakai dokumen lain — tidak bisa dihapus.` },
+        { status: 409 }
+      )
+    }
     return dbWriteErrorResponse(e, 'Gagal menghapus supplier. Coba lagi.')
   }
 

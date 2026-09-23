@@ -752,3 +752,100 @@ describe('sumberDokumenHref', () => {
     expect(sumberDokumenHref('mutasi_kas', '')).toBeNull()
   })
 })
+
+// ══ supplierId PER BARIS — HANYA PADA AKUN LIABILITY (F1, D41) ═══════════
+// Baris beban atau kas yang ditandai supplier akan muncul di daftar penjelas
+// rekonsiliasi sebagai "jurnal manual ke akun hutang" padahal tidak menyentuh
+// hutang sama sekali. Selisih yang dijelaskan oleh baris yang tidak relevan
+// lebih buruk daripada selisih yang tidak dijelaskan.
+describe('validateJournalInput — supplierId per baris', () => {
+  const AKUN_HUTANG = '11111111-1111-4111-8111-111111111111'
+  const AKUN_BEBAN = '22222222-2222-4222-8222-222222222222'
+  const AKUN_TANPA_TIPE = '33333333-3333-4333-8333-333333333333'
+  const SUPPLIER = '44444444-4444-4444-8444-444444444444'
+
+  const tipeAkunById = {
+    [AKUN_HUTANG]: 'liability',
+    [AKUN_BEBAN]: 'expense',
+    [AKUN_TANPA_TIPE]: null,
+  }
+
+  const jurnal = (supplierPada: string | null, supplierId: unknown = SUPPLIER) => ({
+    tanggal: '2026-09-23',
+    tipeAkunById,
+    lines: [
+      {
+        masterCoaId: AKUN_BEBAN,
+        debit: '1000',
+        kredit: '',
+        supplierId: supplierPada === AKUN_BEBAN ? supplierId : undefined,
+      },
+      {
+        masterCoaId: supplierPada === AKUN_TANPA_TIPE ? AKUN_TANPA_TIPE : AKUN_HUTANG,
+        debit: '',
+        kredit: '1000',
+        supplierId: supplierPada !== AKUN_BEBAN && supplierPada !== null ? supplierId : undefined,
+      },
+    ],
+  })
+
+  it('DITERIMA pada baris berakun liability, dan ikut di nilai yang siap ditulis', () => {
+    const r = validateJournalInput(jurnal(AKUN_HUTANG))
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.value.lines[1].supplierId).toBe(SUPPLIER)
+      expect(r.value.lines[0].supplierId).toBeNull()
+    }
+  })
+
+  it('DITOLAK pada baris berakun beban, dengan pesan yang menyebut barisnya', () => {
+    const r = validateJournalInput(jurnal(AKUN_BEBAN))
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      const pesan = r.errors.join(' ')
+      expect(pesan).toContain('Baris 1')
+      expect(pesan).toContain('liability')
+    }
+  })
+
+  it('DITOLAK pada akun yang tipenya BELUM disetel — null bukan liability', () => {
+    // Akun tanpa tipe bisa saja akun hutang yang belum dirapikan, tapi menebak
+    // begitu berarti membuka pintu untuk baris mana pun.
+    const r = validateJournalInput(jurnal(AKUN_TANPA_TIPE))
+    expect(r.ok).toBe(false)
+  })
+
+  it('supplierId yang bukan uuid ditolak', () => {
+    const r = validateJournalInput(jurnal(AKUN_HUTANG, 'bukan-uuid'))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.join(' ')).toContain('supplier tidak valid')
+  })
+
+  it('supplierId kosong bukan galat — ia sekadar tidak ditandai', () => {
+    const r = validateJournalInput(jurnal(AKUN_HUTANG, '   '))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value.lines[1].supplierId).toBeNull()
+  })
+
+  it('TANPA peta tipe akun, supplierId DIABAIKAN — bukan diterima tanpa pemeriksaan', () => {
+    // Penjaga yang paling penting di blok ini. Bentuk sebaliknya membuat
+    // pemanggil yang lupa mengoper peta diam-diam menerima supplier di baris
+    // beban sekalipun — dan tidak ada yang melempar.
+    const { tipeAkunById: _abaikan, ...tanpaPeta } = jurnal(AKUN_BEBAN)
+    void _abaikan
+    const r = validateJournalInput(tanpaPeta)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value.lines.every(l => l.supplierId === null)).toBe(true)
+  })
+
+  it('pemanggil lama tanpa supplierId sama sekali tidak berubah perilakunya', () => {
+    const r = validateJournalInput({
+      tanggal: '2026-09-23',
+      lines: [
+        { masterCoaId: AKUN_BEBAN, debit: '1000' },
+        { masterCoaId: AKUN_HUTANG, kredit: '1000' },
+      ],
+    })
+    expect(r.ok).toBe(true)
+  })
+})

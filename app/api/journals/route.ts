@@ -13,10 +13,29 @@ import {
   assertAccountsBelongToClient,
   loadJournalDetail,
   resolveUserId,
+  loadTipeAkunById,
+  assertSuppliersBelongToClient,
 } from '@/lib/api/journal-queries'
 import { recordJournalEvent } from '@/lib/api/audit'
 
 export const runtime = 'nodejs'
+
+/**
+ * Id akun dari body MENTAH, sebelum divalidasi.
+ *
+ * Dipakai hanya untuk membaca tipe akunnya lebih dulu. Body yang bentuknya
+ * salah tetap ditolak validator sesudahnya — fungsi ini sengaja permisif dan
+ * tidak pernah melempar.
+ */
+function idAkunDariBody(lines: unknown): string[] {
+  if (!Array.isArray(lines)) return []
+  const out: string[] = []
+  for (const l of lines) {
+    const id = (l as { masterCoaId?: unknown })?.masterCoaId
+    if (typeof id === 'string' && id.trim() !== '') out.push(id.trim())
+  }
+  return out
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -159,11 +178,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId)).limit(1)
+  if (!client) return NextResponse.json({ error: 'Klien tidak ditemukan.' }, { status: 404 })
+
+  // Tipe akun dibaca SEBELUM validasi, karena aturan "supplier hanya pada baris
+  // liability" (F1) butuh tahu tipenya. Modul murni tidak boleh menyentuh DB,
+  // jadi petanya dioper — bukan dibaca dari sana.
+  const tipeAkunById = await loadTipeAkunById(clientId, idAkunDariBody(raw.lines))
+
   const check = validateJournalInput({
     tanggal: raw.tanggal,
     noBukti: raw.noBukti,
     keterangan: raw.keterangan,
     lines: raw.lines,
+    tipeAkunById,
   })
   if (!check.ok) {
     return NextResponse.json(
@@ -172,11 +200,14 @@ export async function POST(req: Request) {
     )
   }
 
-  const [client] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId)).limit(1)
-  if (!client) return NextResponse.json({ error: 'Klien tidak ditemukan.' }, { status: 404 })
-
   const guard = await assertAccountsBelongToClient(check.value.lines, clientId)
   if (guard) return guard
+
+  const guardSupplier = await assertSuppliersBelongToClient(
+    check.value.lines.map(l => l.supplierId),
+    clientId
+  )
+  if (guardSupplier) return guardSupplier
 
   const createdBy = await resolveUserId(g.user.email)
   if (!createdBy) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -201,6 +232,7 @@ export async function POST(req: Request) {
         kredit: l.kredit,
         keterangan: l.keterangan,
         lineOrder: l.lineOrder,
+        supplierId: l.supplierId ?? null,
       }))
     ),
     // P10: satu mutasi = satu batch + satu baris riwayat, DI DALAM batch yang
