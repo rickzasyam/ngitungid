@@ -108,7 +108,7 @@ const WARNA_STATUS: Record<string, { bg: string; fg: string }> = {
 function MutasiKasContent() {
   const { activeClient, isLoaded } = useRequireClient()
   const { canDoAccounting } = useClient()
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
   const searchParams = useSearchParams()
 
   const awal = useMemo(() => bulanBerjalan(), [])
@@ -528,11 +528,14 @@ function MutasiKasContent() {
                               {r.akunKasNama}
                             </td>
                             <td style={{ ...td, color: 'var(--color-text-muted)' }}>{r.keterangan ?? '—'}</td>
+                            {/* Nominal PERSIS sampai sen, bukan dibulatkan (keputusan
+                                Ricko sesudah CP-8): tabel ini dicocokkan dengan
+                                rekening koran, sama seperti pratinjau impornya. */}
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {Number(r.debit) > 0 ? rupiah(Number(r.debit)) : '—'}
+                              {Number(r.debit) > 0 ? rupiahPersis(r.debit) : '—'}
                             </td>
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {Number(r.kredit) > 0 ? rupiah(Number(r.kredit)) : '—'}
+                              {Number(r.kredit) > 0 ? rupiahPersis(r.kredit) : '—'}
                             </td>
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {/* Mutasi yang lawannya sebuah AKUN tidak memakai
@@ -541,7 +544,7 @@ function MutasiKasContent() {
                                   selesai terbaca seperti masih menggantung. */}
                               {alokasiTidakDipakai(r) || Number(r.sisa) === 0
                                 ? '—'
-                                : rupiah(Number(r.sisa))}
+                                : rupiahPersis(r.sisa)}
                             </td>
                             <td style={td}>
                               <span

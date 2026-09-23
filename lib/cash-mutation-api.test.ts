@@ -459,14 +459,22 @@ describe('rupiahPersis di layar pencocokan dokumen', () => {
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
   const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
   const INVOICE_FORM = read('components', 'pembelian', 'purchase-form-modal.tsx')
+  const PAGE = read('app', 'mutasi-kas', 'page.tsx')
 
   it.each([
     ['panel alokasi', PANEL],
     ['pratinjau impor', WIZARD],
     ['form invoice', INVOICE_FORM],
+    ['tabel utama /mutasi-kas', PAGE],
   ])('%s: tidak ada rupiah(...) yang membulatkan', (_nama, src) => {
     expect(src).not.toMatch(/[^A-Za-z]rupiah\(/)
     expect(src).toContain('rupiahPersis')
+  })
+
+  it('tabel utama /mutasi-kas: Masuk, Keluar, dan Belum dialokasikan persis — dicocokkan dengan rekening koran', () => {
+    expect(PAGE).toContain("{Number(r.debit) > 0 ? rupiahPersis(r.debit) : '—'}")
+    expect(PAGE).toContain("{Number(r.kredit) > 0 ? rupiahPersis(r.kredit) : '—'}")
+    expect(PAGE).toContain(': rupiahPersis(r.sisa)}')
   })
 
   it('panel alokasi: sisa mutasi dan nominal alokasi juga persis', () => {
