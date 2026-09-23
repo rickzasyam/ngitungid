@@ -38,6 +38,10 @@ const getFirstDayOfWeek = (year: number, month: number) => {
 const formatDate = (date: Date) =>
   date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
+/** Nama tanggal lengkap untuk pembaca layar — sel kalender hanya berisi angka. */
+const formatDayLabel = (date: Date) =>
+  date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
 const formatRangeLabel = (range: DateRange | undefined) => {
   if (!range?.from) return null
   if (!range.to) return formatDate(range.from)
@@ -197,17 +201,30 @@ function CalendarMonth({
                 const isToday = isSameDay(date, TODAY)
                 const isSelected = isStart || isEnd
 
+                // Sel tanggal = TOMBOL ASLI (gotcha #3), bukan div ber-onClick:
+                // peran, fokus Tab, dan Enter/Spasi datang dari browser, bukan
+                // ditiru dengan role/tabIndex/onKeyDown yang bisa terlupa
+                // separuhnya. Fokus menyalakan pratinjau rentang yang SAMA
+                // dengan hover (gotcha #4) — tanpa itu pengguna keyboard memilih
+                // tanggal akhir tanpa pernah melihat rentangnya.
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={colIdx}
-                    className="relative flex items-center justify-center h-8"
+                    data-hari=""
+                    aria-label={formatDayLabel(date)}
+                    aria-pressed={isSelected}
+                    aria-current={isToday ? 'date' : undefined}
+                    className="group relative flex items-center justify-center h-8 w-full focus-visible:outline-none"
                     style={{ zIndex: 1 }}
                     onClick={() => onDayClick(date)}
                     onMouseEnter={() => onDayHover(date)}
                     onMouseLeave={() => onDayHover(null)}
+                    onFocus={() => onDayHover(date)}
+                    onBlur={() => onDayHover(null)}
                   >
                     <div
-                      className="flex items-center justify-center transition-all duration-150 cursor-pointer"
+                      className="flex items-center justify-center transition-all duration-150 cursor-pointer group-focus-visible:ring-2 group-focus-visible:ring-(--color-accent-primary)"
                       style={{
                         width: '30px',
                         height: '30px',
@@ -229,7 +246,7 @@ function CalendarMonth({
                     >
                       {date.getDate()}
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -247,6 +264,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
   const [viewYear, setViewYear] = useState(value?.from?.getFullYear() ?? new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(value?.from?.getMonth() ?? 0)
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   // Node panel disimpan di ref (satu-satunya tempat yang boleh dimutasi — kita
   // menulis .style langsung ke sana), sementara `panelReady` hanyalah PEMICU
   // supaya efek penempatan jalan ULANG begitu node-nya menempel.
@@ -275,7 +293,13 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
       if (panelRef.current?.contains(t)) return
       setIsOpen(false)
     }
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpen(false) }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      // Fokus dikembalikan HANYA bila ia sedang di dalam panel — Escape di
+      // tempat lain di halaman tidak boleh menarik fokus ke pemicu ini.
+      if (panelRef.current?.contains(document.activeElement)) triggerRef.current?.focus()
+      setIsOpen(false)
+    }
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleKey)
     return () => {
@@ -324,6 +348,27 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
     }
   }, [isOpen, panelReady])
 
+  // Fokus MASUK ke kalender saat dibuka. Panelnya di-portal ke ujung <body>,
+  // jadi tanpa ini Tab dari tombol pemicu berjalan ke sisa halaman dulu dan
+  // sel tanggal baru tercapai paling akhir — praktis tidak terjangkau
+  // keyboard. Sasarannya tanggal awal yang terpilih, atau tanggal pertama
+  // bulan yang tampil. Passive effect: berjalan SETELAH useLayoutEffect di
+  // atas membuka `visibility`, karena elemen tersembunyi tidak bisa difokus.
+  useEffect(() => {
+    if (!isOpen || !panelReady) return
+    const panel = panelRef.current
+    const sasaran =
+      panel?.querySelector<HTMLButtonElement>('button[data-hari][aria-pressed="true"]') ??
+      panel?.querySelector<HTMLButtonElement>('button[data-hari]')
+    sasaran?.focus({ preventScroll: true })
+  }, [isOpen, panelReady])
+
+  /** Tutup lewat tombol di dalam panel — fokus kembali ke pemicunya. */
+  const tutupKePemicu = () => {
+    setIsOpen(false)
+    triggerRef.current?.focus()
+  }
+
   const secondMonth = viewMonth === 11 ? 0 : viewMonth + 1
   const secondYear = viewMonth === 11 ? viewYear + 1 : viewYear
 
@@ -353,7 +398,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
 
   const handleApply = () => {
     onChange(tempRange)
-    setIsOpen(false)
+    tutupKePemicu()
   }
 
   const handleClear = () => {
@@ -372,6 +417,9 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
 
       {/* Trigger button */}
       <button
+        ref={triggerRef}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
         onClick={() => {
           setTempRange(value)
           if (value?.from) {
@@ -428,6 +476,8 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
         <ModalPortal>
         <div
           ref={setPanel}
+          role="dialog"
+          aria-label="Pilih rentang tanggal"
           className="fixed z-[70] rounded-3xl overflow-y-auto overflow-x-hidden"
           style={{
             // visibility dibuka oleh useLayoutEffect setelah posisi terhitung —
@@ -448,7 +498,9 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
             {/* Navigation row */}
             <div className="flex items-center justify-between mb-4">
               <button
+                type="button"
                 onClick={handlePrev}
+                aria-label="Bulan sebelumnya"
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
                 style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
                 onMouseEnter={e => {
@@ -463,7 +515,9 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <button
+                type="button"
                 onClick={handleNext}
+                aria-label="Bulan berikutnya"
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
                 style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
                 onMouseEnter={e => {
@@ -524,7 +578,8 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsOpen(false)}
+                type="button"
+                onClick={tutupKePemicu}
                 className="px-4 py-1.5 rounded-full text-xs font-medium transition-all"
                 style={{ color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
@@ -533,6 +588,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleApply}
                 disabled={!tempRange?.from}
                 className="px-4 py-1.5 rounded-full text-xs font-semibold transition-all"
