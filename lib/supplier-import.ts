@@ -1,9 +1,10 @@
 import * as XLSX from 'xlsx'
 import {
+  BANK_ATAS_NAMA_MAX,
+  BANK_NAMA_MAX,
+  BANK_REKENING_MAX,
   NAMA_MAX,
   NAMA_MIN,
-  TERMIN_MAX,
-  TERMIN_MIN,
   namaSupplierKey,
   normalizeNamaSupplier,
 } from '@/lib/supplier'
@@ -18,12 +19,21 @@ import {
 // dikenal jadi WARNING — bukan error: supplier-nya tetap layak diimpor tanpa
 // akun default, dan menggagalkan seluruh file karena satu kode salah ketik
 // memaksa orang mengulang dari awal.
+//
+// ══ NOMOR REKENING TETAP TEKS ═════════════════════════════════════════════
+// Sel dibaca apa adanya sebagai string, tidak pernah lewat Number(): "0123"
+// harus tetap "0123". Berkas hasil ekspor kita menulis semua sel sebagai
+// string, jadi round-trip aman. Yang tidak bisa diselamatkan parser mana pun
+// adalah sel yang di Excel sudah berupa ANGKA — nolnya hilang sebelum berkas
+// sampai ke sini.
 
 export interface ParsedSupplierRow {
   nama: string
   kontak: string | null
   npwp: string | null
-  terminPembayaran: number | null
+  bankNama: string | null
+  bankRekening: string | null
+  bankAtasNama: string | null
   /** KODE akun hutang dari file. Route yang me-resolve ke id. */
   akunHutangKode: string | null
 }
@@ -31,11 +41,11 @@ export interface ParsedSupplierRow {
 export interface SupplierParseResult {
   rows: ParsedSupplierRow[]
   errors: string[]
-  /** Non-blocking: baris dilewati, termin tak terbaca, nama dobel di file. */
+  /** Non-blocking: baris dilewati, nilai terlalu panjang, nama dobel di file, kolom termin lama. */
   warnings?: string[]
 }
 
-type Field = 'nama' | 'kontak' | 'npwp' | 'termin' | 'akun'
+type Field = 'nama' | 'kontak' | 'npwp' | 'bankNama' | 'bankRekening' | 'bankAtasNama' | 'akun'
 
 const REQUIRED_FIELDS: Field[] = ['nama']
 
@@ -56,17 +66,34 @@ const HEADER_ALIASES: Record<string, Field> = {
   'no npwp': 'npwp',
   'nomor npwp': 'npwp',
   'tax id': 'npwp',
-  'termin': 'termin',
-  'termin pembayaran': 'termin',
-  'termin hari': 'termin',
-  'termin (hari)': 'termin',
-  'tempo': 'termin',
-  'payment term': 'termin',
+  'bank': 'bankNama',
+  'nama bank': 'bankNama',
+  'bank name': 'bankNama',
+  'rekening': 'bankRekening',
+  'no rekening': 'bankRekening',
+  'nomor rekening': 'bankRekening',
+  'no rek': 'bankRekening',
+  'norek': 'bankRekening',
+  'rekening bank': 'bankRekening',
+  'account number': 'bankRekening',
+  'atas nama': 'bankAtasNama',
+  'atas nama rekening': 'bankAtasNama',
+  'nama rekening': 'bankAtasNama',
+  'pemilik rekening': 'bankAtasNama',
+  'account name': 'bankAtasNama',
   'akun hutang': 'akun',
   'kode akun hutang': 'akun',
   'akun hutang default': 'akun',
   'kode akun': 'akun',
 }
+
+/**
+ * Header termin dari berkas LAMA (sebelum 0019). Tidak dipetakan ke apa pun —
+ * termin kini diisi per invoice (D43) — tapi kehadirannya diberi peringatan
+ * sekali, supaya orang yang mengimpor cadangan lama tahu kolom itu diabaikan
+ * dan tidak mengira nilainya ikut tersimpan.
+ */
+const HEADER_TERMIN_LAMA = new Set(['termin', 'termin pembayaran', 'termin hari', 'tempo', 'payment term'])
 
 const SUPPLIER_SHEET_NAME_RE = /supplier|vendor/i
 
@@ -85,23 +112,32 @@ function cellToString(value: unknown): string {
 
 const kosongJadiNull = (v: string): string | null => (v === '' ? null : v)
 
-function detectHeader(
-  matrix: unknown[][]
-): { headerRowIdx: number; colIndex: Partial<Record<Field, number>>; requiredMatched: number } | null {
+type HeaderTerdeteksi = {
+  headerRowIdx: number
+  colIndex: Partial<Record<Field, number>>
+  requiredMatched: number
+  /** Baris header memuat kolom termin dari berkas lama (lihat HEADER_TERMIN_LAMA). */
+  adaTerminLama: boolean
+}
+
+function detectHeader(matrix: unknown[][]): HeaderTerdeteksi | null {
   const scanLimit = Math.min(matrix.length, 20)
-  let best: { headerRowIdx: number; colIndex: Partial<Record<Field, number>>; requiredMatched: number } | null = null
+  let best: HeaderTerdeteksi | null = null
   for (let i = 0; i < scanLimit; i++) {
     const colIndex: Partial<Record<Field, number>> = {}
+    let adaTerminLama = false
     ;(matrix[i] ?? []).forEach((cell, idx) => {
-      // normalizeHeader membuang tanda baca, jadi "Termin (Hari)" perlu
-      // dicocokkan dua kali: apa adanya dan versi tanpa kurung.
+      // normalizeHeader membuang tanda baca, jadi header berkurung seperti
+      // "Termin (Hari)" perlu dicocokkan dua kali: apa adanya dan tanpa kurung.
       const key = normalizeHeader(cell)
-      const field = HEADER_ALIASES[key] ?? HEADER_ALIASES[key.replace(/[()]/g, '').replace(/\s+/g, ' ').trim()]
+      const tanpaKurung = key.replace(/[()]/g, '').replace(/\s+/g, ' ').trim()
+      const field = HEADER_ALIASES[key] ?? HEADER_ALIASES[tanpaKurung]
       if (field && colIndex[field] === undefined) colIndex[field] = idx
+      if (HEADER_TERMIN_LAMA.has(key) || HEADER_TERMIN_LAMA.has(tanpaKurung)) adaTerminLama = true
     })
     const requiredMatched = REQUIRED_FIELDS.filter(f => colIndex[f] !== undefined).length
     if (requiredMatched === 0) continue
-    if (!best || requiredMatched > best.requiredMatched) best = { headerRowIdx: i, colIndex, requiredMatched }
+    if (!best || requiredMatched > best.requiredMatched) best = { headerRowIdx: i, colIndex, requiredMatched, adaTerminLama }
   }
   return best
 }
@@ -161,6 +197,12 @@ export function parseSupplierWorkbook(data: ArrayBuffer): SupplierParseResult {
   const warnings: string[] = []
   const namaTerpakai = new Map<string, number>()
 
+  if (header.adaTerminLama) {
+    warnings.push(
+      'Kolom termin diabaikan — termin kini diisi per invoice pembelian, bukan per supplier.'
+    )
+  }
+
   const ambil = (baris: unknown[], f: Field): string =>
     colIndex[f] === undefined ? '' : cellToString(baris[colIndex[f]!])
 
@@ -198,24 +240,25 @@ export function parseSupplierWorkbook(data: ArrayBuffer): SupplierParseResult {
     }
     namaTerpakai.set(kunci, nomorBaris)
 
-    let terminPembayaran: number | null = null
-    const terminRaw = ambil(baris, 'termin')
-    if (terminRaw !== '') {
-      const n = Number(terminRaw)
-      if (!Number.isInteger(n) || n < TERMIN_MIN || n > TERMIN_MAX) {
-        warnings.push(
-          `Baris ${nomorBaris}: termin "${terminRaw}" tidak dikenali (harus ${TERMIN_MIN}–${TERMIN_MAX} hari) — dikosongkan.`
-        )
-      } else {
-        terminPembayaran = n
+    // Nilai yang melebihi batas formulir dikosongkan dengan peringatan, bukan
+    // menggagalkan berkas — pola yang sama dengan kode akun tak dikenal. Pada
+    // supplier yang sudah ada, "kosong" berarti nilai lamanya dipertahankan.
+    const teksBerbatas = (f: Field, label: string, maks: number): string | null => {
+      const v = ambil(baris, f)
+      if (v.length > maks) {
+        warnings.push(`Baris ${nomorBaris}: ${label} lebih dari ${maks} karakter — dikosongkan.`)
+        return null
       }
+      return kosongJadiNull(v)
     }
 
     rows.push({
       nama,
       kontak: kosongJadiNull(ambil(baris, 'kontak')),
       npwp: kosongJadiNull(ambil(baris, 'npwp')),
-      terminPembayaran,
+      bankNama: teksBerbatas('bankNama', 'nama bank', BANK_NAMA_MAX),
+      bankRekening: teksBerbatas('bankRekening', 'nomor rekening', BANK_REKENING_MAX),
+      bankAtasNama: teksBerbatas('bankAtasNama', 'nama pemilik rekening', BANK_ATAS_NAMA_MAX),
       akunHutangKode: kosongJadiNull(ambil(baris, 'akun')),
     })
   }

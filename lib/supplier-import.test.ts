@@ -8,7 +8,7 @@ import { parseSupplierWorkbook } from './supplier-import'
 //
 // Bedanya penting: `errors` berarti JANGAN tulis ke DB sama sekali, sementara
 // `warnings` berarti impor tetap jalan dengan catatan. Menggagalkan seluruh
-// berkas karena satu termin salah ketik memaksa orang mengulang dari awal.
+// berkas karena satu sel salah ketik memaksa orang mengulang dari awal.
 
 const wb = (aoa: unknown[][], sheetName = 'Master Supplier'): ArrayBuffer => {
   const sheet = XLSX.utils.aoa_to_sheet(aoa)
@@ -26,11 +26,37 @@ describe('deteksi header', () => {
     }
   })
 
-  it('menerima ejaan alternatif kolom termin, termasuk yang berkurung', () => {
+  it('menerima ejaan alternatif kolom rekening (D43)', () => {
+    const kasus: [string, string, string][] = [
+      ['Nama Bank', 'No. Rekening', 'Atas Nama Rekening'],
+      ['Bank', 'Nomor Rekening', 'Atas Nama'],
+      ['Bank Name', 'No Rek', 'Nama Rekening'],
+      ['nama_bank', 'norek', 'Pemilik Rekening'],
+      ['Bank', 'Account Number', 'Account Name'],
+    ]
+    for (const [b, r, a] of kasus) {
+      const hasil = parseSupplierWorkbook(wb([['Nama Supplier', b, r, a], ['Toko Jaya', 'BCA', '0123456789', 'Toko Jaya']]))
+      expect(hasil.errors, b + '/' + r + '/' + a).toEqual([])
+      expect(hasil.rows[0].bankNama, b).toBe('BCA')
+      expect(hasil.rows[0].bankRekening, r).toBe('0123456789')
+      expect(hasil.rows[0].bankAtasNama, a).toBe('Toko Jaya')
+    }
+  })
+
+  it('nomor rekening berawalan nol dibaca apa adanya dari sel teks', () => {
+    const hasil = parseSupplierWorkbook(wb([['Nama Supplier', 'No. Rekening'], ['Toko Jaya', '000123']]))
+    expect(hasil.rows[0].bankRekening).toBe('000123')
+  })
+
+  it('kolom termin dari berkas LAMA diabaikan, dengan SATU peringatan — bukan galat', () => {
+    // Cadangan hasil ekspor sebelum 0019 masih membawa "Termin (Hari)".
     for (const judul of ['Termin', 'Termin Pembayaran', 'Termin (Hari)', 'Tempo', 'Payment Term']) {
-      const hasil = parseSupplierWorkbook(wb([['Nama Supplier', judul], ['Toko Jaya', '30']]))
+      const hasil = parseSupplierWorkbook(wb([['Nama Supplier', judul], ['Toko Jaya', '30'], ['CV Mitra', '60']]))
       expect(hasil.errors, judul).toEqual([])
-      expect(hasil.rows[0].terminPembayaran, judul).toBe(30)
+      expect(hasil.rows, judul).toHaveLength(2)
+      expect(Object.keys(hasil.rows[0]), judul).not.toContain('terminPembayaran')
+      expect(hasil.warnings, judul).toHaveLength(1)
+      expect(hasil.warnings?.[0], judul).toContain('termin diabaikan')
     }
   })
 
@@ -106,15 +132,24 @@ describe('baris', () => {
     expect(hasil.rows).toHaveLength(1)
   })
 
-  it('termin tidak masuk akal jadi WARNING dan dikosongkan, bukan menggagalkan berkas', () => {
+  it('nomor rekening terlalu panjang jadi WARNING dan dikosongkan, bukan menggagalkan berkas', () => {
     const hasil = parseSupplierWorkbook(
-      wb([['Nama Supplier', 'Termin (Hari)'], ['Toko Jaya', 'dua minggu'], ['CV Mitra', '999']])
+      wb([['Nama Supplier', 'No. Rekening'], ['Toko Jaya', '1'.repeat(41)], ['CV Mitra', '0123']])
     )
     expect(hasil.errors).toEqual([])
     expect(hasil.rows).toHaveLength(2)
-    expect(hasil.rows[0].terminPembayaran).toBeNull()
-    expect(hasil.rows[1].terminPembayaran).toBeNull()
-    expect(hasil.warnings).toHaveLength(2)
+    expect(hasil.rows[0].bankRekening).toBeNull()
+    expect(hasil.rows[1].bankRekening).toBe('0123')
+    expect(hasil.warnings).toHaveLength(1)
+  })
+
+  it('sel rekening kosong jadi null — route yang memutuskan "nilai lama bertahan"', () => {
+    const hasil = parseSupplierWorkbook(
+      wb([['Nama Supplier', 'Nama Bank', 'No. Rekening', 'Atas Nama Rekening'], ['Toko Jaya', '', '', '']])
+    )
+    expect(hasil.rows[0].bankNama).toBeNull()
+    expect(hasil.rows[0].bankRekening).toBeNull()
+    expect(hasil.rows[0].bankAtasNama).toBeNull()
   })
 
   it('nama terlalu pendek jadi ERROR — itu data yang tidak bisa dipakai', () => {

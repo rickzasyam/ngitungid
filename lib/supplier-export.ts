@@ -10,12 +10,12 @@ import * as XLSX from 'xlsx'
 // Konsekuensinya bentuk file ini TIDAK boleh "dirapikan" sendiri:
 //
 //   1. Header memakai label kanonik yang ada di HEADER_ALIASES
-//      (lib/supplier-import.ts): Nama Supplier / Kontak / NPWP /
-//      Termin (Hari) / Kode Akun Hutang.
+//      (lib/supplier-import.ts): Nama Supplier / Kontak / NPWP / Nama Bank /
+//      No. Rekening / Atas Nama Rekening / Kode Akun Hutang.
 //   2. SEMUA sel ditulis sebagai STRING — alasan yang sama dengan export COA:
-//      NPWP dan kode akun sering berbentuk angka berawalan nol, dan menulisnya
-//      sebagai angka menghapus nol depan itu PERMANEN di file cadangan.
-//      Termin ikut string; importer mengembalikannya ke integer.
+//      NPWP, NOMOR REKENING, dan kode akun sering berawalan nol, dan menulisnya
+//      sebagai angka menghapus nol depan itu PERMANEN di file cadangan. Untuk
+//      nomor rekening itu berarti transfer ke rekening yang salah.
 //   3. Nilai null ditulis sebagai sel KOSONG, karena importer memetakan string
 //      kosong → null. Menulis "-" atau "N/A" akan kembali sebagai teks literal.
 //   4. Kolom akun menyimpan KODE akun, bukan id-nya. Id berubah setiap Master
@@ -30,7 +30,9 @@ export interface SupplierExportRow {
   nama: string
   kontak: string | null
   npwp: string | null
-  terminPembayaran: number | null
+  bankNama: string | null
+  bankRekening: string | null
+  bankAtasNama: string | null
   /** KODE akun hutang default, bukan id. null = tidak dipasang. */
   akunHutangKode: string | null
 }
@@ -40,7 +42,9 @@ export const SUPPLIER_EXPORT_HEADERS = [
   'Nama Supplier',
   'Kontak',
   'NPWP',
-  'Termin (Hari)',
+  'Nama Bank',
+  'No. Rekening',
+  'Atas Nama Rekening',
   'Kode Akun Hutang',
 ] as const
 
@@ -51,7 +55,9 @@ function toCells(r: SupplierExportRow): string[] {
     String(r.nama),
     r.kontak ?? '',
     r.npwp ?? '',
-    r.terminPembayaran === null ? '' : String(r.terminPembayaran),
+    r.bankNama ?? '',
+    r.bankRekening ?? '',
+    r.bankAtasNama ?? '',
     r.akunHutangKode ?? '',
   ]
 }
@@ -59,7 +65,7 @@ function toCells(r: SupplierExportRow): string[] {
 export function buildSupplierWorkbook(rows: SupplierExportRow[]): ArrayBuffer {
   const aoa: string[][] = [[...SUPPLIER_EXPORT_HEADERS], ...rows.map(toCells)]
   const sheet = XLSX.utils.aoa_to_sheet(aoa)
-  sheet['!cols'] = [{ wch: 34 }, { wch: 26 }, { wch: 22 }, { wch: 12 }, { wch: 18 }]
+  sheet['!cols'] = [{ wch: 34 }, { wch: 26 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 28 }, { wch: 18 }]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, sheet, SUPPLIER_EXPORT_SHEET_NAME)

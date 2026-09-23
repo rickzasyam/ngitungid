@@ -160,7 +160,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           nama: r.nama,
           kontak: r.kontak,
           npwp: r.npwp,
-          terminPembayaran: r.terminPembayaran,
+          bankNama: r.bankNama,
+          bankRekening: r.bankRekening,
+          bankAtasNama: r.bankAtasNama,
           akunHutangDefaultId: nilai[i].akunHutangDefaultId,
         })
       )
@@ -176,7 +178,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const isi: Record<string, unknown> = { nama: r.nama, updatedAt: now }
     if (r.kontak !== null) isi.kontak = r.kontak
     if (r.npwp !== null) isi.npwp = r.npwp
-    if (r.terminPembayaran !== null) isi.terminPembayaran = r.terminPembayaran
+    // Kolom rekening tunduk pada aturan yang SAMA: sel kosong tidak menghapus
+    // nomor rekening yang sudah tersimpan.
+    if (r.bankNama !== null) isi.bankNama = r.bankNama
+    if (r.bankRekening !== null) isi.bankRekening = r.bankRekening
+    if (r.bankAtasNama !== null) isi.bankAtasNama = r.bankAtasNama
     if (nilai[i].akunDiputuskan) isi.akunHutangDefaultId = nilai[i].akunHutangDefaultId
 
     statements.push(db.update(masterSupplier).set(isi).where(eq(masterSupplier.id, ada.id)))

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Test STRUKTURAL atas source route supplier — pola sama dengan
@@ -186,7 +186,7 @@ describe('impor: pencocokan nama & sel kosong', () => {
 
   it('supplier BARU: seluruh field ditulis, termasuk yang kosong', () => {
     const blokBaru = IMPORT.slice(IMPORT.indexOf('if (!ada) {'), IMPORT.indexOf('// Supplier yang SUDAH ADA'))
-    for (const f of ['kontak:', 'npwp:', 'terminPembayaran:', 'akunHutangDefaultId:']) {
+    for (const f of ['kontak:', 'npwp:', 'bankNama:', 'bankRekening:', 'bankAtasNama:', 'akunHutangDefaultId:']) {
       expect(blokBaru, f).toContain(f)
     }
   })
@@ -194,11 +194,18 @@ describe('impor: pencocokan nama & sel kosong', () => {
   it('supplier YANG SUDAH ADA: hanya field terisi yang ditulis', () => {
     // Sel kosong berarti "tidak disebut", bukan "kosongkan". Tanpa penjagaan
     // ini, berkas impor yang cuma memuat kolom nama akan menghapus kontak,
-    // NPWP, termin, dan akun default seluruh supplier yang disebutnya.
+    // NPWP, rekening, dan akun default seluruh supplier yang disebutnya.
     expect(IMPORT).toContain('if (r.kontak !== null) isi.kontak = r.kontak')
     expect(IMPORT).toContain('if (r.npwp !== null) isi.npwp = r.npwp')
-    expect(IMPORT).toContain('if (r.terminPembayaran !== null) isi.terminPembayaran')
     expect(IMPORT).toContain('if (nilai[i].akunDiputuskan) isi.akunHutangDefaultId')
+  })
+
+  it('kolom rekening tunduk pada aturan sel kosong yang SAMA (D43)', () => {
+    // Berkas yang tidak memuat kolom rekening tidak boleh menghapus nomor
+    // rekening yang sudah tersimpan.
+    expect(IMPORT).toContain('if (r.bankNama !== null) isi.bankNama = r.bankNama')
+    expect(IMPORT).toContain('if (r.bankRekening !== null) isi.bankRekening = r.bankRekening')
+    expect(IMPORT).toContain('if (r.bankAtasNama !== null) isi.bankAtasNama = r.bankAtasNama')
   })
 
   it('kode akun salah pada supplier yang sudah ada TIDAK mengosongkan akun lamanya', () => {
@@ -300,5 +307,45 @@ describe('dialog hapus supplier', () => {
     expect(UI).not.toContain('Master COA dan jurnal tidak terpengaruh')
     expect(UI).toContain('Supplier yang masih dipakai invoice pembelian atau baris jurnal')
     expect(UI).toContain('tidak bisa dihapus')
+  })
+})
+
+// ══ MIGRASI 0019 (D43): termin supplier dihapus, rekening menggantikannya ══
+describe('termin supplier sudah tidak dirujuk kode mana pun', () => {
+  const semuaBerkas = (dir: string): string[] =>
+    readdirSync(join(process.cwd(), dir)).flatMap(n => {
+      const rel = join(dir, n)
+      return statSync(join(process.cwd(), rel)).isDirectory() ? semuaBerkas(rel) : [rel]
+    })
+
+  it('tidak ada terminPembayaran / termin_pembayaran di app, lib, components — kecuali migrasi & test', () => {
+    const berkas = ['app', 'lib', 'components']
+      .flatMap(semuaBerkas)
+      .filter(f => /\.(ts|tsx)$/.test(f) && !/\.test\.ts$/.test(f) && !f.includes('migrations'))
+    // Komentar dibuang dulu: skema sengaja MENJELASKAN bahwa kolom itu sudah
+    // dihapus di 0019, dan penjelasan itu bukan rujukan.
+    const tanpaKomentar = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    const perujuk = berkas.filter(f =>
+      /terminPembayaran|termin_pembayaran|TERMIN_M(IN|AX)/.test(tanpaKomentar(read(f)))
+    )
+    expect(perujuk).toEqual([])
+  })
+
+  it('daftar & ekspor membaca kolom rekening', () => {
+    for (const [nama, src] of [['daftar', LIST], ['ekspor', EXPORT]] as const) {
+      expect(src, nama).toContain('bankNama: masterSupplier.bankNama')
+      expect(src, nama).toContain('bankRekening: masterSupplier.bankRekening')
+      expect(src, nama).toContain('bankAtasNama: masterSupplier.bankAtasNama')
+    }
+  })
+
+  it('0019 hanya men-DROP satu kolom itu — tidak menyentuh objek lain', () => {
+    const berkas0019 = readdirSync(join(process.cwd(), 'lib', 'db', 'migrations')).filter(n => n.startsWith('0019_'))
+    expect(berkas0019).toHaveLength(1)
+    const isi = read('lib', 'db', 'migrations', berkas0019[0])
+      .split(/\r?\n/)
+      .filter(l => l.trim() !== '' && !l.trim().startsWith('--'))
+      .join(' ')
+    expect(isi.trim()).toBe('ALTER TABLE "master_supplier" DROP COLUMN "termin_pembayaran";')
   })
 })

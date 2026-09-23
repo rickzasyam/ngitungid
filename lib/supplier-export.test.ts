@@ -5,6 +5,7 @@ import {
   SUPPLIER_EXPORT_HEADERS,
   type SupplierExportRow,
 } from './supplier-export'
+import * as XLSX from 'xlsx'
 import { parseSupplierWorkbook } from './supplier-import'
 
 // ══ PENJAGA BERDIRI: KONTRAK ROUND-TRIP ══════════════════════════
@@ -12,10 +13,28 @@ import { parseSupplierWorkbook } from './supplier-import'
 // menghasilkan daftar yang identik. Kalau kontrak ini putus, gejalanya baru
 // muncul saat seseorang butuh cadangannya — yaitu saat paling buruk.
 
+const kosongBank = { bankNama: null, bankRekening: null, bankAtasNama: null }
+
 const rows: SupplierExportRow[] = [
-  { nama: 'Toko Bangunan Jaya', kontak: 'Pak Budi 0812', npwp: '01.234.567.8-901.000', terminPembayaran: 30, akunHutangKode: '21-0001' },
-  { nama: 'PT Sumber Rejeki', kontak: null, npwp: null, terminPembayaran: 0, akunHutangKode: null },
-  { nama: 'CV Mitra Abadi', kontak: 'admin@mitra.co.id', npwp: null, terminPembayaran: null, akunHutangKode: '21-0002' },
+  {
+    nama: 'Toko Bangunan Jaya',
+    kontak: 'Pak Budi 0812',
+    npwp: '01.234.567.8-901.000',
+    bankNama: 'BCA',
+    bankRekening: '0123456789',
+    bankAtasNama: 'Toko Bangunan Jaya',
+    akunHutangKode: '21-0001',
+  },
+  { nama: 'PT Sumber Rejeki', kontak: null, npwp: null, ...kosongBank, akunHutangKode: null },
+  {
+    nama: 'CV Mitra Abadi',
+    kontak: 'admin@mitra.co.id',
+    npwp: null,
+    bankNama: 'Bank Mandiri',
+    bankRekening: '0000123',
+    bankAtasNama: null,
+    akunHutangKode: '21-0002',
+  },
 ]
 
 const roundTrip = (input: SupplierExportRow[]) => {
@@ -39,7 +58,9 @@ describe('round-trip export → import', () => {
         nama: rows[i].nama,
         kontak: rows[i].kontak,
         npwp: rows[i].npwp,
-        terminPembayaran: rows[i].terminPembayaran,
+        bankNama: rows[i].bankNama,
+        bankRekening: rows[i].bankRekening,
+        bankAtasNama: rows[i].bankAtasNama,
         akunHutangKode: rows[i].akunHutangKode,
       })
     }
@@ -51,14 +72,28 @@ describe('round-trip export → import', () => {
     expect(sumber.kontak).toBeNull()
     expect(sumber.npwp).toBeNull()
     expect(sumber.akunHutangKode).toBeNull()
+    expect(sumber.bankNama).toBeNull()
+    expect(sumber.bankRekening).toBeNull()
+    expect(sumber.bankAtasNama).toBeNull()
   })
 
-  it('termin 0 bertahan sebagai 0, TIDAK berubah jadi null', () => {
-    // Nol dan kosong berbeda maknanya: 0 = bayar tunai di muka, null = belum
-    // ditentukan. Kalau sel kosong dan "0" tertukar, termin supplier berubah
-    // diam-diam setiap kali cadangan dipulihkan.
+  it('NOMOR REKENING berawalan nol tidak kehilangan nol depannya (D43)', () => {
+    // Nomor rekening yang kehilangan nol depan adalah nomor rekening ORANG LAIN.
+    // Ketahuannya baru saat transfer gagal — atau malah berhasil ke rekening
+    // yang salah.
     const hasil = roundTrip(rows)
-    expect(hasil.rows.find(r => r.nama === 'PT Sumber Rejeki')!.terminPembayaran).toBe(0)
+    expect(hasil.rows[0].bankRekening).toBe('0123456789')
+    expect(hasil.rows.find(r => r.nama === 'CV Mitra Abadi')!.bankRekening).toBe('0000123')
+  })
+
+  it('sel rekening di berkas ekspor bertipe TEKS, bukan angka', () => {
+    const buf = buildSupplierWorkbook([rows[0]])
+    const book = XLSX.read(new Uint8Array(buf), { type: 'array' })
+    const sheet = book.Sheets[book.SheetNames[0]]
+    const kolom = SUPPLIER_EXPORT_HEADERS.indexOf('No. Rekening')
+    const sel = sheet[XLSX.utils.encode_cell({ r: 1, c: kolom })]
+    expect(sel.t).toBe('s')
+    expect(sel.v).toBe('0123456789')
   })
 
   it('NPWP berawalan nol tidak kehilangan nol depannya', () => {
@@ -71,7 +106,7 @@ describe('round-trip export → import', () => {
 
   it('kode akun berawalan nol juga utuh', () => {
     const hasil = roundTrip([
-      { nama: 'Vendor Nol', kontak: null, npwp: null, terminPembayaran: null, akunHutangKode: '0021' },
+      { nama: 'Vendor Nol', kontak: null, npwp: null, ...kosongBank, akunHutangKode: '0021' },
     ])
     expect(hasil.rows[0].akunHutangKode).toBe('0021')
   })
@@ -94,9 +129,15 @@ describe('header export', () => {
       'Nama Supplier',
       'Kontak',
       'NPWP',
-      'Termin (Hari)',
+      'Nama Bank',
+      'No. Rekening',
+      'Atas Nama Rekening',
       'Kode Akun Hutang',
     ])
+  })
+
+  it('tidak ada lagi kolom termin — ia melekat pada invoice (D43, 0019)', () => {
+    expect(SUPPLIER_EXPORT_HEADERS.join(' ').toLowerCase()).not.toContain('termin')
   })
 })
 

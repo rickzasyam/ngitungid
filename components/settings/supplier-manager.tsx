@@ -33,10 +33,11 @@ import {
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import {
+  BANK_ATAS_NAMA_MAX,
+  BANK_NAMA_MAX,
+  BANK_REKENING_MAX,
   isHutangAccount,
   NAMA_MAX,
-  TERMIN_MAX,
-  TERMIN_MIN,
   validateSupplierInput,
 } from '@/lib/supplier'
 
@@ -45,7 +46,9 @@ interface SupplierRow {
   nama: string
   kontak: string | null
   npwp: string | null
-  terminPembayaran: number | null
+  bankNama: string | null
+  bankRekening: string | null
+  bankAtasNama: string | null
   akunHutangDefaultId: string | null
   akunHutangKode: string | null
   akunHutangNama: string | null
@@ -62,7 +65,9 @@ interface FormState {
   nama: string
   kontak: string
   npwp: string
-  terminPembayaran: string
+  bankNama: string
+  bankRekening: string
+  bankAtasNama: string
   akunHutangDefaultId: string
 }
 
@@ -77,9 +82,19 @@ const kosongForm = (): FormState => ({
   nama: '',
   kontak: '',
   npwp: '',
-  terminPembayaran: '',
+  bankNama: '',
+  bankRekening: '',
+  bankAtasNama: '',
   akunHutangDefaultId: '',
 })
+
+/** Ringkasan rekening untuk tabel: "BCA · 0123456789 · a.n. PT ABC", atau null. */
+function ringkasRekening(r: Pick<SupplierRow, 'bankNama' | 'bankRekening' | 'bankAtasNama'>): string | null {
+  const bagian = [r.bankNama, r.bankRekening, r.bankAtasNama ? `a.n. ${r.bankAtasNama}` : null].filter(
+    (x): x is string => x !== null && x !== ''
+  )
+  return bagian.length === 0 ? null : bagian.join(' · ')
+}
 
 export function SupplierTab({ clientId, readOnly = false }: { clientId: string; readOnly?: boolean }) {
   const [rows, setRows] = useState<SupplierRow[]>([])
@@ -163,7 +178,9 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
       nama: r.nama,
       kontak: r.kontak ?? '',
       npwp: r.npwp ?? '',
-      terminPembayaran: r.terminPembayaran === null ? '' : String(r.terminPembayaran),
+      bankNama: r.bankNama ?? '',
+      bankRekening: r.bankRekening ?? '',
+      bankAtasNama: r.bankAtasNama ?? '',
       akunHutangDefaultId: r.akunHutangDefaultId ?? '',
     })
     setFormMode('edit')
@@ -177,7 +194,9 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
       nama: form.nama,
       kontak: form.kontak,
       npwp: form.npwp,
-      terminPembayaran: form.terminPembayaran,
+      bankNama: form.bankNama,
+      bankRekening: form.bankRekening,
+      bankAtasNama: form.bankAtasNama,
       akunHutangDefaultId: form.akunHutangDefaultId === '' ? null : form.akunHutangDefaultId,
     })
     if (!check.ok) {
@@ -410,7 +429,7 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
                   <th scope="col" style={th}>Nama</th>
                   <th scope="col" style={th}>Kontak</th>
                   <th scope="col" style={th}>NPWP</th>
-                  <th scope="col" style={{ ...th, textAlign: 'right' }}>Termin</th>
+                  <th scope="col" style={th}>Rekening</th>
                   <th scope="col" style={th}>Akun Hutang Default</th>
                   {bolehTulis && <th scope="col" style={{ ...th, textAlign: 'right' }}>Aksi</th>}
                 </tr>
@@ -421,9 +440,7 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
                     <td style={{ ...td, fontWeight: 600 }}>{r.nama}</td>
                     <td style={td}>{r.kontak ?? '—'}</td>
                     <td style={td}>{r.npwp ?? '—'}</td>
-                    <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {r.terminPembayaran === null ? '—' : `${r.terminPembayaran} hari`}
-                    </td>
+                    <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{ringkasRekening(r) ?? '—'}</td>
                     <td style={td}>
                       {r.akunHutangKode ? (
                         <>
@@ -547,22 +564,52 @@ export function SupplierTab({ clientId, readOnly = false }: { clientId: string; 
                   />
                 </div>
               </div>
-              <div>
-                <label style={label} htmlFor="sup-termin">
-                  Termin pembayaran <span style={optional}>(opsional, hari)</span>
-                </label>
-                <input
-                  id="sup-termin"
-                  type="text"
-                  inputMode="numeric"
-                  value={form.terminPembayaran}
-                  placeholder={`${TERMIN_MIN}–${TERMIN_MAX}`}
-                  onChange={e => setForm(f => ({ ...f, terminPembayaran: e.target.value }))}
-                  style={input}
-                />
-                <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                  Kosongkan kalau belum ditentukan. 0 berarti bayar tunai di muka.
-                </p>
+              {/* Data rekening (D43) — menggantikan termin, yang kini diisi per
+                  invoice. Nomor rekening input TEKS: nol di depan adalah bagian
+                  nomornya dan tidak boleh hilang. */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label style={label} htmlFor="sup-bank-nama">
+                    Nama bank <span style={optional}>(opsional)</span>
+                  </label>
+                  <input
+                    id="sup-bank-nama"
+                    type="text"
+                    value={form.bankNama}
+                    maxLength={BANK_NAMA_MAX}
+                    placeholder="mis. BCA"
+                    onChange={e => setForm(f => ({ ...f, bankNama: e.target.value }))}
+                    style={input}
+                  />
+                </div>
+                <div>
+                  <label style={label} htmlFor="sup-bank-rekening">
+                    No. rekening <span style={optional}>(opsional)</span>
+                  </label>
+                  <input
+                    id="sup-bank-rekening"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={form.bankRekening}
+                    maxLength={BANK_REKENING_MAX}
+                    onChange={e => setForm(f => ({ ...f, bankRekening: e.target.value }))}
+                    style={{ ...input, fontVariantNumeric: 'tabular-nums' }}
+                  />
+                </div>
+                <div>
+                  <label style={label} htmlFor="sup-bank-atas-nama">
+                    Atas nama <span style={optional}>(opsional)</span>
+                  </label>
+                  <input
+                    id="sup-bank-atas-nama"
+                    type="text"
+                    value={form.bankAtasNama}
+                    maxLength={BANK_ATAS_NAMA_MAX}
+                    onChange={e => setForm(f => ({ ...f, bankAtasNama: e.target.value }))}
+                    style={input}
+                  />
+                </div>
               </div>
               <div>
                 <label style={label}>

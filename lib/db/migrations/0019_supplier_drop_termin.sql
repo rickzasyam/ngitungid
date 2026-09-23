@@ -1,0 +1,1 @@
+ALTER TABLE "master_supplier" DROP COLUMN "termin_pembayaran";

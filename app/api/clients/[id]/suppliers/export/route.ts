@@ -40,7 +40,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       nama: masterSupplier.nama,
       kontak: masterSupplier.kontak,
       npwp: masterSupplier.npwp,
-      terminPembayaran: masterSupplier.terminPembayaran,
+      bankNama: masterSupplier.bankNama,
+      bankRekening: masterSupplier.bankRekening,
+      bankAtasNama: masterSupplier.bankAtasNama,
       akunHutangKode: masterCoa.kode,
     })
     .from(masterSupplier)

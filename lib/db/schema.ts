@@ -668,11 +668,11 @@ export const journalLines = pgTable(
 // menghitungnya sebagai supplierUnlinkedCount). Baris jurnal tidak punya
 // kemewahan itu: ia pencatatan yang sudah terjadi.
 //
-// ══ termin_pembayaran integer, bukan interval ═════════════════════════════
-// Isinya JUMLAH HARI (0–365), pola yang sama dengan contracts.tanggalPenagihan
-// yang menyimpan hari-dalam-bulan sebagai integer. Tipe interval Postgres
-// mengundang nilai seperti '1 mon 3 days' yang tidak bisa dijumlahkan ke tanggal
-// jatuh tempo tanpa aturan tambahan.
+// ══ Tidak ada termin di sini (migrasi 0019, D43) ══════════════════════════
+// Termin pembayaran melekat pada INVOICE, bukan pada rekanan — supplier yang
+// sama bisa memberi 3× untuk satu invoice dan tunai untuk yang lain. Kolom
+// `termin_pembayaran` dihapus di 0019; yang tersisa di supplier adalah data
+// rekeningnya.
 export const masterSupplier = pgTable(
   'master_supplier',
   {
@@ -683,11 +683,6 @@ export const masterSupplier = pgTable(
     nama: text('nama').notNull(),
     kontak: text('kontak'),
     npwp: text('npwp'),
-    // ⚠️ DIHAPUS di migrasi 0019 (D43) — termin melekat pada INVOICE, bukan pada
-    // rekanan: supplier yang sama bisa memberi 3× untuk satu invoice dan tunai
-    // untuk yang lain. Dipertahankan di sini sampai 0019 diterapkan, dan sudah
-    // TIDAK DIPAKAI jalur mana pun sejak modul pembelian ada.
-    terminPembayaran: integer('termin_pembayaran'),
     // ── Data rekening, migrasi 0017 (D43) ──────────────────────
     // `bank_rekening` TEXT, bukan angka: nomor rekening bisa berawalan nol dan
     // bukan sesuatu yang pernah dihitung. Menyimpannya sebagai angka membuang

@@ -134,6 +134,13 @@
       "when": 1789987994582,
       "tag": "0018_mutasi_kas",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790167835160,
+      "tag": "0019_supplier_drop_termin",
+      "breakpoints": true
     }
   ]
 }

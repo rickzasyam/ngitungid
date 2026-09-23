@@ -4,8 +4,9 @@ import {
   isHutangAccount,
   NAMA_MIN,
   NAMA_MAX,
-  TERMIN_MIN,
-  TERMIN_MAX,
+  BANK_NAMA_MAX,
+  BANK_REKENING_MAX,
+  BANK_ATAS_NAMA_MAX,
   normalizeNamaSupplier,
   namaSupplierKey,
 } from './supplier'
@@ -47,7 +48,9 @@ describe('validateSupplierInput — yang sah', () => {
       nama: 'Toko Bangunan Jaya',
       kontak: null,
       npwp: null,
-      terminPembayaran: null,
+      bankNama: null,
+      bankRekening: null,
+      bankAtasNama: null,
       akunHutangDefaultId: null,
     })
   })
@@ -68,22 +71,40 @@ describe('validateSupplierInput — yang sah', () => {
     expect(r.value.kontak).not.toBe('')
   })
 
-  it('termin 0 DIPERTAHANKAN — berbeda maknanya dari kosong', () => {
-    // 0 = bayar tunai di muka. null = belum ditentukan. Dua hal berbeda.
-    const nol = validateSupplierInput({ nama: 'Vendor A', terminPembayaran: 0 })
-    expect(nol.ok).toBe(true)
-    if (nol.ok) expect(nol.value.terminPembayaran).toBe(0)
-
-    const kosong = validateSupplierInput({ nama: 'Vendor A', terminPembayaran: '' })
-    expect(kosong.ok).toBe(true)
-    if (kosong.ok) expect(kosong.value.terminPembayaran).toBeNull()
-  })
-
-  it('termin dalam bentuk string angka diterima', () => {
-    const r = validateSupplierInput({ nama: 'Vendor A', terminPembayaran: '30' })
+  it('data rekening disimpan sebagai TEKS — nol di depan nomor rekening bertahan (D43)', () => {
+    const r = validateSupplierInput({
+      nama: 'Vendor A',
+      bankNama: ' BCA ',
+      bankRekening: '0123456789',
+      bankAtasNama: 'PT Vendor A',
+    })
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.value.terminPembayaran).toBe(30)
+    expect(r.value.bankNama).toBe('BCA')
+    expect(r.value.bankRekening).toBe('0123456789')
+    expect(r.value.bankRekening).not.toBe('123456789')
+    expect(r.value.bankAtasNama).toBe('PT Vendor A')
+  })
+
+  it('rekening yang semuanya nol pun tidak disentuh — tidak pernah lewat Number()', () => {
+    const r = validateSupplierInput({ nama: 'Vendor A', bankRekening: '000012' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.value.bankRekening).toBe('000012')
+  })
+
+  it('kolom rekening yang kosong atau spasi jadi null', () => {
+    const r = validateSupplierInput({ nama: 'Vendor A', bankNama: '  ', bankRekening: '', bankAtasNama: null })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.value.bankNama).toBeNull()
+    expect(r.value.bankRekening).toBeNull()
+    expect(r.value.bankAtasNama).toBeNull()
+  })
+
+  it('termin tidak lagi diterima — ia melekat pada invoice (D43, migrasi 0019)', () => {
+    const r = validateSupplierInput({ nama: 'Vendor A', terminPembayaran: 30 } as Record<string, unknown>)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(Object.keys(r.value)).not.toContain('terminPembayaran')
   })
 
   it('nama tepat di batas bawah & atas diterima', () => {
@@ -91,10 +112,14 @@ describe('validateSupplierInput — yang sah', () => {
     expect(validateSupplierInput({ nama: 'A'.repeat(NAMA_MAX) }).ok).toBe(true)
   })
 
-  it('termin tepat di batas diterima', () => {
-    for (const t of [TERMIN_MIN, TERMIN_MAX]) {
-      expect(validateSupplierInput({ nama: 'Vendor A', terminPembayaran: t }).ok, String(t)).toBe(true)
-    }
+  it('data rekening tepat di batas panjang diterima', () => {
+    const r = validateSupplierInput({
+      nama: 'Vendor A',
+      bankNama: 'B'.repeat(BANK_NAMA_MAX),
+      bankRekening: '0'.repeat(BANK_REKENING_MAX),
+      bankAtasNama: 'A'.repeat(BANK_ATAS_NAMA_MAX),
+    })
+    expect(r.ok).toBe(true)
   })
 
   it('akun hutang default berupa UUID diterima', () => {
@@ -125,13 +150,18 @@ describe('validateSupplierInput — yang ditolak', () => {
     if (!panjang.ok) expect(punyaGalat(panjang.errors, `maksimal ${NAMA_MAX}`)).toBe(true)
   })
 
-  it('menolak termin di luar rentang, pecahan, atau bukan angka', () => {
-    for (const t of [-1, TERMIN_MAX + 1, 12.5, 'tiga puluh']) {
-      const r = validateSupplierInput({ nama: 'Vendor A', terminPembayaran: t })
-      expect(r.ok, String(t)).toBe(false)
-      if (r.ok) continue
-      expect(punyaGalat(r.errors, 'Termin pembayaran')).toBe(true)
-    }
+  it('menolak data rekening yang melebihi batas panjang', () => {
+    const r = validateSupplierInput({
+      nama: 'Vendor A',
+      bankNama: 'B'.repeat(BANK_NAMA_MAX + 1),
+      bankRekening: '0'.repeat(BANK_REKENING_MAX + 1),
+      bankAtasNama: 'A'.repeat(BANK_ATAS_NAMA_MAX + 1),
+    })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(punyaGalat(r.errors, 'Nama bank maksimal')).toBe(true)
+    expect(punyaGalat(r.errors, 'Nomor rekening maksimal')).toBe(true)
+    expect(punyaGalat(r.errors, 'Nama pemilik rekening maksimal')).toBe(true)
   })
 
   it('menolak akun hutang default yang bukan UUID', () => {
@@ -146,7 +176,7 @@ describe('validateSupplierInput — yang ditolak', () => {
   it('mengumpulkan semua galat sekaligus, tidak berhenti di yang pertama', () => {
     const r = validateSupplierInput({
       nama: '',
-      terminPembayaran: 999,
+      bankRekening: '0'.repeat(BANK_REKENING_MAX + 1),
       akunHutangDefaultId: 'bukan-uuid',
     })
     expect(r.ok).toBe(false)

@@ -13,8 +13,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export const NAMA_MIN = 2
 export const NAMA_MAX = 120
-export const TERMIN_MIN = 0
-export const TERMIN_MAX = 365
+export const BANK_NAMA_MAX = 80
+export const BANK_REKENING_MAX = 40
+export const BANK_ATAS_NAMA_MAX = 120
 
 /**
  * Bentuk SIMPAN sebuah nama supplier: spasi ganda dirapikan, ujungnya di-trim.
@@ -58,7 +59,9 @@ export type SupplierInput = {
   nama?: unknown
   kontak?: unknown
   npwp?: unknown
-  terminPembayaran?: unknown
+  bankNama?: unknown
+  bankRekening?: unknown
+  bankAtasNama?: unknown
   akunHutangDefaultId?: unknown
 }
 
@@ -67,7 +70,10 @@ export type SupplierValue = {
   nama: string
   kontak: string | null
   npwp: string | null
-  terminPembayaran: number | null
+  bankNama: string | null
+  /** TEKS, bukan angka — nol di depan nomor rekening harus bertahan (D43). */
+  bankRekening: string | null
+  bankAtasNama: string | null
   akunHutangDefaultId: string | null
 }
 
@@ -110,17 +116,21 @@ export function validateSupplierInput(input: SupplierInput): SupplierCheck {
     return t === '' ? null : t
   }
 
-  // Termin: jumlah HARI, bukan tanggal. Kosong = belum ditentukan, dan itu
-  // berbeda dari 0 (bayar tunai di muka) — dua-duanya nilai yang sah.
-  let terminPembayaran: number | null = null
-  const rawTermin = input.terminPembayaran
-  if (rawTermin !== null && rawTermin !== undefined && rawTermin !== '') {
-    const n = typeof rawTermin === 'number' ? rawTermin : Number(String(rawTermin).trim())
-    if (!Number.isInteger(n) || n < TERMIN_MIN || n > TERMIN_MAX) {
-      errors.push(`Termin pembayaran harus bilangan bulat ${TERMIN_MIN}–${TERMIN_MAX} hari.`)
-    } else {
-      terminPembayaran = n
-    }
+  // Data rekening (D43, menggantikan termin — termin kini melekat pada invoice).
+  // Semuanya teks bebas; yang dijaga hanya panjangnya. Nomor rekening SENGAJA
+  // tidak diubah jadi angka: nol di depan adalah bagian nomornya, dan
+  // Number('0123') membuangnya tanpa galat apa pun.
+  const bankNama = teksOpsional(input.bankNama)
+  const bankRekening = teksOpsional(input.bankRekening)
+  const bankAtasNama = teksOpsional(input.bankAtasNama)
+  if (bankNama !== null && bankNama.length > BANK_NAMA_MAX) {
+    errors.push(`Nama bank maksimal ${BANK_NAMA_MAX} karakter.`)
+  }
+  if (bankRekening !== null && bankRekening.length > BANK_REKENING_MAX) {
+    errors.push(`Nomor rekening maksimal ${BANK_REKENING_MAX} karakter.`)
+  }
+  if (bankAtasNama !== null && bankAtasNama.length > BANK_ATAS_NAMA_MAX) {
+    errors.push(`Nama pemilik rekening maksimal ${BANK_ATAS_NAMA_MAX} karakter.`)
   }
 
   let akunHutangDefaultId: string | null = null
@@ -140,7 +150,9 @@ export function validateSupplierInput(input: SupplierInput): SupplierCheck {
       nama,
       kontak: teksOpsional(input.kontak),
       npwp: teksOpsional(input.npwp),
-      terminPembayaran,
+      bankNama,
+      bankRekening,
+      bankAtasNama,
       akunHutangDefaultId,
     },
   }
