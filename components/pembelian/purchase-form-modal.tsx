@@ -120,7 +120,11 @@ export function PurchaseFormModal({
   onSubmit: (value: PurchaseFormValue) => void
   onCancel: () => void
 }) {
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
+  // PERSIS, bukan dibulatkan (keputusan Ricko di CP-8): ringkasan ini
+  // dicocokkan dengan invoice kertasnya, dan termin menaruh sisa sen di
+  // cicilan terakhir — "Rp 100.000" untuk 100.000,01 menyembunyikan keduanya.
+  const rpSen = (minor: number) => rupiahPersis(fromMinorUnits(minor))
   const [v, setV] = useState<PurchaseFormValue>(initial)
 
   const set = <K extends keyof PurchaseFormValue>(k: K, val: PurchaseFormValue[K]) =>
@@ -465,9 +469,9 @@ export function PurchaseFormModal({
             className="mt-4 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1"
             style={{ background: '#fafafa', border: '1px solid #f0f0f0' }}
           >
-            <Angka label="Subtotal" nilai={rupiah(totals.subtotalMinor / 100)} />
-            <Angka label="PPN" nilai={rupiah(totals.ppnMinor / 100)} />
-            <Angka label="Total" nilai={rupiah(totals.totalMinor / 100)} tebal />
+            <Angka label="Subtotal" nilai={rpSen(totals.subtotalMinor)} />
+            <Angka label="PPN" nilai={rpSen(totals.ppnMinor)} />
+            <Angka label="Total" nilai={rpSen(totals.totalMinor)} tebal />
           </div>
 
           {/* ── Pratinjau jadwal termin ── */}
@@ -483,7 +487,7 @@ export function PurchaseFormModal({
                     className="rounded-full px-2.5 py-1 text-[11px]"
                     style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
                   >
-                    #{c.urutan} · {fmtTanggal(c.tanggal)} · {rupiah(c.nominalMinor / 100)}
+                    #{c.urutan} · {fmtTanggal(c.tanggal)} · {rpSen(c.nominalMinor)}
                   </li>
                 ))}
               </ul>
@@ -498,15 +502,15 @@ export function PurchaseFormModal({
               </p>
               <ul className="text-[11px] flex flex-col gap-0.5" style={{ color: 'var(--color-text-muted)', listStyle: 'none', margin: 0, padding: 0 }}>
                 <li>
-                  D · {akunTujuan.kode} {akunTujuan.nama} — {rupiah(totals.subtotalMinor / 100)}
+                  D · {akunTujuan.kode} {akunTujuan.nama} — {rpSen(totals.subtotalMinor)}
                 </li>
-                {totals.ppnMinor > 0 && <li>D · PPN Masukan — {rupiah(totals.ppnMinor / 100)}</li>}
+                {totals.ppnMinor > 0 && <li>D · PPN Masukan — {rpSen(totals.ppnMinor)}</li>}
                 <li>
                   K ·{' '}
                   {v.caraBayar === 'tunai'
                     ? `${akunKas?.kode ?? ''} ${akunKas?.nama ?? 'akun kas'}`
                     : 'akun hutang supplier'}{' '}
-                  — {rupiah(totals.totalMinor / 100)}
+                  — {rpSen(totals.totalMinor)}
                 </li>
               </ul>
             </div>

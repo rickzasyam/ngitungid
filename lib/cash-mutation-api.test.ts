@@ -437,14 +437,50 @@ describe('pelabelan nominal & kolom', () => {
     expect(blok).toContain('alokasiCount === 0')
   })
 
-  it('dropdown invoice di panel alokasi diformat rupiah', () => {
-    expect(PANEL).toContain('sisa ${rupiah(Number(i.sisa))}')
+  it('dropdown invoice di panel alokasi diformat rupiah PERSIS (CP-8)', () => {
+    expect(PANEL).toContain('sisa ${rupiahPersis(i.sisa)}')
     expect(PANEL).not.toContain('sisa ${i.sisa}')
   })
 
-  it('pratinjau impor diformat rupiah, sama dengan tabel utama', () => {
-    expect(WIZARD).toContain('rupiah(Number(r.debit))')
-    expect(WIZARD).toContain('rupiah(Number(r.kredit))')
-    expect(WIZARD).toContain("useRupiah()")
+  it('pratinjau impor diformat rupiah PERSIS — dicocokkan dengan rekening koran (CP-8)', () => {
+    // 12.345,67 lewat rupiah() tampil "Rp 12.346": tidak cocok dengan baris
+    // mana pun di rekening koran yang sedang diperiksa.
+    expect(WIZARD).toContain("r.debit === '0.00' ? '—' : rupiahPersis(r.debit)")
+    expect(WIZARD).toContain("r.kredit === '0.00' ? '—' : rupiahPersis(r.kredit)")
+    expect(WIZARD).toContain('const { rupiahPersis } = useRupiah()')
+  })
+})
+
+// ══ SEN TIDAK DIBULATKAN DI LAYAR YANG DICOCOKKAN KE DOKUMEN (keputusan CP-8) ══
+// rupiah() membulatkan ke rupiah utuh — benar untuk Dashboard & Analytics,
+// salah untuk layar yang dibaca berdampingan dengan rekening koran atau invoice
+// kertas. Tidak satu pun pemanggilan rupiah(...) boleh tersisa di sini.
+describe('rupiahPersis di layar pencocokan dokumen', () => {
+  const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
+  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const INVOICE_FORM = read('components', 'pembelian', 'purchase-form-modal.tsx')
+
+  it.each([
+    ['panel alokasi', PANEL],
+    ['pratinjau impor', WIZARD],
+    ['form invoice', INVOICE_FORM],
+  ])('%s: tidak ada rupiah(...) yang membulatkan', (_nama, src) => {
+    expect(src).not.toMatch(/[^A-Za-z]rupiah\(/)
+    expect(src).toContain('rupiahPersis')
+  })
+
+  it('panel alokasi: sisa mutasi dan nominal alokasi juga persis', () => {
+    expect(PANEL).toContain('{rupiahPersis(sisa)}')
+    expect(PANEL).toContain('{rupiahPersis(a.nominal)}')
+  })
+
+  it('form invoice: total, termin, dan pratinjau jurnal lewat sen → string, tanpa pembagian float', () => {
+    expect(INVOICE_FORM).toContain('const rpSen = (minor: number) => rupiahPersis(fromMinorUnits(minor))')
+    expect(INVOICE_FORM).toContain('<Angka label="Subtotal" nilai={rpSen(totals.subtotalMinor)} />')
+    expect(INVOICE_FORM).toContain('<Angka label="PPN" nilai={rpSen(totals.ppnMinor)} />')
+    expect(INVOICE_FORM).toContain('<Angka label="Total" nilai={rpSen(totals.totalMinor)} tebal />')
+    // Termin menaruh sisa sen di cicilan terakhir — justru yang harus terlihat.
+    expect(INVOICE_FORM).toContain('{rpSen(c.nominalMinor)}')
+    expect(INVOICE_FORM).not.toContain('Minor / 100')
   })
 })

@@ -56,7 +56,7 @@ export function AllocationPanel({
   bolehTulis: boolean
   onBerubah: () => void
 }) {
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   const [invoices, setInvoices] = useState<InvoiceBersisa[]>([])
   const [invoiceId, setInvoiceId] = useState('')
@@ -102,11 +102,13 @@ export function AllocationPanel({
         value: i.id,
         // Diformat rupiah, bukan angka mentah dari DB: yang dibaca akunting
         // saat memilih invoice adalah nominalnya, dan "3630000.00" menuntut ia
-        // menghitung digitnya sendiri.
-        label: `${i.noInvoice ?? '(tanpa nomor)'} · sisa ${rupiah(Number(i.sisa))}`,
+        // menghitung digitnya sendiri. PERSIS, bukan dibulatkan (keputusan
+        // Ricko di CP-8): sisa 100.000,01 yang tampil "Rp 100.000" membuat
+        // alokasi sebesar angka itu meninggalkan satu sen yang tak terlihat.
+        label: `${i.noInvoice ?? '(tanpa nomor)'} · sisa ${rupiahPersis(i.sisa)}`,
         badge: i.supplierNama,
       })),
-    [invoices, rupiah]
+    [invoices, rupiahPersis]
   )
 
   const opsiTermin: StyledOption[] = useMemo(() => {
@@ -192,7 +194,7 @@ export function AllocationPanel({
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {rupiah(sisaAngka)}
+            {rupiahPersis(sisa)}
           </p>
         </div>
         <span className="text-[11px] rounded-full px-2.5 py-1" style={{ background: 'white', border: '1px solid #e5e7eb', color: 'var(--color-text-muted)' }}>
@@ -241,7 +243,7 @@ export function AllocationPanel({
                     )}
                   </td>
                   <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {rupiah(Number(a.nominal))}
+                    {rupiahPersis(a.nominal)}
                   </td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     {bolehTulis && (

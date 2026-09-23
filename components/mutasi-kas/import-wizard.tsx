@@ -61,7 +61,7 @@ export function ImportWizard({
   onClose: () => void
   onSelesai: (tersimpan: number) => void
 }) {
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
@@ -328,15 +328,18 @@ export function ImportWizard({
                         </td>
                         <td style={sel}>{r.tanggal}</td>
                         <td style={{ ...sel, color: 'var(--color-text-muted)' }}>{r.keterangan ?? '—'}</td>
-                        {/* Diformat rupiah, sama dengan tabel mutasi utama.
-                            Angka mentah dari parser ("2500000.00") membuat
-                            pembacanya menghitung digit sendiri — justru di layar
-                            yang meminta ia memeriksa arah tiap baris. */}
+                        {/* Diformat rupiah — angka mentah dari parser
+                            ("2500000.00") membuat pembacanya menghitung digit
+                            sendiri, justru di layar yang meminta ia memeriksa
+                            arah tiap baris. PERSIS, bukan dibulatkan (keputusan
+                            Ricko di CP-8): layar ini dicocokkan dengan rekening
+                            koran, dan 12.345,67 yang tampil "Rp 12.346" tidak
+                            akan pernah cocok dengan baris mana pun di sana. */}
                         <td style={{ ...sel, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {r.debit === '0.00' ? '—' : rupiah(Number(r.debit))}
+                          {r.debit === '0.00' ? '—' : rupiahPersis(r.debit)}
                         </td>
                         <td style={{ ...sel, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                          {r.kredit === '0.00' ? '—' : rupiah(Number(r.kredit))}
+                          {r.kredit === '0.00' ? '—' : rupiahPersis(r.kredit)}
                         </td>
                       </tr>
                     )

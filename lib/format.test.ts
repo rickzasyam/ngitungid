@@ -209,3 +209,16 @@ describe('formatRupiahPersis', () => {
     expect(formatRupiahPersis('123456.00', 'idr')).toBe('Rp 123.456')
   })
 })
+
+// ══ Kasus nyata uji klik CP-8 — kenapa layar pencocokan dokumen butuh persis ══
+describe('rupiah vs rupiahPersis pada angka yang dicocokkan ke dokumen (CP-8)', () => {
+  it('biaya bank 12.345,67 di pratinjau impor: dibulatkan KE ATAS oleh formatRupiah', () => {
+    expect(formatRupiah(12345.67, 'idr')).toBe('Rp 12.346')
+    expect(formatRupiahPersis('12345.67', 'idr')).toBe('Rp 12.345,67')
+  })
+
+  it('sisa invoice 100.000,01 di dropdown alokasi: senya hilang lewat formatRupiah', () => {
+    expect(formatRupiah(100000.01, 'idr')).toBe('Rp 100.000')
+    expect(formatRupiahPersis('100000.01', 'idr')).toBe('Rp 100.000,01')
+  })
+})
