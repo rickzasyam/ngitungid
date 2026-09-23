@@ -34,6 +34,7 @@ import { todayYmd } from '@/lib/ymd'
 import { AGE_BUCKETS, AGE_BUCKET_LABEL, type AgeBucket } from '@/lib/hutang'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
 import { SupplierDetail, type InvoiceDetail } from '@/components/hutang/supplier-detail'
+import { ReconciliationPanel } from '@/components/hutang/reconciliation-panel'
 
 type BucketMap = Record<AgeBucket, string>
 
@@ -533,11 +534,10 @@ export default function HutangPage() {
                   )}
                 </div>
 
-                {/* Rekonsiliasi (F4) menyusul di §5.C — disebut supaya tidak
-                    terlihat seperti bagian yang hilang. */}
-                <p className="text-[11px] text-center" style={{ color: 'var(--color-text-muted)' }}>
-                  Bagian Rekonsiliasi hutang supplier menyusul di fase berikutnya.
-                </p>
+                {/* ── Rekonsiliasi (F4, D41/D44) ── Di halaman ini, bukan di
+                    tab Supplier: yang dibandingkan adalah hutang yang berjalan,
+                    dan tanggal acuannya sama dengan "Per tanggal" di atas. */}
+                <ReconciliationPanel key={`${activeClient.id}-${asOf}`} clientId={activeClient.id} asOf={asOf} />
               </>
             )}
           </div>

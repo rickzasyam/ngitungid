@@ -45,6 +45,49 @@ export function formatRupiah(value: number, format: CurrencyFormat = 'idr'): str
 }
 
 /**
+ * Nominal PERSIS — TANPA pembulatan ke rupiah utuh.
+ *
+ * ══ KENAPA FORMATTER KEDUA ══════════════════════════════════════════════
+ * `formatRupiah` membulatkan ke rupiah utuh, dengan asumsi lama bahwa laporan
+ * klien selalu bulat. Asumsi itu tidak lagi berlaku untuk modul pembelian &
+ * mutasi kas: jadwal termin menaruh sisa sen di cicilan terakhir, dan invoice
+ * boleh bersen. Di layar REKONSILIASI pembulatan itu fatal — selisih Rp 0,01
+ * akan tampil "Rp 0" dan terbaca COCOK. `formatRupiah` sendiri sengaja tidak
+ * diubah: ia dipakai di Dashboard & Analytics, di mana angka bulat memang
+ * yang diinginkan.
+ *
+ * Menerima STRING 2 desimal (keluaran fromMinorUnits), bukan number, supaya
+ * nilainya tidak pernah melewati float. Sen ditampilkan HANYA bila tidak nol:
+ * "Rp 1.210.000" tetap terbaca biasa, "Rp 0,01" tetap terlihat. Negatif memakai
+ * kurung, sama dengan formatRupiah.
+ */
+export function formatRupiahPersis(value: string, format: CurrencyFormat = 'idr'): string {
+  const s = String(value ?? '').trim()
+  const neg = s.startsWith('-')
+  const [intRaw = '', fracRaw = ''] = (neg ? s.slice(1) : s).split('.')
+
+  let mulai = 0
+  while (mulai < intRaw.length - 1 && intRaw[mulai] === '0') mulai++
+  const int = intRaw.slice(mulai) || '0'
+  const frac = (fracRaw + '00').slice(0, 2)
+
+  // Pemisah dipasang per karakter, bukan lewat Intl atas number: nilainya
+  // tidak boleh melewati float, berapa pun besarnya.
+  const sepRibu = format === 'idr' ? '.' : ','
+  const sepDesimal = format === 'idr' ? ',' : '.'
+  let dikelompokkan = ''
+  for (let i = 0; i < int.length; i++) {
+    if (i > 0 && (int.length - i) % 3 === 0) dikelompokkan += sepRibu
+    dikelompokkan += int[i]
+  }
+
+  const angka = frac === '00' ? dikelompokkan : `${dikelompokkan}${sepDesimal}${frac}`
+  const body = `${STYLE[format].symbol} ${angka}`
+  const nol = int === '0' && frac === '00'
+  return neg && !nol ? `(${body})` : body
+}
+
+/**
  * Digit saja, TANPA simbol — untuk tabel yang kolomnya sudah berjudul mata uang
  * dan harus bisa diadu persis dengan laporan manual klien.
  *   idr  → "1.234.567"   negatif → "(1.234.567)"

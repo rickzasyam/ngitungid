@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatRupiah, formatRupiahPlain, formatRupiahShort, digitsOf } from './format'
+import { formatRupiah, formatRupiahPersis, formatRupiahPlain, formatRupiahShort, digitsOf } from './format'
 import { CURRENCY_FORMATS, type CurrencyFormat } from '@/lib/api/preferences'
 
 describe('formatRupiah — nominal penuh dengan simbol', () => {
@@ -164,5 +164,48 @@ describe('periode akuntansi tidak pernah bergeser', () => {
     expect(fmtTanggal('2026-12-31')).toBe('31 Des 2026')
     expect(fmtTanggal('2026-12-31')).not.toContain('Jan')
     expect(fmtTanggal('2026-12-31')).not.toContain('2027')
+  })
+})
+
+// ══ formatRupiahPersis — TANPA pembulatan (rekonsiliasi hutang, F4) ══════
+// formatRupiah membulatkan ke rupiah utuh. Di layar rekonsiliasi itu fatal:
+// selisih Rp 0,01 tampil "Rp 0" dan terbaca COCOK.
+describe('formatRupiahPersis', () => {
+  it('selisih SATU SEN tetap terlihat — bukan "Rp 0"', () => {
+    expect(formatRupiahPersis('0.01', 'idr')).toBe('Rp 0,01')
+    // Pembanding: formatter lama memang membulatkannya.
+    expect(formatRupiah(0.01, 'idr')).toBe('Rp 0')
+  })
+
+  it('nominal bulat tetap terbaca biasa, tanpa ",00"', () => {
+    expect(formatRupiahPersis('1210000.00', 'idr')).toBe('Rp 1.210.000')
+  })
+
+  it('sen tampil bila tidak nol, dengan pemisah desimal sesuai gaya', () => {
+    expect(formatRupiahPersis('1234567.89', 'idr')).toBe('Rp 1.234.567,89')
+    expect(formatRupiahPersis('1234567.89', 'intl')).toBe('IDR 1,234,567.89')
+  })
+
+  it('negatif memakai kurung — sama dengan formatRupiah, tanda tidak hilang', () => {
+    expect(formatRupiahPersis('-500000.00', 'idr')).toBe('(Rp 500.000)')
+    expect(formatRupiahPersis('-0.01', 'idr')).toBe('(Rp 0,01)')
+  })
+
+  it('nol tetap nol, tanpa kurung walau ditulis "-0.00"', () => {
+    expect(formatRupiahPersis('0.00', 'idr')).toBe('Rp 0')
+    expect(formatRupiahPersis('-0.00', 'idr')).toBe('Rp 0')
+  })
+
+  it('nilai di atas presisi float tidak kehilangan satu digit pun', () => {
+    // 90 kuadriliun lebih — Number() akan membulatkannya. String tidak.
+    expect(formatRupiahPersis('90071992547409934.07', 'idr')).toBe('Rp 90.071.992.547.409.934,07')
+  })
+
+  it('pengelompokan ribuan benar di semua panjang', () => {
+    expect(formatRupiahPersis('1.00', 'idr')).toBe('Rp 1')
+    expect(formatRupiahPersis('12.00', 'idr')).toBe('Rp 12')
+    expect(formatRupiahPersis('123.00', 'idr')).toBe('Rp 123')
+    expect(formatRupiahPersis('1234.00', 'idr')).toBe('Rp 1.234')
+    expect(formatRupiahPersis('123456.00', 'idr')).toBe('Rp 123.456')
   })
 })

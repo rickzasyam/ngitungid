@@ -17,6 +17,9 @@ export interface JournalLineRow {
   kredit: string
   keterangan: string | null
   lineOrder: number
+  /** F1. Opsional supaya respons lama tetap terbaca. */
+  supplierId?: string | null
+  supplierNama?: string | null
 }
 
 export interface JournalEventRow {
@@ -129,6 +132,15 @@ export function JournalDetail({
                     {l.kode}
                   </span>
                   {l.nama}
+                  {l.supplierNama && (
+                    <span
+                      className="ml-1.5 rounded-full px-2 py-0.5 text-[10.5px]"
+                      style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)' }}
+                      title="Supplier yang ditandai pada baris hutang ini"
+                    >
+                      {l.supplierNama}
+                    </span>
+                  )}
                 </td>
                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                   {Number(l.debit) > 0 ? rupiah(Number(l.debit)) : '—'}

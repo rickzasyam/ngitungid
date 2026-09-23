@@ -205,8 +205,13 @@ describe('halaman /hutang', () => {
     expect(PAGE).toContain('Invoice tunai tidak masuk monitoring hutang')
   })
 
-  it('bagian Rekonsiliasi yang menyusul disebut, bukan dibiarkan hilang', () => {
-    expect(PAGE).toContain('Rekonsiliasi')
+  it('bagian Rekonsiliasi SUDAH dipasang — catatan "menyusul" tidak tersisa (F4)', () => {
+    expect(PAGE).toContain('<ReconciliationPanel')
+    expect(PAGE).not.toContain('menyusul di fase berikutnya')
+  })
+
+  it('panel rekonsiliasi memakai tanggal acuan YANG SAMA dengan halaman', () => {
+    expect(PAGE).toContain('asOf={asOf}')
   })
 })
 
@@ -288,5 +293,81 @@ describe('GET /api/hutang/reconciliation', () => {
     expect(RQ).toContain('purchaseInvoices.akunHutangId')
     expect(RQ).toContain('masterSupplier.akunHutangDefaultId')
     expect(RQ).not.toContain("'liability'")
+  })
+})
+
+// ══ UI REKONSILIASI (F4) ═════════════════════════════════════════════════
+describe('panel Rekonsiliasi di /hutang', () => {
+  const PANEL = read('components', 'hutang', 'reconciliation-panel.tsx')
+
+  it('SEMUA nominal lewat rupiahPersis — rupiah() membulatkan ke rupiah utuh', () => {
+    // Selisih Rp 0,01 lewat rupiah() tampil "Rp 0" dan terbaca COCOK.
+    expect(PANEL).toContain('rupiahPersis(data.selisih)')
+    expect(PANEL).toContain('rupiahPersis(data.totalSupplier)')
+    expect(PANEL).toContain('rupiahPersis(data.totalNeraca)')
+    expect(PANEL).toContain('rupiahPersis(r.sisa)')
+    expect(PANEL).toContain('rupiahPersis(b.efek)')
+    // Tidak satu pun pemanggilan rupiah(...) yang membulatkan.
+    expect(PANEL).not.toMatch(/[^A-Za-z]rupiah\(/)
+  })
+
+  it('tanggal pembanding tampil MENONJOL, dengan penjelasan invoice sesudahnya', () => {
+    expect(PANEL).toContain('fmtTanggal(data.tanggalPembanding)')
+    expect(PANEL).toContain('tidak')
+    expect(PANEL).toContain('ikut dihitung')
+  })
+
+  it('neraca belum ada → "belum bisa dihitung", BUKAN Rp 0', () => {
+    expect(PANEL).toContain('data.selisih === null')
+    expect(PANEL).toContain('belum bisa dihitung')
+    expect(PANEL).toContain("data.totalNeraca === null ? '—'")
+  })
+
+  it('arah selisih dijelaskan dengan KATA, bukan warna saja', () => {
+    expect(PANEL).toContain('LEBIH BESAR')
+    expect(PANEL).toContain('LEBIH KECIL')
+    expect(PANEL).toContain('Cocok')
+  })
+
+  it('penjelas dinyatakan TIDAK dikurangkan dari selisih', () => {
+    expect(PANEL).toContain('Tidak dikurangkan dari selisih')
+    expect(PANEL).toContain("['Bersupplier', data.penjelas.berSupplier]")
+    expect(PANEL).toContain("['Tanpa supplier', data.penjelas.tanpaSupplier]")
+  })
+
+  it('tidak menghitung satu angka pun di browser', () => {
+    for (const fn of ['reconcileHutang(', 'supplierSummary(', 'efekHutangMinor(', 'Number(a', '+ Number(']) {
+      expect(PANEL.includes(fn), fn).toBe(false)
+    }
+  })
+})
+
+describe('pemilih supplier di form jurnal (F4)', () => {
+  const FORM = read('components', 'jurnal', 'journal-form-modal.tsx')
+  const JPAGE = read('app', 'jurnal', 'page.tsx')
+
+  it('muncul HANYA pada baris yang akunnya liability', () => {
+    expect(FORM).toContain("resolvedType === 'liability'")
+    expect(FORM).toContain('akunLiability(l.masterCoaId) && suppliers.length > 0')
+  })
+
+  it('supplier dikirim HANYA bila akunnya liability — bukan sisa pilihan lama', () => {
+    // Akun baris bisa berganti lewat banyak jalan (dipilih ulang, saran AI).
+    expect(FORM).toContain('export function supplierUntukDikirim(')
+    expect(JPAGE).toContain('supplierId: supplierUntukDikirim(l, accounts)')
+  })
+
+  it('form EDIT memuat supplierId — kalau tidak, PATCH menghapusnya', () => {
+    expect(JPAGE).toContain("supplierId: l.supplierId ?? ''")
+  })
+
+  it('daftar supplier dimuat bersama COA, dan gagalnya tidak menggagalkan form', () => {
+    expect(JPAGE).toContain('/suppliers`')
+    expect(JPAGE).toContain('suppliers={suppliers}')
+  })
+
+  it('panel rincian jurnal menampilkan supplier yang ditandai', () => {
+    const DETAIL = read('components', 'jurnal', 'journal-detail.tsx')
+    expect(DETAIL).toContain('l.supplierNama &&')
   })
 })

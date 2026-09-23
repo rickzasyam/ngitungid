@@ -48,8 +48,10 @@ import Link from 'next/link'
 import {
   JournalFormModal,
   blankJournalForm,
+  supplierUntukDikirim,
   type CoaOption,
   type JournalFormValue,
+  type SupplierOption,
 } from '@/components/jurnal/journal-form-modal'
 import {
   JournalDetail,
@@ -109,6 +111,7 @@ export default function JurnalPage() {
   const [detailLoading, setDetailLoading] = useState(false)
 
   const [accounts, setAccounts] = useState<CoaOption[]>([])
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
   const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null)
   const [formInitial, setFormInitial] = useState<JournalFormValue | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -172,11 +175,22 @@ export default function JurnalPage() {
     let batal = false
     void (async () => {
       try {
-        const res = await fetch(`/api/clients/${clientId}/coa`)
+        const [res, resSup] = await Promise.all([
+          fetch(`/api/clients/${clientId}/coa`),
+          fetch(`/api/clients/${clientId}/suppliers`),
+        ])
         const payload = (await res.json().catch(() => null)) as { accounts?: CoaOption[] } | null
-        if (!batal) setAccounts(payload?.accounts ?? [])
+        const pSup = (await resSup.json().catch(() => null)) as { suppliers?: SupplierOption[] } | null
+        if (batal) return
+        setAccounts(payload?.accounts ?? [])
+        // Supplier untuk penanda baris berakun hutang (F4). Gagal memuatnya
+        // tidak menggagalkan form: pemilihnya sekadar tidak muncul.
+        setSuppliers(pSup?.suppliers ?? [])
       } catch {
-        if (!batal) setAccounts([])
+        if (!batal) {
+          setAccounts([])
+          setSuppliers([])
+        }
       }
     })()
     return () => {
@@ -241,6 +255,9 @@ export default function JurnalPage() {
           debit: Number(l.debit) > 0 ? l.debit : '',
           kredit: Number(l.kredit) > 0 ? l.kredit : '',
           keterangan: l.keterangan ?? '',
+          // WAJIB ikut: PATCH mengganti seluruh baris, jadi supplier yang
+          // tidak dimuat ke form terhapus saat disimpan.
+          supplierId: l.supplierId ?? '',
         })),
       })
     } catch {
@@ -263,6 +280,7 @@ export default function JurnalPage() {
         debit: l.debit,
         kredit: l.kredit,
         keterangan: l.keterangan,
+        supplierId: supplierUntukDikirim(l, accounts),
       })),
     }
     try {
@@ -776,6 +794,7 @@ export default function JurnalPage() {
           clientId={activeClient.id}
           clientName={activeClient.name}
           accounts={accounts}
+          suppliers={suppliers}
           initial={formInitial}
           submitting={submitting}
           serverErrors={formErrors}

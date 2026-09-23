@@ -28,6 +28,17 @@ export interface CoaOption {
   kode: string
   nama: string
   kelompok: string
+  /**
+   * Tipe akun yang BERLAKU — eksplisit ?? turunan, dihitung server (E2/E3).
+   * Opsional supaya respons lama tetap terbaca. Dipakai F4: pemilih supplier
+   * hanya muncul pada baris yang akunnya `liability`.
+   */
+  resolvedType?: string | null
+}
+
+export interface SupplierOption {
+  id: string
+  nama: string
 }
 
 /** Satu baris di form. Nominal disimpan sebagai TEKS apa adanya — normalisasi
@@ -38,6 +49,8 @@ export interface FormLine {
   debit: string
   kredit: string
   keterangan: string
+  /** '' = tidak ditandai supplier. Hanya bermakna pada baris liability (F1). */
+  supplierId: string
 }
 
 export interface JournalFormValue {
@@ -62,7 +75,21 @@ export const emptyLine = (): FormLine => ({
   debit: '',
   kredit: '',
   keterangan: '',
+  supplierId: '',
 })
+
+/**
+ * Supplier yang BOLEH dikirim untuk baris ini: hanya bila akunnya liability.
+ *
+ * Dipakai saat MENGIRIM, bukan cuma saat merender: akun sebuah baris bisa
+ * berganti lewat banyak jalan (dipilih ulang, diisi saran AI), dan supplier
+ * yang tertinggal di baris yang sudah bukan hutang akan ditolak server dengan
+ * galat yang tidak dimengerti orang yang tidak pernah melihat pemilihnya.
+ */
+export function supplierUntukDikirim(line: FormLine, accounts: readonly CoaOption[]): string {
+  const akun = accounts.find(a => a.id === line.masterCoaId)
+  return akun?.resolvedType === 'liability' ? line.supplierId : ''
+}
 
 export function blankJournalForm(tanggal: string): JournalFormValue {
   return { tanggal, noBukti: '', keterangan: '', lines: [emptyLine(), emptyLine()] }
@@ -73,6 +100,7 @@ export function JournalFormModal({
   clientId,
   clientName,
   accounts,
+  suppliers = [],
   initial,
   submitting,
   serverErrors,
@@ -83,6 +111,8 @@ export function JournalFormModal({
   clientId: string
   clientName: string
   accounts: CoaOption[]
+  /** Supplier klien — untuk penanda di baris berakun hutang (F1/F4). */
+  suppliers?: SupplierOption[]
   initial: JournalFormValue
   submitting: boolean
   /** Galat dari server (mis. 409 nomor bukti dobel) — ditampilkan inline. */
@@ -116,6 +146,17 @@ export function JournalFormModal({
       })),
     [accounts]
   )
+
+  const opsiSupplier: StyledOption[] = useMemo(
+    () => [
+      { value: '', label: '— tanpa supplier —', kind: 'placeholder' as const },
+      ...suppliers.map(s => ({ value: s.id, label: s.nama })),
+    ],
+    [suppliers]
+  )
+
+  const akunLiability = (masterCoaId: string) =>
+    accounts.find(a => a.id === masterCoaId)?.resolvedType === 'liability'
 
   const totals = computeTotals(form.lines)
   const seimbang = totals.selisih === 0
@@ -501,6 +542,27 @@ export function JournalFormModal({
                     onChange={e => patchLine(l.key, { keterangan: e.target.value })}
                     style={{ ...input, padding: '7px 10px', fontSize: 12 }}
                   />
+                  {/* ══ PENANDA SUPPLIER — HANYA PADA BARIS HUTANG (F1/F4) ══
+                      Muncul hanya bila akun baris ini bertipe liability. Di
+                      baris lain ia akan ditolak server; lebih baik tidak
+                      ditawarkan sama sekali daripada ditawarkan lalu ditolak.
+                      Gunanya menjelaskan selisih di Rekonsiliasi /hutang. */}
+                  {akunLiability(l.masterCoaId) && suppliers.length > 0 && (
+                    <div className="mt-2">
+                      <StyledSelect
+                        options={opsiSupplier}
+                        value={l.supplierId}
+                        onChange={v => patchLine(l.key, { supplierId: v })}
+                        placeholder="— tanpa supplier —"
+                        searchable
+                        searchPlaceholder="Cari supplier…"
+                        ariaLabel={`Supplier baris ${i + 1} (opsional)`}
+                      />
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                        Opsional. Menandai supplier membantu menjelaskan selisih di Rekonsiliasi hutang.
+                      </p>
+                    </div>
+                  )}
                   {masalah && (
                     <p className="text-[11px] mt-1.5" style={{ color: '#b91c1c' }}>
                       {masalah === 'akun' && 'Pilih akun untuk baris ini.'}

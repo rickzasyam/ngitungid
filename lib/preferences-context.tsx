@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { DEFAULT_PREFERENCES, type Preferences } from '@/lib/api/preferences'
-import { formatRupiah, formatRupiahShort, formatRupiahPlain } from '@/lib/format'
+import { formatRupiah, formatRupiahPersis, formatRupiahShort, formatRupiahPlain } from '@/lib/format'
 
 // Preferensi tampilan per-user, di-fetch SEKALI per load aplikasi — pola sama
 // dengan ClientProvider yang mem-fetch /api/clients sekali.
@@ -111,6 +111,8 @@ export function useRupiah() {
       rupiahShort: (v: number) => formatRupiahShort(v, f),
       /** "1.234.567" — digit saja, tanpa simbol. */
       rupiahPlain: (v: number) => formatRupiahPlain(v, f),
+      /** "Rp 0,01" — PERSIS, tanpa pembulatan. Untuk selisih rekonsiliasi. */
+      rupiahPersis: (v: string) => formatRupiahPersis(v, f),
     }),
     [f]
   )
