@@ -51,7 +51,7 @@ export function SupplierDetail({
   invoices: InvoiceDetail[] | null
   loading: boolean
 }) {
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   if (loading || !invoices) {
     return (
@@ -89,13 +89,13 @@ export function SupplierDetail({
             </div>
             <div className="text-right">
               <p className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
-                Sisa dari {rupiah(Number(inv.total))}
+                Sisa dari {rupiahPersis(inv.total)}
               </p>
               <p
                 className="text-sm font-bold"
                 style={{ color: 'var(--color-text-primary)', fontVariantNumeric: 'tabular-nums' }}
               >
-                {rupiah(Number(inv.sisa))}
+                {rupiahPersis(inv.sisa)}
               </p>
             </div>
           </div>
@@ -156,10 +156,10 @@ export function SupplierDetail({
                     </td>
                     <td style={td}>{fmtTanggal(c.tanggal)}</td>
                     <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {rupiah(Number(c.nominal))}
+                      {rupiahPersis(c.nominal)}
                     </td>
                     <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {Number(c.tertutup) > 0 ? rupiah(Number(c.tertutup)) : '—'}
+                      {Number(c.tertutup) > 0 ? rupiahPersis(c.tertutup) : '—'}
                     </td>
                     <td
                       style={{
@@ -170,7 +170,7 @@ export function SupplierDetail({
                         fontWeight: c.lunas ? 600 : 400,
                       }}
                     >
-                      {c.lunas ? 'lunas' : rupiah(Number(c.sisa))}
+                      {c.lunas ? 'lunas' : rupiahPersis(c.sisa)}
                     </td>
                   </tr>
                 ))}
@@ -200,7 +200,7 @@ export function SupplierDetail({
                     style={{ color: 'var(--color-text-muted)' }}
                   >
                     <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                      {rupiah(Number(p.nominal))}
+                      {rupiahPersis(p.nominal)}
                     </span>
                     <span>· {fmtTanggal(p.tanggal)}</span>
                     {p.keterangan && <span>· {p.keterangan}</span>}

@@ -79,7 +79,7 @@ function bulanBerjalan(): { start: string; end: string } {
 
 export default function BukuBesarPage() {
   const { activeClient, isLoaded } = useRequireClient()
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   const awal = useMemo(() => bulanBerjalan(), [])
   const [periode, setPeriode] = useState<{ start: string; end: string }>(awal)
@@ -375,7 +375,7 @@ export default function BukuBesarPage() {
               <span className="text-sm">Memuat…</span>
             </div>
           ) : tab === 'neraca' ? (
-            <NeracaSaldo data={summary} rupiah={rupiah} periodEnd={periode.end} />
+            <NeracaSaldo data={summary} rupiahPersis={rupiahPersis} periodEnd={periode.end} />
           ) : !akunValid ? (
             <Kosong
               judul="Pilih akun dulu"
@@ -412,7 +412,7 @@ export default function BukuBesarPage() {
                       <th scope="row" colSpan={5} style={{ ...td, fontWeight: 600 }}>
                         Saldo awal per {fmtTanggal(periode.start)}
                       </th>
-                      <td style={angka}>{rupiah(Number(ledger.opening))}</td>
+                      <td style={angka}>{rupiahPersis(ledger.opening)}</td>
                     </tr>
                     {ledger.rows.length === 0 ? (
                       <tr style={{ borderTop: '1px solid #f5f5f5' }}>
@@ -474,12 +474,12 @@ export default function BukuBesarPage() {
                               {r.keterangan ?? '—'}
                             </td>
                             <td style={angka}>
-                              {Number(r.debit) > 0 ? rupiah(Number(r.debit)) : '—'}
+                              {Number(r.debit) > 0 ? rupiahPersis(r.debit) : '—'}
                             </td>
                             <td style={angka}>
-                              {Number(r.kredit) > 0 ? rupiah(Number(r.kredit)) : '—'}
+                              {Number(r.kredit) > 0 ? rupiahPersis(r.kredit) : '—'}
                             </td>
-                            <td style={{ ...angka, fontWeight: 600 }}>{rupiah(Number(r.saldo))}</td>
+                            <td style={{ ...angka, fontWeight: 600 }}>{rupiahPersis(r.saldo)}</td>
                           </tr>
                           {expanded === r.journalId && (
                             <tr>
@@ -497,7 +497,7 @@ export default function BukuBesarPage() {
                       <th scope="row" colSpan={5} style={{ ...td, fontWeight: 700 }}>
                         Saldo akhir per {fmtTanggal(periode.end)}
                       </th>
-                      <td style={{ ...angka, fontWeight: 700 }}>{rupiah(Number(ledger.closing))}</td>
+                      <td style={{ ...angka, fontWeight: 700 }}>{rupiahPersis(ledger.closing)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -516,11 +516,11 @@ export default function BukuBesarPage() {
 
 function NeracaSaldo({
   data,
-  rupiah,
+  rupiahPersis,
   periodEnd,
 }: {
   data: SummaryResponse | null
-  rupiah: (n: number) => string
+  rupiahPersis: (v: string) => string
   periodEnd: string
 }) {
   if (!data) {
@@ -545,8 +545,8 @@ function NeracaSaldo({
         <Scale className="w-4 h-4" style={{ color: 'var(--color-text-primary)' }} />
         <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
           Per {fmtTanggal(periodEnd)} · total debit{' '}
-          <strong>{rupiah(Number(data.totalDebit))}</strong> · total kredit{' '}
-          <strong>{rupiah(Number(data.totalKredit))}</strong> ·{' '}
+          <strong>{rupiahPersis(data.totalDebit)}</strong> · total kredit{' '}
+          <strong>{rupiahPersis(data.totalKredit)}</strong> ·{' '}
           <strong>{data.seimbang ? 'seimbang' : 'TIDAK seimbang'}</strong>
         </p>
       </div>
@@ -575,9 +575,9 @@ function NeracaSaldo({
                 </td>
                 <td style={td}>{a.nama}</td>
                 <td style={{ ...td, color: 'var(--color-text-muted)' }}>{a.posisi}</td>
-                <td style={angka}>{Number(a.debit) > 0 ? rupiah(Number(a.debit)) : '—'}</td>
-                <td style={angka}>{Number(a.kredit) > 0 ? rupiah(Number(a.kredit)) : '—'}</td>
-                <td style={{ ...angka, fontWeight: 600 }}>{rupiah(Number(a.saldo))}</td>
+                <td style={angka}>{Number(a.debit) > 0 ? rupiahPersis(a.debit) : '—'}</td>
+                <td style={angka}>{Number(a.kredit) > 0 ? rupiahPersis(a.kredit) : '—'}</td>
+                <td style={{ ...angka, fontWeight: 600 }}>{rupiahPersis(a.saldo)}</td>
               </tr>
             ))}
           </tbody>
@@ -586,8 +586,8 @@ function NeracaSaldo({
               <th scope="row" colSpan={3} style={{ ...td, fontWeight: 700 }}>
                 Total
               </th>
-              <td style={{ ...angka, fontWeight: 700 }}>{rupiah(Number(data.totalDebit))}</td>
-              <td style={{ ...angka, fontWeight: 700 }}>{rupiah(Number(data.totalKredit))}</td>
+              <td style={{ ...angka, fontWeight: 700 }}>{rupiahPersis(data.totalDebit)}</td>
+              <td style={{ ...angka, fontWeight: 700 }}>{rupiahPersis(data.totalKredit)}</td>
               <td style={td} />
             </tr>
           </tfoot>

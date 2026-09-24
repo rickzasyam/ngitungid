@@ -21,7 +21,7 @@ import { AlertTriangle, Check, Loader2, Plus, Sparkles, Trash2, X } from 'lucide
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { useRupiah } from '@/lib/preferences-context'
-import { computeTotals, MIN_LINES, NO_BUKTI_MAX, toMinorUnits } from '@/lib/journal'
+import { computeTotals, fromMinorUnits, MIN_LINES, NO_BUKTI_MAX, toMinorUnits } from '@/lib/journal'
 import { pesanGalatNominal } from '@/lib/nominal'
 
 export interface CoaOption {
@@ -121,7 +121,7 @@ export function JournalFormModal({
   onSubmit: (value: JournalFormValue) => void
   onCancel: () => void
 }) {
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
   const [form, setForm] = useState<JournalFormValue>(initial)
   const [aiPairs, setAiPairs] = useState<AiPair[] | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
@@ -633,7 +633,7 @@ export function JournalFormModal({
               className="text-sm font-bold"
               style={{ color: 'var(--color-text-primary)', fontVariantNumeric: 'tabular-nums' }}
             >
-              {rupiah(totals.debit / 100)}
+              {rupiahPersis(fromMinorUnits(totals.debit))}
             </p>
           </div>
           <div>
@@ -644,7 +644,7 @@ export function JournalFormModal({
               className="text-sm font-bold"
               style={{ color: 'var(--color-text-primary)', fontVariantNumeric: 'tabular-nums' }}
             >
-              {rupiah(totals.kredit / 100)}
+              {rupiahPersis(fromMinorUnits(totals.kredit))}
             </p>
           </div>
           <div aria-live="polite">
@@ -663,7 +663,7 @@ export function JournalFormModal({
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                {rupiah(totals.selisih / 100)}
+                {rupiahPersis(fromMinorUnits(totals.selisih))}
                 <span className="block text-[11px] font-normal" style={{ color: 'var(--color-text-muted)' }}>
                   sisi {totals.sisiLebih} lebih besar
                 </span>

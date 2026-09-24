@@ -6,7 +6,7 @@
 
 import { AlertTriangle, History, Loader2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
-import { computeTotals, labelEvent, TANPA_NO_BUKTI } from '@/lib/journal'
+import { computeTotals, fromMinorUnits, labelEvent, TANPA_NO_BUKTI } from '@/lib/journal'
 
 export interface JournalLineRow {
   id: string
@@ -82,7 +82,7 @@ export function JournalDetail({
   detail: JournalDetailData | null
   loading: boolean
 }) {
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   if (loading) {
     return (
@@ -143,10 +143,10 @@ export function JournalDetail({
                   )}
                 </td>
                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  {Number(l.debit) > 0 ? rupiah(Number(l.debit)) : '—'}
+                  {Number(l.debit) > 0 ? rupiahPersis(l.debit) : '—'}
                 </td>
                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  {Number(l.kredit) > 0 ? rupiah(Number(l.kredit)) : '—'}
+                  {Number(l.kredit) > 0 ? rupiahPersis(l.kredit) : '—'}
                 </td>
                 <td style={{ ...td, color: 'var(--color-text-muted)' }}>{l.keterangan ?? '—'}</td>
               </tr>
@@ -156,10 +156,10 @@ export function JournalDetail({
             <tr style={{ borderTop: '1px solid #e5e7eb', background: '#fafafa' }}>
               <th scope="row" style={{ ...td, fontWeight: 700 }}>Total</th>
               <td style={{ ...td, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                {rupiah(totals.debit / 100)}
+                {rupiahPersis(fromMinorUnits(totals.debit))}
               </td>
               <td style={{ ...td, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                {rupiah(totals.kredit / 100)}
+                {rupiahPersis(fromMinorUnits(totals.kredit))}
               </td>
               <td style={td} />
             </tr>

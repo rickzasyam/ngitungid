@@ -98,7 +98,7 @@ function bulanBerjalan(): { start: string; end: string } {
 export default function JurnalPage() {
   const { activeClient, isLoaded } = useRequireClient()
   const { canDoAccounting } = useClient()
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   const awal = useMemo(() => bulanBerjalan(), [])
   const [periode, setPeriode] = useState<{ start: string; end: string }>(awal)
@@ -664,7 +664,7 @@ export default function JurnalPage() {
                                 whiteSpace: 'nowrap',
                               }}
                             >
-                              {rupiah(Number(r.totalDebit))}
+                              {rupiahPersis(r.totalDebit)}
                             </td>
                             <td style={td}>
                               <span
@@ -826,7 +826,7 @@ export default function JurnalPage() {
               <strong style={{ color: 'var(--color-text-primary)' }}>
                 {postingTarget.noBukti ?? TANPA_NO_BUKTI}
               </strong>{' '}
-              · {fmtTanggal(postingTarget.tanggal)} · {rupiah(Number(postingTarget.totalDebit))}
+              · {fmtTanggal(postingTarget.tanggal)} · {rupiahPersis(postingTarget.totalDebit)}
             </p>
             <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
               <strong style={{ color: 'var(--color-text-primary)' }}>

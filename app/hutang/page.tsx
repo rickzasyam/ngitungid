@@ -31,6 +31,7 @@ import {
 import { useRequireClient } from '@/lib/use-require-client'
 import { useRupiah } from '@/lib/preferences-context'
 import { todayYmd } from '@/lib/ymd'
+import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
 import { AGE_BUCKETS, AGE_BUCKET_LABEL, type AgeBucket } from '@/lib/hutang'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
 import { SupplierDetail, type InvoiceDetail } from '@/components/hutang/supplier-detail'
@@ -92,7 +93,7 @@ const WARNA_EMBER: Record<AgeBucket, { bg: string; fg: string }> = {
 
 export default function HutangPage() {
   const { activeClient, isLoaded } = useRequireClient()
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   const [asOf, setAsOf] = useState(() => todayYmd())
   const [aging, setAging] = useState<AgingResponse | null>(null)
@@ -207,10 +208,18 @@ export default function HutangPage() {
     URL.revokeObjectURL(url)
   }
 
-  const totalSisa = useMemo(
-    () => suppliers.reduce((s, r) => s + Number(r.sisa), 0),
-    [suppliers]
-  )
+  // Dijumlahkan dalam SEN, bukan Number(): tampilannya persis sampai sen, dan
+  // jumlah float dari string "600000.50" bisa berakhir di ...49999999.
+  // Tanda minus ditangani sendiri karena toMinorUnits menolaknya (pola yang
+  // sama dengan saldo di lib/cash-mutation.ts).
+  const totalSisa = useMemo(() => {
+    const sen = suppliers.reduce((s, r) => {
+      const neg = r.sisa.startsWith('-')
+      const m = toMinorUnits(neg ? r.sisa.slice(1) : r.sisa) ?? 0
+      return s + (neg ? -m : m)
+    }, 0)
+    return fromMinorUnits(sen)
+  }, [suppliers])
 
   if (!isLoaded || !activeClient) {
     return (
@@ -242,7 +251,7 @@ export default function HutangPage() {
               Monitoring Hutang
             </h1>
             <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-              {activeClient.name} · sisa {rupiah(totalSisa)} dari {suppliers.length} supplier
+              {activeClient.name} · sisa {rupiahPersis(totalSisa)} dari {suppliers.length} supplier
               {aging && aging.invoiceBersisa > 0 && ` · ${aging.invoiceBersisa} invoice bersisa`}
             </p>
           </div>
@@ -331,7 +340,7 @@ export default function HutangPage() {
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          {rupiah(nilai)}
+                          {rupiahPersis(aging?.buckets[k] ?? '0.00')}
                         </p>
                       </div>
                     )
@@ -433,7 +442,7 @@ export default function HutangPage() {
                             <td style={td}>{i.noInvoice ?? '(tanpa nomor)'}</td>
                             <td style={td}>ke-{i.terminUrutan}</td>
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {rupiah(Number(i.sisa))}
+                              {rupiahPersis(i.sisa)}
                             </td>
                           </tr>
                         ))}
@@ -495,13 +504,13 @@ export default function HutangPage() {
                                 <td style={{ ...td, fontWeight: 500 }}>{s.supplierNama}</td>
                                 <td style={{ ...td, textAlign: 'right' }}>{s.invoiceCount}</td>
                                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                  {rupiah(Number(s.total))}
+                                  {rupiahPersis(s.total)}
                                 </td>
                                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-muted)' }}>
-                                  {rupiah(Number(s.dibayar))}
+                                  {rupiahPersis(s.dibayar)}
                                 </td>
                                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                                  {rupiah(Number(s.sisa))}
+                                  {rupiahPersis(s.sisa)}
                                 </td>
                                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                                   {telat > 0 ? (
@@ -512,7 +521,7 @@ export default function HutangPage() {
                                         color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)',
                                       }}
                                     >
-                                      {rupiah(telat)}
+                                      {rupiahPersis(s.telat)}
                                     </span>
                                   ) : (
                                     '—'

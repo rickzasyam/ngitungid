@@ -99,7 +99,7 @@ function bulanBerjalan(): { start: string; end: string } {
 export default function PembelianPage() {
   const { activeClient, isLoaded } = useRequireClient()
   const { canDoAccounting } = useClient()
-  const { rupiah } = useRupiah()
+  const { rupiahPersis } = useRupiah()
 
   const awal = useMemo(() => bulanBerjalan(), [])
   const [periode, setPeriode] = useState(awal)
@@ -522,9 +522,9 @@ export default function PembelianPage() {
                                 {r.caraBayar === 'kredit' && r.jumlahTermin > 1 ? ` · ${r.jumlahTermin}×` : ''}
                               </span>
                             </td>
-                            <td style={angka}>{rupiah(Number(r.total))}</td>
+                            <td style={angka}>{rupiahPersis(r.total)}</td>
                             <td style={{ ...angka, fontWeight: Number(r.sisa) > 0 ? 600 : 400 }}>
-                              {Number(r.sisa) > 0 ? rupiah(Number(r.sisa)) : '—'}
+                              {Number(r.sisa) > 0 ? rupiahPersis(r.sisa) : '—'}
                             </td>
                             <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--color-text-muted)' }}>
                               {r.jatuhTempoAkhir ? fmtTanggal(r.jatuhTempoAkhir) : '—'}
@@ -559,7 +559,7 @@ export default function PembelianPage() {
                           {open && (
                             <tr>
                               <td colSpan={9} style={{ background: '#fbfbfb', padding: 0 }}>
-                                <DetailPanel detail={detail} loading={detailLoading} rupiah={rupiah} />
+                                <DetailPanel detail={detail} loading={detailLoading} rupiahPersis={rupiahPersis} />
                               </td>
                             </tr>
                           )}
@@ -606,7 +606,7 @@ export default function PembelianPage() {
             <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
               <strong style={{ color: 'var(--color-text-primary)' }}>{hapusTarget.noInvoice ?? '(tanpa nomor)'}</strong>{' '}
               · {hapusTarget.supplierNama} · {fmtTanggal(hapusTarget.tanggal)} ·{' '}
-              {rupiah(Number(hapusTarget.total))}
+              {rupiahPersis(hapusTarget.total)}
             </p>
             <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
               <strong style={{ color: 'var(--color-text-primary)' }}>Jurnal yang dibuat dari invoice ini ikut terhapus.</strong>{' '}
@@ -650,11 +650,11 @@ export default function PembelianPage() {
 function DetailPanel({
   detail,
   loading,
-  rupiah,
+  rupiahPersis,
 }: {
   detail: InvoiceDetail | null
   loading: boolean
-  rupiah: (n: number) => string
+  rupiahPersis: (v: string) => string
 }) {
   if (loading) {
     return (
@@ -692,17 +692,17 @@ function DetailPanel({
                 <td style={td}>{l.namaBarang}</td>
                 <td style={angka}>{Number(l.qty)}</td>
                 <td style={{ ...td, color: 'var(--color-text-muted)' }}>{l.satuan ?? '—'}</td>
-                <td style={angka}>{rupiah(Number(l.hargaSatuan))}</td>
-                <td style={{ ...angka, fontWeight: 600 }}>{rupiah(Number(l.subtotal))}</td>
+                <td style={angka}>{rupiahPersis(l.hargaSatuan)}</td>
+                <td style={{ ...angka, fontWeight: 600 }}>{rupiahPersis(l.subtotal)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr style={{ borderTop: '1px solid #e5e7eb', background: '#fafafa' }}>
               <th scope="row" colSpan={4} style={{ ...td, fontWeight: 700 }}>
-                Subtotal · PPN {rupiah(Number(detail.ppn))} · Total
+                Subtotal · PPN {rupiahPersis(detail.ppn)} · Total
               </th>
-              <td style={{ ...angka, fontWeight: 700 }}>{rupiah(Number(detail.total))}</td>
+              <td style={{ ...angka, fontWeight: 700 }}>{rupiahPersis(detail.total)}</td>
             </tr>
           </tfoot>
         </table>
@@ -720,7 +720,7 @@ function DetailPanel({
                 className="rounded-full px-2.5 py-1 text-[11px]"
                 style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}
               >
-                #{c.urutan} · {fmtTanggal(c.tanggal)} · {rupiah(Number(c.nominal))}
+                #{c.urutan} · {fmtTanggal(c.tanggal)} · {rupiahPersis(c.nominal)}
                 {c.disesuaikan ? ' · disesuaikan' : ''}
               </li>
             ))}
