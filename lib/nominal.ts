@@ -41,15 +41,20 @@ export interface RingkasPemisah {
 /**
  * Pemisah mana yang DESIMAL — null bila semuanya pemisah ribuan (atau tidak
  * ada pemisah). `posisiTerakhir` = jumlah digit SEBELUM pemisah itu.
+ *
+ * `maxDesimal` 2 untuk uang (bawaan, dipakai CSV & server), 4 untuk qty. Tepat
+ * 3 angka di belakang satu pemisah SELALU ribuan, berapa pun batasnya — itu
+ * yang membuat "1.000" seribu baik sebagai rupiah maupun sebagai qty.
  */
-export function pemisahDesimal(r: RingkasPemisah): Pemisah | null {
+export function pemisahDesimal(r: RingkasPemisah, maxDesimal = 2): Pemisah | null {
   const adaTitik = r.titik.jumlah > 0
   const adaKoma = r.koma.jumlah > 0
   if (adaTitik && adaKoma) return r.terakhir
   if (!adaTitik && !adaKoma) return null
   const ch: Pemisah = adaTitik ? '.' : ','
   const p = adaTitik ? r.titik : r.koma
-  return p.jumlah === 1 && r.jumlahDigit - p.posisiTerakhir <= 2 ? ch : null
+  const sesudah = r.jumlahDigit - p.posisiTerakhir
+  return p.jumlah === 1 && sesudah !== 3 && sesudah <= maxDesimal ? ch : null
 }
 
 export type BacaNominal =
@@ -62,7 +67,8 @@ export const CONTOH_NOMINAL = '1.500.000,25 · 1500000,25 · 1500000.25'
 const GALAT_FORMAT = `Format nominal tidak terbaca. Contoh yang diterima: ${CONTOH_NOMINAL}.`
 const GALAT_NEGATIF = 'Nominal tidak boleh negatif — tulis tanpa tanda minus.'
 const GALAT_KARAKTER = 'Nominal hanya boleh berisi angka, titik, dan koma.'
-const GALAT_DESIMAL = 'Paling banyak 2 angka desimal (sen).'
+const galatDesimal = (maxDesimal: number) =>
+  maxDesimal === 2 ? 'Paling banyak 2 angka desimal (sen).' : `Paling banyak ${maxDesimal} angka desimal.`
 const GALAT_BESAR = 'Nominal terlalu besar.'
 
 const huruf = (s: string) => {
@@ -75,13 +81,15 @@ const huruf = (s: string) => {
 }
 
 /**
- * Teks → nominal kanonik "1500000.25" (2 desimal, tanpa pemisah), `kosong`, atau
+ * Teks → angka kanonik (`maxDesimal` desimal, tanpa pemisah), `kosong`, atau
  * galat dengan pesan yang bisa ditampilkan apa adanya di bawah field.
+ * Uang memakai bacaNominal (2 desimal: "1500000.25"); qty memakai bacaQty
+ * (4 desimal: "2.5000", bentuk yang sama dengan normalizeQty di server).
  *
  * Diterima juga, karena lazim diketik dan tidak mengubah nilai: awalan "Rp",
  * "Rp." dan "IDR"; akhiran ",-" / ".-" ("tanpa sen"); spasi di mana pun.
  */
-export function bacaNominal(raw: unknown): BacaNominal {
+export function bacaAngka(raw: unknown, maxDesimal: 2 | 4): BacaNominal {
   if (typeof raw !== 'string') return { status: 'galat', pesan: GALAT_FORMAT }
   let teks = raw.trim()
   if (teks === '') return { status: 'kosong' }
@@ -127,7 +135,7 @@ export function bacaNominal(raw: unknown): BacaNominal {
     ringkas.terakhir = p.ch
   }
 
-  const desimal = pemisahDesimal(ringkas)
+  const desimal = pemisahDesimal(ringkas, maxDesimal)
   let ujungUtuh = digit.length
   let ribuan = pemisah
   if (desimal !== null) {
@@ -157,13 +165,29 @@ export function bacaNominal(raw: unknown): BacaNominal {
   }
 
   const digitDesimal = digit.length - ujungUtuh
-  if (digitDesimal > 2) return { status: 'galat', pesan: GALAT_DESIMAL }
+  if (digitDesimal > maxDesimal) return { status: 'galat', pesan: galatDesimal(maxDesimal) }
 
   let mulai = 0
   while (mulai < ujungUtuh - 1 && digit[mulai] === '0') mulai++
   const utuh = digit.slice(mulai, ujungUtuh).join('') || '0'
-  const pecahan = (digit.slice(ujungUtuh).join('') + '00').slice(0, 2)
+  const pecahan = (digit.slice(ujungUtuh).join('') + '0000').slice(0, maxDesimal)
   return { status: 'ok', nilai: `${utuh}.${pecahan}` }
+}
+
+/** Nominal uang: kanonik 2 desimal ("1500000.25"). */
+export function bacaNominal(raw: unknown): BacaNominal {
+  return bacaAngka(raw, 2)
+}
+
+/** Qty barang: kanonik 4 desimal ("2.5000") — sama dengan normalizeQty server. */
+export function bacaQty(raw: unknown): BacaNominal {
+  return bacaAngka(raw, 4)
+}
+
+/** Pesan galat field qty, atau null bila kosong/terbaca. */
+export function pesanGalatQty(raw: unknown): string | null {
+  const h = bacaQty(raw)
+  return h.status === 'galat' ? h.pesan.replace('Nominal', 'Qty').replace('nominal', 'qty') : null
 }
 
 /**

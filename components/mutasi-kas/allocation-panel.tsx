@@ -20,6 +20,7 @@ import { Link2, Loader2, Pin, Trash2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
+import { NominalInput } from '@/components/ui/nominal-input'
 import { pesanGalatNominal } from '@/lib/nominal'
 
 export interface AlokasiRow {
@@ -308,10 +309,9 @@ export function AllocationPanel({
                   />
                 </div>
                 <div>
-                  <input
-                    inputMode="decimal"
+                  <NominalInput
                     value={nominal}
-                    onChange={e => setNominal(e.target.value)}
+                    onChange={setNominal}
                     placeholder="Nominal"
                     aria-label="Nominal alokasi"
                     aria-invalid={galatNominal !== null}

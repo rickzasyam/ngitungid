@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, Loader2, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
+import { NominalInput } from '@/components/ui/nominal-input'
 import { useRupiah } from '@/lib/preferences-context'
 import { computeTotals, fromMinorUnits, MIN_LINES, NO_BUKTI_MAX, toMinorUnits } from '@/lib/journal'
 import { pesanGalatNominal } from '@/lib/nominal'
@@ -42,8 +43,9 @@ export interface SupplierOption {
   nama: string
 }
 
-/** Satu baris di form. Nominal disimpan sebagai TEKS apa adanya — normalisasi
- *  ke dua desimal adalah urusan lib/journal, bukan urusan input. */
+/** Satu baris di form. Debit/kredit berisi NILAI dari <NominalInput>: kanonik
+ *  ("150000.25"), '' bila kosong, atau teks mentah bila tidak terbaca — yang
+ *  terakhir itu yang membuat pesanGalatNominal menandai barisnya. */
 export interface FormLine {
   key: string
   masterCoaId: string
@@ -496,9 +498,7 @@ export function JournalFormModal({
                       />
                     </div>
                     <div className="sm:col-span-3">
-                      <input
-                        type="text"
-                        inputMode="decimal"
+                      <NominalInput
                         value={l.debit}
                         placeholder="Debit"
                         aria-label={`Debit baris ${i + 1}`}
@@ -507,20 +507,18 @@ export function JournalFormModal({
                         // Mengisi satu sisi MENGOSONGKAN sisi lain: satu baris
                         // jurnal cuma punya satu sisi, dan membiarkan keduanya
                         // terisi memindahkan penemuan galat ke tombol Simpan.
-                        onChange={e => patchLine(l.key, { debit: e.target.value, kredit: '' })}
+                        onChange={v => patchLine(l.key, { debit: v, kredit: '' })}
                         style={nominalInput(galat.debit !== null || masalah === 'dua-sisi')}
                       />
                     </div>
                     <div className="sm:col-span-3">
-                      <input
-                        type="text"
-                        inputMode="decimal"
+                      <NominalInput
                         value={l.kredit}
                         placeholder="Kredit"
                         aria-label={`Kredit baris ${i + 1}`}
                         aria-invalid={galat.kredit !== null || masalah === 'dua-sisi'}
                         aria-describedby={masalah ? idGalat : undefined}
-                        onChange={e => patchLine(l.key, { kredit: e.target.value, debit: '' })}
+                        onChange={v => patchLine(l.key, { kredit: v, debit: '' })}
                         style={nominalInput(galat.kredit !== null || masalah === 'dua-sisi')}
                       />
                     </div>

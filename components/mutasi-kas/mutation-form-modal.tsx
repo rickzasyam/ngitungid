@@ -14,6 +14,7 @@ import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Loader2 } from 'lucide-reac
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
+import { NominalInput } from '@/components/ui/nominal-input'
 import { pesanGalatNominal } from '@/lib/nominal'
 
 export interface AkunOption {
@@ -162,11 +163,10 @@ export function MutationFormModal({
 
         <div>
           <label htmlFor="m-nominal" style={label}>Nominal</label>
-          <input
+          <NominalInput
             id="m-nominal"
-            inputMode="decimal"
             value={form.nominal}
-            onChange={e => set('nominal', e.target.value)}
+            onChange={nilai => set('nominal', nilai)}
             placeholder="0"
             aria-invalid={galatNominal !== null}
             aria-describedby={galatNominal ? 'm-nominal-galat' : undefined}
@@ -174,8 +174,8 @@ export function MutationFormModal({
           />
           <GalatNominal id="m-nominal-galat" pesan={galatNominal} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Tanpa tanda minus — arahnya sudah dipilih di atas. Titik ribuan dan koma desimal boleh
-            (1.500.000,25).
+            Tanpa tanda minus — arahnya sudah dipilih di atas. Titik ribuan muncul sendiri; koma
+            (atau titik) untuk sen.
           </p>
         </div>
 

@@ -21,8 +21,9 @@ import { useRupiah } from '@/lib/preferences-context'
 import { computeInvoiceTotals, NO_INVOICE_MAX, PURCHASE_PAYMENT_LABEL } from '@/lib/purchase'
 import { buildTerminSchedule } from '@/lib/termin'
 import { toMinorUnits, fromMinorUnits } from '@/lib/journal'
-import { pesanGalatNominal } from '@/lib/nominal'
+import { bacaQty, pesanGalatNominal, pesanGalatQty } from '@/lib/nominal'
 import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
+import { NominalInput } from '@/components/ui/nominal-input'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
 import { todayYmd } from '@/lib/ymd'
 
@@ -83,16 +84,18 @@ export function blankLine(): PurchaseFormLine {
   return {
     key: `l-${Math.random().toString(36).slice(2, 9)}`,
     namaBarang: '',
-    qty: '1',
+    qty: '1.0000',
     satuan: '',
     hargaSatuan: '',
     subtotal: '',
   }
 }
 
-/** qty × harga dalam SEN — dasar pengisian otomatis subtotal. */
+/** qty × harga dalam SEN — dasar pengisian otomatis subtotal. Keduanya dibaca
+ *  parser bersama (lib/nominal.ts), sama dengan field-nya. */
 function hitungSubtotal(qty: string, harga: string): string {
-  const q = Number(String(qty).replace(',', '.'))
+  const hq = bacaQty(qty)
+  const q = hq.status === 'ok' ? Number(hq.nilai) : NaN
   const hMinor = toMinorUnits(harga)
   if (!Number.isFinite(q) || q <= 0 || hMinor === null) return ''
   // Dibulatkan ke sen terdekat SEKALI, di sini — bukan dibiarkan jadi pecahan
@@ -172,10 +175,12 @@ export function PurchaseFormModal({
   // tampil Rp 0 tanpa satu pun tanda — persis yang ditemukan di gladi.
   const galatPpn = akunPpnTersedia ? pesanGalatNominal(v.ppn) : null
   const galatBaris = v.lines.map(l => ({
+    qty: pesanGalatQty(l.qty),
     harga: pesanGalatNominal(l.hargaSatuan),
     subtotal: pesanGalatNominal(l.subtotal),
   }))
-  const adaGalatNominal = galatPpn !== null || galatBaris.some(g => g.harga !== null || g.subtotal !== null)
+  const adaGalatNominal =
+    galatPpn !== null || galatBaris.some(g => g.qty !== null || g.harga !== null || g.subtotal !== null)
 
   const termin = useMemo(() => {
     if (v.caraBayar !== 'kredit' || v.jatuhTempoAkhir === '') return []
@@ -332,16 +337,14 @@ export function PurchaseFormModal({
                   : 'Akun PPN Masukan belum disetel di Settings › Pembukuan.'
               }
             >
-              <input
-                type="text"
-                inputMode="decimal"
+              <NominalInput
                 value={v.ppn}
                 disabled={!akunPpnTersedia}
                 placeholder={akunPpnTersedia ? '0' : 'tidak tersedia'}
                 aria-label="PPN"
                 aria-invalid={galatPpn !== null}
                 aria-describedby={galatPpn ? 'inv-ppn-galat' : undefined}
-                onChange={e => set('ppn', e.target.value)}
+                onChange={nilai => set('ppn', nilai)}
                 style={{ ...input, ...merahBila(galatPpn), opacity: akunPpnTersedia ? 1 : 0.6 }}
               />
               <GalatNominal id="inv-ppn-galat" pesan={galatPpn} />
@@ -410,14 +413,16 @@ export function PurchaseFormModal({
                       />
                     </td>
                     <td style={td}>
-                      <input
-                        type="text"
-                        inputMode="decimal"
+                      <NominalInput
                         value={l.qty}
+                        maxDesimal={4}
                         aria-label="Qty"
-                        onChange={e => setLine(l.key, { qty: e.target.value })}
-                        style={inputSel}
+                        aria-invalid={galatBaris[i].qty !== null}
+                        aria-describedby={galatBaris[i].qty ? `${l.key}-qty-galat` : undefined}
+                        onChange={nilai => setLine(l.key, { qty: nilai })}
+                        style={{ ...inputSel, ...merahBila(galatBaris[i].qty), textAlign: 'right' }}
                       />
+                      <GalatNominal id={`${l.key}-qty-galat`} pesan={galatBaris[i].qty} />
                     </td>
                     <td style={td}>
                       <input
@@ -429,27 +434,23 @@ export function PurchaseFormModal({
                       />
                     </td>
                     <td style={td}>
-                      <input
-                        type="text"
-                        inputMode="decimal"
+                      <NominalInput
                         value={l.hargaSatuan}
                         aria-label="Harga satuan"
                         aria-invalid={galatBaris[i].harga !== null}
                         aria-describedby={galatBaris[i].harga ? `${l.key}-harga-galat` : undefined}
-                        onChange={e => setLine(l.key, { hargaSatuan: e.target.value })}
+                        onChange={nilai => setLine(l.key, { hargaSatuan: nilai })}
                         style={{ ...inputSel, ...merahBila(galatBaris[i].harga), textAlign: 'right' }}
                       />
                       <GalatNominal id={`${l.key}-harga-galat`} pesan={galatBaris[i].harga} />
                     </td>
                     <td style={td}>
-                      <input
-                        type="text"
-                        inputMode="decimal"
+                      <NominalInput
                         value={l.subtotal}
                         aria-label="Subtotal"
                         aria-invalid={galatBaris[i].subtotal !== null}
                         aria-describedby={galatBaris[i].subtotal ? `${l.key}-subtotal-galat` : undefined}
-                        onChange={e => setLine(l.key, { subtotal: e.target.value })}
+                        onChange={nilai => setLine(l.key, { subtotal: nilai })}
                         style={{ ...inputSel, ...merahBila(galatBaris[i].subtotal), textAlign: 'right', fontWeight: 600 }}
                       />
                       <GalatNominal id={`${l.key}-subtotal-galat`} pesan={galatBaris[i].subtotal} />
