@@ -886,6 +886,8 @@ belum pernah diuji sekali jalan. Buat branch Neon dari `main`, arahkan `.env.loc
 jalankan smoke test langkah 7 di atasnya. Hapus branch gladi sesudahnya. Yang sudah diperiksa dari berkasnya: 0016
 (`ALTER TYPE … ADD VALUE`) berdiri sendiri dan 0017/0018 tidak memakai nilai enum baru itu, jadi aman satu jalan.
 
+**✅ Gladi dijalankan 2026-09-24** di branch Neon `gladi-phase5` (dibuat Ricko dari main): 10 migrasi (created_at cocok dengan jurnal 0000–0009) → satu `pnpm db:migrate` → **20**, tanpa galat · skema = `schema.ts` (22 tabel, kolom + nullability, 11 enum lengkap), `termin_pembayaran` tidak ada, `bank_*` ada, CHECK `journal_lines` menolak debit/kredit negatif (ekspresi tersimpan dievaluasi ke 8 baris uji, baca-saja), indeks unik `(client_id, lower(nama))` ada, 69 constraint/indeks bernama dari 0010–0019 ada · 12 tabel lama: jumlah baris **dan** hash isi kolom lamanya identik sebelum/sesudah · `pnpm build` dengan DB gladi sukses · smoke test langkah 7 belum (dev server sengaja tidak dinyalakan ke data ini) · branch gladi belum dihapus.
+
 ### 3. Backup branch Neon dari main
 
 Sebelum menyentuh apa pun. 0019 adalah satu-satunya migrasi non-aditif di seluruh Phase 5.
