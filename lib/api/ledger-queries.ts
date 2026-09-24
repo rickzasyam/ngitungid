@@ -83,6 +83,9 @@ export async function loadPostedLines(opts: {
       id: journalLines.id,
       journalId: journalEntries.id,
       tanggal: journalEntries.tanggal,
+      // UTC, lebar tetap, sampai mikrodetik — lihat LedgerLine.journalCreatedAt.
+      // Mengurutkan teks ini = mengurutkan kolom timestamptz-nya.
+      journalCreatedAt: sql<string>`to_char(${journalEntries.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US')`,
       noBukti: journalEntries.noBukti,
       keterangan: sql<
         string | null
@@ -107,4 +110,15 @@ export async function loadPostedLines(opts: {
     .from(journalLines)
     .innerJoin(journalEntries, eq(journalLines.journalId, journalEntries.id))
     .where(and(...filters))
+    // Urutan yang SAMA PERSIS dengan URUTAN_BUKU_BESAR (lib/ledger.ts), kunci
+    // demi kunci — dikunci test. Mesin murni tetap mengurutkan ulang, jadi yang
+    // di sini tidak bisa menang diam-diam; ia ada supaya pembaca query mentah
+    // (ekspor, debug) melihat urutan yang sama dengan layar.
+    .orderBy(
+      asc(journalEntries.tanggal),
+      asc(journalEntries.createdAt),
+      asc(journalEntries.id),
+      asc(journalLines.lineOrder),
+      asc(journalLines.id)
+    )
 }

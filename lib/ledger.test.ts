@@ -4,6 +4,7 @@ import {
   compareLedgerLines,
   computeRunningBalance,
   summarizeByAccount,
+  URUTAN_BUKU_BESAR,
   type LedgerLine,
   type AccountRef,
 } from './ledger'
@@ -11,6 +12,7 @@ import {
 const line = (o: Partial<LedgerLine> & { id: string }): LedgerLine => ({
   journalId: `J-${o.id}`,
   tanggal: '2026-09-01',
+  journalCreatedAt: '2026-09-01T00:00:00.000000',
   noBukti: `JU-${o.id}`,
   keterangan: null,
   masterCoaId: 'AKUN-1',
@@ -38,41 +40,84 @@ describe('normalSign', () => {
 
 // ══ PENJAGA BERDIRI: URUTAN BUKU BESAR STABIL ════════════════════
 // Saldo berjalan yang urutannya berubah antar-query adalah angka BERBEDA untuk
-// data yang sama. Sejak no_bukti boleh NULL, urutan tanpa aturan eksplisit
-// bergantung default DB.
-describe('urutan baku: tanggal, no_bukti NULLS LAST, line_order, id', () => {
-  it('tanggal paling menentukan', () => {
-    const a = line({ id: 'a', tanggal: '2026-09-02', noBukti: 'JU-001' })
-    const b = line({ id: 'b', tanggal: '2026-09-01', noBukti: 'JU-999' })
+// data yang sama. Urutan 2026-09-24 (keputusan Ricko, mengganti CP-5):
+// tanggal → waktu jurnal dibuat → id jurnal → line_order (→ id baris).
+describe('urutan baku: tanggal, created_at jurnal, id jurnal, line_order', () => {
+  it('daftar kuncinya persis yang diputuskan, dalam urutan itu', () => {
+    expect([...URUTAN_BUKU_BESAR]).toEqual(['tanggal', 'journalCreatedAt', 'journalId', 'lineOrder', 'id'])
+  })
+
+  it('tanggal paling menentukan — mengalahkan waktu dibuat', () => {
+    const a = line({ id: 'a', tanggal: '2026-09-02', journalCreatedAt: '2026-09-01T01:00:00.000000' })
+    const b = line({ id: 'b', tanggal: '2026-09-01', journalCreatedAt: '2026-09-05T01:00:00.000000' })
     expect([a, b].sort(compareLedgerLines).map(l => l.id)).toEqual(['b', 'a'])
   })
 
-  it('nomor bukti NULL ditaruh SESUDAH yang bernomor pada tanggal yang sama', () => {
-    const kosong = line({ id: 'a', noBukti: null })
-    const bernomor = line({ id: 'b', noBukti: 'JU-500' })
-    expect([kosong, bernomor].sort(compareLedgerLines).map(l => l.id)).toEqual(['b', 'a'])
-    // Dan hasilnya sama apa pun urutan masukannya.
-    expect([bernomor, kosong].sort(compareLedgerLines).map(l => l.id)).toEqual(['b', 'a'])
+  it('tanggal sama → jurnal yang DIBUAT lebih dulu di depan, bernomor bukti atau tidak', () => {
+    // Ini yang diganti dari CP-5: dulu jurnal bernomor selalu di depan yang
+    // tanpa nomor. Sekarang nomor bukti tidak ikut menentukan urutan.
+    const tanpaNomorLebihDulu = line({ id: 'a', noBukti: null, journalCreatedAt: '2026-09-24T08:00:00.000000' })
+    const bernomorBelakangan = line({ id: 'b', noBukti: 'JU-001', journalCreatedAt: '2026-09-24T09:00:00.000000' })
+    expect([bernomorBelakangan, tanpaNomorLebihDulu].sort(compareLedgerLines).map(l => l.id)).toEqual(['a', 'b'])
   })
 
-  it('dua baris sama-sama tanpa nomor bukti tetap berurutan stabil lewat line_order lalu id', () => {
-    const a = line({ id: 'zzz', noBukti: null, lineOrder: 1 })
-    const b = line({ id: 'aaa', noBukti: null, lineOrder: 0 })
-    const c = line({ id: 'mmm', noBukti: null, lineOrder: 1 })
-    expect([a, b, c].sort(compareLedgerLines).map(l => l.id)).toEqual(['aaa', 'mmm', 'zzz'])
+  it('selisih MIKRODETIK tetap memisahkan — presisi Postgres, bukan milidetik Date', () => {
+    const lebihDulu = line({ id: 'z', journalId: 'J-z', journalCreatedAt: '2026-09-24T08:00:00.123456' })
+    const belakangan = line({ id: 'a', journalId: 'J-a', journalCreatedAt: '2026-09-24T08:00:00.123457' })
+    expect([belakangan, lebihDulu].sort(compareLedgerLines).map(l => l.id)).toEqual(['z', 'a'])
   })
 
-  it('urutan tidak bergantung urutan masukan — hasilnya sama untuk permutasi mana pun', () => {
+  it('waktu dibuat sama (satu transaksi) → id jurnal, dan baris satu jurnal tetap berkumpul', () => {
+    const t = '2026-09-24T08:00:00.000000'
     const l = [
-      line({ id: 'd', tanggal: '2026-09-02', noBukti: null }),
-      line({ id: 'a', tanggal: '2026-09-01', noBukti: 'JU-001', lineOrder: 0 }),
-      line({ id: 'c', tanggal: '2026-09-01', noBukti: null }),
-      line({ id: 'b', tanggal: '2026-09-01', noBukti: 'JU-001', lineOrder: 1 }),
+      line({ id: 'x1', journalId: 'J-bbb', journalCreatedAt: t, lineOrder: 0 }),
+      line({ id: 'y0', journalId: 'J-aaa', journalCreatedAt: t, lineOrder: 1 }),
+      line({ id: 'x0', journalId: 'J-bbb', journalCreatedAt: t, lineOrder: 1 }),
+      line({ id: 'y1', journalId: 'J-aaa', journalCreatedAt: t, lineOrder: 0 }),
     ]
-    const harapan = ['a', 'b', 'c', 'd']
-    expect([...l].sort(compareLedgerLines).map(x => x.id)).toEqual(harapan)
-    expect([...l].reverse().sort(compareLedgerLines).map(x => x.id)).toEqual(harapan)
-    expect([l[2], l[0], l[3], l[1]].sort(compareLedgerLines).map(x => x.id)).toEqual(harapan)
+    expect(l.sort(compareLedgerLines).map(x => x.id)).toEqual(['y1', 'y0', 'x1', 'x0'])
+  })
+
+  it('line_order seri di satu jurnal (tak ada batasan unik di DB) → id baris memutus', () => {
+    const a = line({ id: 'zzz', lineOrder: 1 })
+    const b = line({ id: 'aaa', lineOrder: 1 })
+    expect([a, b].sort(compareLedgerLines).map(x => x.id)).toEqual(['aaa', 'zzz'])
+  })
+
+  // Seluruh permutasi, bukan tiga contoh: 6! = 720 urutan masukan, dan
+  // semuanya WAJIB menghasilkan urutan serta saldo berjalan yang identik.
+  it('urutan dan saldo berjalan identik untuk SETIAP permutasi masukan', () => {
+    const baris = [
+      line({ id: 'l1', tanggal: '2026-09-24', journalId: 'J-bayar', journalCreatedAt: '2026-09-24T09:00:00.000001', noBukti: null, debit: '400000.00' }),
+      line({ id: 'l2', tanggal: '2026-09-24', journalId: 'J-beli', journalCreatedAt: '2026-09-24T08:00:00.000000', noBukti: null, kredit: '1000000.50' }),
+      line({ id: 'l3', tanggal: '2026-09-23', journalId: 'J-lama', journalCreatedAt: '2026-09-30T00:00:00.000000', noBukti: 'JU-9', kredit: '10.00' }),
+      line({ id: 'l4', tanggal: '2026-09-24', journalId: 'J-ju', journalCreatedAt: '2026-09-24T09:00:00.000001', noBukti: 'JU-1', lineOrder: 1, kredit: '1.00' }),
+      line({ id: 'l5', tanggal: '2026-09-24', journalId: 'J-ju', journalCreatedAt: '2026-09-24T09:00:00.000001', noBukti: 'JU-1', lineOrder: 0, debit: '2.00' }),
+      line({ id: 'l6', tanggal: '2026-09-25', journalId: 'J-akhir', journalCreatedAt: '2026-09-24T07:00:00.000000', noBukti: null, debit: '5.00' }),
+    ]
+    const permutasi = <T,>(xs: T[]): T[][] =>
+      xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutasi([...xs.slice(0, i), ...xs.slice(i + 1)]).map(p => [x, ...p]))
+
+    const harapan = ['l3', 'l2', 'l1', 'l5', 'l4', 'l6']
+    const semua = permutasi(baris)
+    expect(semua).toHaveLength(720)
+    const saldoHarapan = computeRunningBalance({ posisi: 'Kredit', lines: baris }).rows.map(r => r.saldo)
+    for (const p of semua) {
+      expect(p.sort(compareLedgerLines).map(x => x.id)).toEqual(harapan)
+      expect(computeRunningBalance({ posisi: 'Kredit', lines: p }).rows.map(r => r.saldo)).toEqual(saldoHarapan)
+    }
+  })
+
+  it('skenario gladi: pembelian dicatat sebelum pembayarannya → saldo hutang tidak pernah minus', () => {
+    // Dua jurnal otomatis tanpa nomor bukti di tanggal yang sama. Dengan urutan
+    // CP-5 keduanya jatuh ke `id` acak, dan di gladi pembayaran tampil duluan:
+    // saldo hutang (400.000) sebelum pembeliannya masuk.
+    const beli = line({ id: 'ffff', journalId: 'J-ffff', noBukti: null, journalCreatedAt: '2026-09-24T08:15:00.000000', kredit: '1000000.50' })
+    const bayar = line({ id: '0000', journalId: 'J-0000', noBukti: null, journalCreatedAt: '2026-09-24T08:16:00.000000', debit: '400000.00' })
+    const r = computeRunningBalance({ posisi: 'Kredit', lines: [bayar, beli] })
+    expect(r.rows.map(x => x.id)).toEqual(['ffff', '0000'])
+    expect(r.rows.map(x => x.saldo)).toEqual([100_000_050, 60_000_050])
+    expect(r.rows.every(x => x.saldo >= 0)).toBe(true)
   })
 })
 

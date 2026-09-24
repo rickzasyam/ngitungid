@@ -92,13 +92,35 @@ describe('urutan & saldo datang dari mesin murni, bukan dari SQL', () => {
     expect(SUMMARY).toContain('summarizeByAccount(')
   })
 
-  // Urutan baku (tanggal, no_bukti NULLS LAST, line_order, id) hidup di
-  // compareLedgerLines dan diuji di lib/ledger.test.ts. Kalau route menambah
-  // ORDER BY sendiri, ada dua urutan untuk satu tabel — dan yang menang
-  // tergantung siapa yang jalan belakangan.
-  it('query baris tidak punya ORDER BY sendiri', () => {
+  // Keputusan Ricko 2026-09-24: urutan diterapkan SAMA PERSIS di SQL dan di
+  // lib/ledger.ts. Sebelumnya query sengaja tanpa ORDER BY (urutan hanya di
+  // compareLedgerLines); sekarang keduanya ada, jadi yang dijaga adalah bahwa
+  // mereka tidak pernah berbeda — kunci demi kunci, dalam urutan yang sama.
+  it('ORDER BY query = URUTAN_BUKU_BESAR, kunci demi kunci', async () => {
+    const { URUTAN_BUKU_BESAR } = await import('./ledger')
+    const KOLOM: Record<(typeof URUTAN_BUKU_BESAR)[number], string> = {
+      tanggal: 'asc(journalEntries.tanggal)',
+      journalCreatedAt: 'asc(journalEntries.createdAt)',
+      journalId: 'asc(journalEntries.id)',
+      lineOrder: 'asc(journalLines.lineOrder)',
+      id: 'asc(journalLines.id)',
+    }
     const potong = QUERIES.slice(QUERIES.indexOf('export async function loadPostedLines'))
-    expect(potong).not.toContain('.orderBy(')
+    const awal = potong.indexOf('.orderBy(')
+    expect(awal, 'loadPostedLines wajib punya ORDER BY').toBeGreaterThan(-1)
+    const isi = potong.slice(awal + '.orderBy('.length, potong.indexOf('\n    )', awal))
+    const kunci = isi
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+    expect(kunci).toEqual(URUTAN_BUKU_BESAR.map(k => KOLOM[k]))
+  })
+
+  it('journalCreatedAt diambil sebagai teks UTC lebar tetap sampai mikrodetik', () => {
+    // Urutan string di JS harus sama dengan urutan timestamptz di SQL: zona
+    // waktu tetap (UTC) dan presisi penuh (US = mikrodetik), bukan Date.
+    expect(QUERIES).toContain(`at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US')`)
+    expect(QUERIES).toContain('journalCreatedAt: sql<string>')
   })
 
   it('saldo awal dipisah dengan perbandingan STRING tanggal, tanpa objek Date', () => {

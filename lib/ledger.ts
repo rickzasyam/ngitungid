@@ -21,6 +21,14 @@ export interface LedgerLine {
   id: string
   journalId: string
   tanggal: string
+  /**
+   * Waktu JURNAL-nya dibuat (journal_entries.created_at), sebagai teks UTC
+   * lebar tetap sampai mikrodetik: 'YYYY-MM-DDTHH:MM:SS.ffffff'. Bentuk itu
+   * membuat urutan string = urutan waktu = urutan ORDER BY di SQL. Objek Date
+   * sengaja tidak dipakai: presisinya milidetik, sedangkan Postgres mikrodetik —
+   * dua jurnal selisih 0,3 ms akan seri di JS tapi tidak di SQL.
+   */
+  journalCreatedAt: string
   noBukti: string | null
   keterangan: string | null
   masterCoaId: string
@@ -79,31 +87,37 @@ export function normalSign(posisi: string): 1 | -1 {
 }
 
 /**
- * Urutan baku buku besar: `tanggal, no_bukti NULLS LAST, line_order, id`.
+ * Urutan baku buku besar — SATU daftar kunci, dipakai compareLedgerLines di
+ * bawah dan ditiru persis oleh ORDER BY di lib/api/ledger-queries.ts (dikunci
+ * test yang membandingkan keduanya).
  *
- * Keputusan Ricko 2026-09-18. MP hanya menyebut tiga kunci pertama, tapi sejak
- * `no_bukti` boleh NULL (Fase 1) urutannya jadi bergantung default DB — dan
- * saldo berjalan yang urutannya berubah antar-query adalah angka yang berbeda
- * untuk data yang sama. `id` di ujung membuatnya deterministik ketika seluruh
- * kunci lain seri.
+ *   tanggal → waktu jurnal dibuat → id jurnal → line_order → id baris
  *
- * Jurnal tanpa nomor bukti ditaruh SESUDAH yang bernomor pada tanggal yang
- * sama: yang bernomor bisa diadu dengan dokumen fisik, jadi ia yang jadi
- * tulang punggung pembacaan.
+ * ══ KEPUTUSAN RICKO 2026-09-24 — MENGGANTI URUTAN CP-5 ════════════════════
+ * Sebelumnya (2026-09-18): `tanggal, no_bukti NULLS LAST, line_order, id`.
+ * Jurnal otomatis (pembelian, mutasi kas) lahir TANPA nomor bukti, jadi pada
+ * tanggal yang sama urutannya jatuh ke `id` acak: di gladi, pembayaran hutang
+ * tampil SEBELUM pembeliannya dan saldo berjalan hutang sempat minus. Waktu
+ * dibuat adalah urutan kejadian yang sebenarnya — pembelian dicatat sebelum
+ * pembayarannya.
+ *
+ * `id` jurnal sebelum `line_order` menjaga baris satu jurnal tetap berkumpul
+ * ketika dua jurnal lahir di transaksi yang sama (created_at = now() identik).
+ * `id` baris di ujung hanya penjaga determinisme: tidak ada batasan unik
+ * (journal_id, line_order) di DB, jadi dua baris satu jurnal bisa seri.
  */
+export const URUTAN_BUKU_BESAR = ['tanggal', 'journalCreatedAt', 'journalId', 'lineOrder', 'id'] as const
+
 export function compareLedgerLines(a: LedgerLine, b: LedgerLine): number {
-  if (a.tanggal !== b.tanggal) return a.tanggal < b.tanggal ? -1 : 1
-
-  // NULLS LAST, ditulis eksplisit — bukan mengandalkan perbandingan string
-  // dengan null yang di JS berperilaku beda dari SQL.
-  if (a.noBukti === null && b.noBukti !== null) return 1
-  if (a.noBukti !== null && b.noBukti === null) return -1
-  if (a.noBukti !== null && b.noBukti !== null && a.noBukti !== b.noBukti) {
-    return a.noBukti < b.noBukti ? -1 : 1
+  // Tiap kunci string punya lebar/format tetap (YYYY-MM-DD, timestamp UTC
+  // lebar tetap, uuid hex huruf kecil), jadi `<` string = urutan Postgres.
+  // lineOrder angka dibandingkan sebagai angka.
+  for (const k of URUTAN_BUKU_BESAR) {
+    const x = a[k]
+    const y = b[k]
+    if (x !== y) return x < y ? -1 : 1
   }
-
-  if (a.lineOrder !== b.lineOrder) return a.lineOrder - b.lineOrder
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  return 0
 }
 
 /** Mutasi satu baris dalam SEN, berarah normal balance akunnya. */
