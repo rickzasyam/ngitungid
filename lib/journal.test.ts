@@ -122,10 +122,23 @@ describe('sen bulat — tidak ada drift float', () => {
 
     expect(toMinorUnits('')).toBeNull()
     expect(toMinorUnits('abc')).toBeNull()
-    expect(toMinorUnits('1.234')).toBeNull() // lebih dari 2 desimal
-    expect(toMinorUnits('1,000')).toBeNull() // pemisah ribuan bukan input sah
+    expect(toMinorUnits('12.345.67')).toBeNull() // kelompok ribuan bukan 3 angka
+    expect(toMinorUnits('1.000,505')).toBeNull() // lebih dari 2 desimal
     expect(toMinorUnits(null)).toBeNull()
     expect(toMinorUnits(undefined)).toBeNull()
+  })
+
+  // Sampai 2026-09-24 pemisah ribuan DITOLAK di sini ('1.234' dan '1,000' → null).
+  // Keputusan Ricko hari itu: input uang menerima format Indonesia. Aturannya
+  // hidup di lib/nominal.ts dan diuji lengkap di sana; ini memastikan jalurnya
+  // benar-benar sampai ke toMinorUnits, yang dipakai form DAN server.
+  it('toMinorUnits membaca format Indonesia lewat lib/nominal', () => {
+    expect(toMinorUnits('1.500.000,25')).toBe(150_000_025)
+    expect(toMinorUnits('500000,25')).toBe(50_000_025)
+    expect(toMinorUnits('1.000')).toBe(100_000) // seribu, bukan satu
+    expect(toMinorUnits('1,000')).toBe(100_000)
+    expect(toMinorUnits('1.234')).toBe(123_400)
+    expect(toMinorUnits('1.000,5')).toBe(100_050)
   })
 
   it('nominal negatif ditolak di kedua bentuk', () => {

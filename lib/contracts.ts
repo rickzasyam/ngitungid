@@ -14,6 +14,8 @@
 // < '2026-02-01' sebagai perbandingan string biasa, tanpa objek Date sama
 // sekali. Jadi seluruh logika rentang di bawah cuma `<=` antar string.
 
+import { bacaNominal } from '@/lib/nominal'
+
 export const CONTRACT_JENIS = ['reguler', 'project'] as const
 export type ContractJenis = (typeof CONTRACT_JENIS)[number]
 
@@ -272,6 +274,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Normalisasi nominal ke string desimal 2 angka di belakang koma.
  * Menerima number ATAU string; menolak nilai negatif, NaN, dan yang bukan angka.
  * Hasilnya STRING supaya nilainya masuk ke kolom numeric tanpa mampir ke float.
+ *
+ * String dibaca bacaNominal (lib/nominal.ts) — format Indonesia ("1.500.000,25")
+ * maupun kanonik ("1500000.25"). Aturan pemisahnya hidup di SATU tempat itu,
+ * dipakai bersama form, validasi server, dan impor CSV. Bentuk kanonik selalu
+ * ≤ 2 desimal, jadi tidak ada nilai lama yang berubah arti.
  */
 export function normalizeNominal(v: unknown): string | null {
   if (typeof v === 'number') {
@@ -279,10 +286,8 @@ export function normalizeNominal(v: unknown): string | null {
     return v.toFixed(2)
   }
   if (typeof v === 'string') {
-    const t = v.trim()
-    if (t === '' || !/^\d+(\.\d{1,2})?$/.test(t)) return null
-    const [int, frac = ''] = t.split('.')
-    return `${int}.${(frac + '00').slice(0, 2)}`
+    const h = bacaNominal(v)
+    return h.status === 'ok' ? h.nilai : null
   }
   return null
 }

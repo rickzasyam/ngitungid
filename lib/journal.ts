@@ -80,7 +80,9 @@ export const NO_BUKTI_MAX = 80
  * Nominal → INTEGER SEN. null kalau bukan nominal yang sah.
  *
  * Memakai normalizeNominal lebih dulu supaya aturan bentuk (tanpa tanda minus,
- * maksimal 2 desimal, tanpa pemisah ribuan) hanya hidup di SATU tempat.
+ * maksimal 2 desimal, pemisah ribuan/desimal format Indonesia — lib/nominal.ts)
+ * hanya hidup di SATU tempat. Form dan server memanggil fungsi ini juga, jadi
+ * "1.500.000,25" yang terbaca di panel total adalah angka yang disimpan server.
  *
  * Batas aman sengaja ikut dijaga: hasil di atas Number.MAX_SAFE_INTEGER
  * (± Rp 90 triliun) dikembalikan sebagai null, bukan dibulatkan diam-diam.

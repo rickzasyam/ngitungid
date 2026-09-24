@@ -154,9 +154,17 @@ describe('normalizeNominal — uang tidak pernah jadi float', () => {
   })
 
   it('menolak negatif, NaN, dan yang bukan angka', () => {
-    for (const v of [-1, NaN, Infinity, 'abc', '', '  ', '1.234', null, undefined, {}]) {
+    for (const v of [-1, NaN, Infinity, 'abc', '', '  ', '-5', '1.000,505', '12.345.67', null, undefined, {}]) {
       expect(normalizeNominal(v), String(v)).toBeNull()
     }
+  })
+
+  // '1.234' dulu ada di daftar tolak di atas. Sejak 2026-09-24 (keputusan Ricko)
+  // ia seribu dua ratus tiga puluh empat — lib/nominal.ts.
+  it('format Indonesia dinormalkan ke bentuk kanonik', () => {
+    expect(normalizeNominal('1.234')).toBe('1234.00')
+    expect(normalizeNominal('150.000.000')).toBe('150000000.00')
+    expect(normalizeNominal('1.500.000,25')).toBe('1500000.25')
   })
 })
 

@@ -21,6 +21,8 @@ import { useRupiah } from '@/lib/preferences-context'
 import { computeInvoiceTotals, NO_INVOICE_MAX, PURCHASE_PAYMENT_LABEL } from '@/lib/purchase'
 import { buildTerminSchedule } from '@/lib/termin'
 import { toMinorUnits, fromMinorUnits } from '@/lib/journal'
+import { pesanGalatNominal } from '@/lib/nominal'
+import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
 import { todayYmd } from '@/lib/ymd'
 
@@ -165,6 +167,16 @@ export function PurchaseFormModal({
   const supplier = suppliers.find(s => s.id === v.supplierId) ?? null
   const totals = computeInvoiceTotals(v.lines, v.ppn)
 
+  // Nominal yang tidak terbaca ditunjuk di field-nya dan MENAHAN Simpan.
+  // Tanpa ini harga "500.000,2x" membuat subtotal tidak terisi dan total
+  // tampil Rp 0 tanpa satu pun tanda — persis yang ditemukan di gladi.
+  const galatPpn = akunPpnTersedia ? pesanGalatNominal(v.ppn) : null
+  const galatBaris = v.lines.map(l => ({
+    harga: pesanGalatNominal(l.hargaSatuan),
+    subtotal: pesanGalatNominal(l.subtotal),
+  }))
+  const adaGalatNominal = galatPpn !== null || galatBaris.some(g => g.harga !== null || g.subtotal !== null)
+
   const termin = useMemo(() => {
     if (v.caraBayar !== 'kredit' || v.jatuhTempoAkhir === '') return []
     return buildTerminSchedule({
@@ -186,7 +198,7 @@ export function PurchaseFormModal({
       <form
         onSubmit={e => {
           e.preventDefault()
-          if (!submitting) onSubmit(v)
+          if (!submitting && !adaGalatNominal) onSubmit(v)
         }}
       >
         <div className="px-5 sm:px-6 py-5" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
@@ -326,9 +338,13 @@ export function PurchaseFormModal({
                 value={v.ppn}
                 disabled={!akunPpnTersedia}
                 placeholder={akunPpnTersedia ? '0' : 'tidak tersedia'}
+                aria-label="PPN"
+                aria-invalid={galatPpn !== null}
+                aria-describedby={galatPpn ? 'inv-ppn-galat' : undefined}
                 onChange={e => set('ppn', e.target.value)}
-                style={{ ...input, opacity: akunPpnTersedia ? 1 : 0.6 }}
+                style={{ ...input, ...merahBila(galatPpn), opacity: akunPpnTersedia ? 1 : 0.6 }}
               />
+              <GalatNominal id="inv-ppn-galat" pesan={galatPpn} />
             </Field>
 
             {v.caraBayar === 'kredit' && (
@@ -382,8 +398,8 @@ export function PurchaseFormModal({
                 </tr>
               </thead>
               <tbody>
-                {v.lines.map(l => (
-                  <tr key={l.key} style={{ borderTop: '1px solid #f5f5f5' }}>
+                {v.lines.map((l, i) => (
+                  <tr key={l.key} style={{ borderTop: '1px solid #f5f5f5', verticalAlign: 'top' }}>
                     <td style={td}>
                       <input
                         type="text"
@@ -418,9 +434,12 @@ export function PurchaseFormModal({
                         inputMode="decimal"
                         value={l.hargaSatuan}
                         aria-label="Harga satuan"
+                        aria-invalid={galatBaris[i].harga !== null}
+                        aria-describedby={galatBaris[i].harga ? `${l.key}-harga-galat` : undefined}
                         onChange={e => setLine(l.key, { hargaSatuan: e.target.value })}
-                        style={{ ...inputSel, textAlign: 'right' }}
+                        style={{ ...inputSel, ...merahBila(galatBaris[i].harga), textAlign: 'right' }}
                       />
+                      <GalatNominal id={`${l.key}-harga-galat`} pesan={galatBaris[i].harga} />
                     </td>
                     <td style={td}>
                       <input
@@ -428,9 +447,12 @@ export function PurchaseFormModal({
                         inputMode="decimal"
                         value={l.subtotal}
                         aria-label="Subtotal"
+                        aria-invalid={galatBaris[i].subtotal !== null}
+                        aria-describedby={galatBaris[i].subtotal ? `${l.key}-subtotal-galat` : undefined}
                         onChange={e => setLine(l.key, { subtotal: e.target.value })}
-                        style={{ ...inputSel, textAlign: 'right', fontWeight: 600 }}
+                        style={{ ...inputSel, ...merahBila(galatBaris[i].subtotal), textAlign: 'right', fontWeight: 600 }}
                       />
+                      <GalatNominal id={`${l.key}-subtotal-galat`} pesan={galatBaris[i].subtotal} />
                     </td>
                     <td style={{ ...td, textAlign: 'center' }}>
                       <button
@@ -532,7 +554,8 @@ export function PurchaseFormModal({
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || adaGalatNominal}
+            title={adaGalatNominal ? 'Perbaiki nominal yang ditandai merah dulu.' : undefined}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
             style={{ background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)', border: 'none', minHeight: 34 }}
           >

@@ -22,6 +22,7 @@ import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { useRupiah } from '@/lib/preferences-context'
 import { computeTotals, MIN_LINES, NO_BUKTI_MAX, toMinorUnits } from '@/lib/journal'
+import { pesanGalatNominal } from '@/lib/nominal'
 
 export interface CoaOption {
   id: string
@@ -161,9 +162,19 @@ export function JournalFormModal({
   const totals = computeTotals(form.lines)
   const seimbang = totals.selisih === 0
 
+  // Nominal yang tidak terbaca ditunjuk DI SISINYA, dengan pesan dari parser
+  // bersama (lib/nominal.ts) — bukan dihitung nol di panel total lalu baru
+  // ketahuan saat Simpan. Diperiksa sebelum akun: yang diketik salah lebih
+  // mendesak daripada yang belum dipilih.
+  const galatNominal = form.lines.map(l => ({
+    debit: pesanGalatNominal(l.debit),
+    kredit: pesanGalatNominal(l.kredit),
+  }))
+
   // Aturan "tepat satu sisi terisi" diperiksa per baris supaya pesannya bisa
   // menunjuk barisnya — sama seperti validateJournalInput di server.
-  const barisBermasalah = form.lines.map(l => {
+  const barisBermasalah = form.lines.map((l, i) => {
+    if (galatNominal[i].debit || galatNominal[i].kredit) return 'nominal'
     if (!l.masterCoaId) return 'akun'
     const d = l.debit.trim() === '' ? 0 : toMinorUnits(l.debit)
     const k = l.kredit.trim() === '' ? 0 : toMinorUnits(l.kredit)
@@ -457,6 +468,8 @@ export function JournalFormModal({
         <div className="space-y-2">
           {form.lines.map((l, i) => {
             const masalah = barisBermasalah[i]
+            const galat = galatNominal[i]
+            const idGalat = `jurnal-baris-${l.key}-galat`
             return (
               <div
                 key={l.key}
@@ -489,11 +502,13 @@ export function JournalFormModal({
                         value={l.debit}
                         placeholder="Debit"
                         aria-label={`Debit baris ${i + 1}`}
+                        aria-invalid={galat.debit !== null || masalah === 'dua-sisi'}
+                        aria-describedby={masalah ? idGalat : undefined}
                         // Mengisi satu sisi MENGOSONGKAN sisi lain: satu baris
                         // jurnal cuma punya satu sisi, dan membiarkan keduanya
                         // terisi memindahkan penemuan galat ke tombol Simpan.
                         onChange={e => patchLine(l.key, { debit: e.target.value, kredit: '' })}
-                        style={nominalInput(masalah === 'nominal' || masalah === 'dua-sisi')}
+                        style={nominalInput(galat.debit !== null || masalah === 'dua-sisi')}
                       />
                     </div>
                     <div className="sm:col-span-3">
@@ -503,8 +518,10 @@ export function JournalFormModal({
                         value={l.kredit}
                         placeholder="Kredit"
                         aria-label={`Kredit baris ${i + 1}`}
+                        aria-invalid={galat.kredit !== null || masalah === 'dua-sisi'}
+                        aria-describedby={masalah ? idGalat : undefined}
                         onChange={e => patchLine(l.key, { kredit: e.target.value, debit: '' })}
-                        style={nominalInput(masalah === 'nominal' || masalah === 'dua-sisi')}
+                        style={nominalInput(galat.kredit !== null || masalah === 'dua-sisi')}
                       />
                     </div>
                     <div className="sm:col-span-1 flex items-start justify-end">
@@ -564,9 +581,10 @@ export function JournalFormModal({
                     </div>
                   )}
                   {masalah && (
-                    <p className="text-[11px] mt-1.5" style={{ color: '#b91c1c' }}>
+                    <p id={idGalat} className="text-[11px] mt-1.5" style={{ color: '#b91c1c' }}>
                       {masalah === 'akun' && 'Pilih akun untuk baris ini.'}
-                      {masalah === 'nominal' && 'Nominal tidak valid — angka saja, maksimal 2 desimal, tanpa tanda minus.'}
+                      {masalah === 'nominal' &&
+                        `${galat.debit !== null ? 'Debit' : 'Kredit'}: ${galat.debit ?? galat.kredit ?? 'nominal tidak valid.'}`}
                       {masalah === 'dua-sisi' && 'Isi debit ATAU kredit, tidak keduanya.'}
                       {masalah === 'kosong' && 'Isi nominal di salah satu sisi.'}
                     </p>

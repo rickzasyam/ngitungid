@@ -13,6 +13,8 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Loader2 } from 'lucide-react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
+import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
+import { pesanGalatNominal } from '@/lib/nominal'
 
 export interface AkunOption {
   id: string
@@ -67,6 +69,9 @@ export function MutationFormModal({
 
   const set = <K extends keyof MutationFormValue>(k: K, v: MutationFormValue[K]) =>
     setForm(f => ({ ...f, [k]: v }))
+
+  // Parser bersama (lib/nominal.ts) — yang sama dengan validasi server.
+  const galatNominal = pesanGalatNominal(form.nominal)
 
   return (
     <ModalShell onDismiss={submitting ? null : onCancel} labelledBy="mutasi-form-title" className="max-w-xl">
@@ -163,10 +168,14 @@ export function MutationFormModal({
             value={form.nominal}
             onChange={e => set('nominal', e.target.value)}
             placeholder="0"
-            style={{ ...input, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+            aria-invalid={galatNominal !== null}
+            aria-describedby={galatNominal ? 'm-nominal-galat' : undefined}
+            style={{ ...input, ...merahBila(galatNominal), textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
           />
+          <GalatNominal id="m-nominal-galat" pesan={galatNominal} />
           <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            Tanpa tanda minus — arahnya sudah dipilih di atas.
+            Tanpa tanda minus — arahnya sudah dipilih di atas. Titik ribuan dan koma desimal boleh
+            (1.500.000,25).
           </p>
         </div>
 
@@ -215,7 +224,8 @@ export function MutationFormModal({
         <button
           type="button"
           onClick={() => onSubmit(form)}
-          disabled={submitting}
+          disabled={submitting || galatNominal !== null}
+          title={galatNominal ? 'Perbaiki nominal yang ditandai merah dulu.' : undefined}
           className="inline-flex items-center gap-2 rounded-full text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
           style={{ padding: '8px 18px', minHeight: 34, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
         >

@@ -18,6 +18,8 @@
 // pemetaan — bukan syarat supaya berkasnya bisa diimpor. Importer yang hanya
 // jalan kalau headernya dikenali akan gagal pada bank berikutnya.
 
+import { pemisahDesimal, type Pemisah as PemisahAngka } from '@/lib/nominal'
+
 export type MutasiField = 'tanggal' | 'keterangan' | 'debit' | 'kredit' | 'saldo'
 
 export const MUTASI_FIELDS: readonly MutasiField[] = [
@@ -296,15 +298,17 @@ export function detectHeader(rows: readonly RawRow[]): HeaderDetection {
  *
  * ══ DUA KONVENSI ANGKA, DAN KELIRU MEMILIH ITU MAHAL ════════════════════
  * "1.234.567,89" (Indonesia) dan "1,234,567.89" (Inggris) memakai karakter yang
- * sama dengan arti terbalik. Aturannya:
+ * sama dengan arti terbalik. Klasifikasi pemisahnya DIBAGI dengan form & server
+ * lewat `pemisahDesimal` (lib/nominal.ts), supaya satu teks tidak pernah berarti
+ * dua angka di dua pintu:
  *   - Kalau titik DAN koma muncul: yang MUNCUL TERAKHIR adalah desimal.
- *   - Kalau hanya satu jenis yang muncul SEKALI dan diikuti tepat 2 digit: ia
- *     desimal ("1234,56").
+ *   - Kalau hanya satu jenis yang muncul SEKALI dan diikuti 0–2 digit: ia
+ *     desimal ("1234,56", "1234,5").
  *   - Selain itu ia pemisah ribuan dan dibuang ("1.000", "1.234.567").
  *
- * "1.000" karena itu dibaca SERIBU, bukan satu koma nol. Itu tebakan, dan
- * tebakan yang benar untuk rekening koran rupiah — nominal dua digit di
- * belakang titik pada berkas bank Indonesia praktis selalu ribuan.
+ * "1.000" karena itu dibaca SERIBU, bukan satu koma nol: pemisah ribuan selalu
+ * diikuti tepat 3 digit. Sampai 2026-09-24 aturan kedua berbunyi "tepat 2
+ * digit", sehingga "1234,5" terbaca 12.345 — sepuluh kali lipat, tanpa galat.
  *
  * Tanda kurung dan tanda minus di depan sama-sama berarti negatif; pemanggil
  * yang memutuskan apakah negatif itu sah (saldo boleh, nominal tidak).
@@ -317,6 +321,7 @@ export function parseNominalCell(raw: unknown): string | null {
   let koma = -1
   let jumlahTitik = 0
   let jumlahKoma = 0
+  let terakhir: PemisahAngka | null = null
 
   for (const ch of teks) {
     if (ch === '(' || ch === '-') {
@@ -332,11 +337,13 @@ export function parseNominalCell(raw: unknown): string | null {
     if (ch === '.') {
       titik = angka.length
       jumlahTitik++
+      terakhir = '.'
       continue
     }
     if (ch === ',') {
       koma = angka.length
       jumlahKoma++
+      terakhir = ','
       continue
     }
     // Huruf (Rp, IDR, DB/CR), spasi, dan sisanya diabaikan. Penanda DB/CR
@@ -348,16 +355,15 @@ export function parseNominalCell(raw: unknown): string | null {
   if (angka.length === 0) return null
 
   // Posisi pemisah desimal, dihitung sebagai "berapa digit sesudahnya".
+  const desimal = pemisahDesimal({
+    jumlahDigit: angka.length,
+    titik: { jumlah: jumlahTitik, posisiTerakhir: titik },
+    koma: { jumlah: jumlahKoma, posisiTerakhir: koma },
+    terakhir,
+  })
   let digitDesimal = 0
-  if (jumlahTitik > 0 && jumlahKoma > 0) {
-    const desimalDiKoma = koma > titik
-    const posisi = desimalDiKoma ? koma : titik
-    digitDesimal = angka.length - posisi
-  } else if (jumlahTitik === 1 && angka.length - titik === 2) {
-    digitDesimal = 2
-  } else if (jumlahKoma === 1 && angka.length - koma === 2) {
-    digitDesimal = 2
-  }
+  if (desimal === '.') digitDesimal = angka.length - titik
+  else if (desimal === ',') digitDesimal = angka.length - koma
 
   // Lebih dari 2 digit desimal dibulatkan ke bawah ke 2 — rekening koran
   // sesekali menulis 4 desimal untuk kurs. Memotong, bukan membulatkan:

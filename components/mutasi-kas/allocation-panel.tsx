@@ -19,6 +19,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link2, Loader2, Pin, Trash2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
+import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
+import { pesanGalatNominal } from '@/lib/nominal'
 
 export interface AlokasiRow {
   id: string
@@ -61,6 +63,8 @@ export function AllocationPanel({
   const [invoices, setInvoices] = useState<InvoiceBersisa[]>([])
   const [invoiceId, setInvoiceId] = useState('')
   const [nominal, setNominal] = useState('')
+  // Parser bersama (lib/nominal.ts) — yang sama dengan route alokasi.
+  const galatNominal = pesanGalatNominal(nominal)
   const [terminUrutan, setTerminUrutan] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +125,7 @@ export function AllocationPanel({
   }, [terpilih])
 
   async function tambah() {
-    if (!invoiceId || nominal.trim() === '') return
+    if (!invoiceId || nominal.trim() === '' || galatNominal !== null) return
     setBusy(true)
     setError(null)
     setDetails([])
@@ -310,8 +314,11 @@ export function AllocationPanel({
                     onChange={e => setNominal(e.target.value)}
                     placeholder="Nominal"
                     aria-label="Nominal alokasi"
-                    style={{ ...input, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                    aria-invalid={galatNominal !== null}
+                    aria-describedby={galatNominal ? `alokasi-${mutationId}-galat` : undefined}
+                    style={{ ...input, ...merahBila(galatNominal), textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
                   />
+                  <GalatNominal id={`alokasi-${mutationId}-galat`} pesan={galatNominal} />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
@@ -328,7 +335,7 @@ export function AllocationPanel({
                 <button
                   type="button"
                   onClick={() => void tambah()}
-                  disabled={busy || !invoiceId || nominal.trim() === ''}
+                  disabled={busy || !invoiceId || nominal.trim() === '' || galatNominal !== null}
                   className="inline-flex items-center justify-center gap-2 rounded-full text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                   style={{ minHeight: 38, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
                 >
