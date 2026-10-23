@@ -94,6 +94,17 @@ thing protecting production is which branch `DATABASE_URL` points at.
 - Production schema changes go through `db:generate` + `db:migrate` (reviewed SQL),
   deliberately pointed at `main` — not `db:push`.
 
+**Rahasia & kredensial (aturan Ricko 2026-10-23 — menggantikan larangan lama membaca/mencetak `.env.local`):**
+1. **Rahasia DEV boleh dibaca, dipakai, dan ditampilkan bila perlu, tanpa minta izin:** isi `.env.local`, connection
+   string branch Neon dev (`ep-rapid-hat-aos7vlb0`), serta `DATABASE_URL` dan `AUTH_SECRET` **Preview** di Vercel.
+2. **Rahasia PRODUKSI tetap dilarang tampil di percakapan:** connection string branch main (`ep-small-mode-ao8ouvtp`),
+   `AUTH_SECRET` **Production**, dan `GEMINI_API_KEY` selama masih dipakai bersama Production. Kalau perlu dipakai
+   (mis. migrasi ke main), ambil lewat alat dan langsung pakai sebagai **variabel lingkungan untuk satu perintah**
+   (`DATABASE_URL=... pnpm db:migrate`) — tidak ditulis ke berkas, tidak dicetak. `drizzle.config.ts` tidak menimpa
+   variabel lingkungan yang sudah ada dengan isi `.env.local` (terbukti 2026-10-23).
+3. **Sebelum memakai `.env.local`, tetap pastikan `DATABASE_URL`-nya mengarah ke `ep-rapid-hat`.** Kalau mengarah ke
+   `ep-small-mode`, **berhenti dan lapor** — itu berarti ada yang salah konfigurasi, bukan izin untuk bekerja di main.
+
 Full workflow: see `README.md` § "Database environments".
 
 ## Design System (locked — do not deviate)
