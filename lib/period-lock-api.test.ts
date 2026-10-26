@@ -102,3 +102,48 @@ describe('pemindai: tidak ada route penulis jurnal/mutasi tanpa pemeriksaan kunc
     })
   }
 })
+
+// K3 — route kunci & buka. Hak aksesnya keputusan D17, dan satu-satunya yang
+// menjaganya tetap di tempat adalah berkas ini.
+describe('route /api/period-locks (K3)', () => {
+  const LIST = read('app', 'api', 'period-locks', 'route.ts')
+  const ONE = read('app', 'api', 'period-locks', '[id]', 'route.ts')
+
+  it('baca = requireInternal (finance ikut melihat), kunci = requireAkunting, buka = requireOwner', () => {
+    expect(handler(LIST, 'GET')).toContain('await requireInternal()')
+    expect(handler(LIST, 'POST')).toContain('await requireAkunting()')
+    expect(handler(ONE, 'DELETE')).toContain('await requireOwner()')
+    for (const b of [handler(LIST, 'GET'), handler(LIST, 'POST'), handler(ONE, 'DELETE')]) {
+      expect(b).toContain('canAccessClientData(')
+    }
+  })
+
+  it('mengunci: divalidasi aturan murni K1 terhadap kunci berlaku & hari ini', () => {
+    const b = handler(LIST, 'POST')
+    expect(b).toContain('latestLock(await loadPeriodLocks(clientId))')
+    expect(b).toContain('validateLockInput({ terkunciSampai: raw.terkunciSampai }, { latest, hariIni: todayYmd() })')
+  })
+
+  it('mengunci: baris kunci + riwayat period_locked di SATU batch', () => {
+    const b = handler(LIST, 'POST')
+    const batch = b.indexOf('await db.batch(')
+    expect(b.indexOf('db.insert(periodLocks)')).toBeLessThan(batch)
+    expect(b.indexOf("event: 'period_locked'")).toBeLessThan(batch)
+    expect(b).toContain("entityType: 'period_lock'")
+  })
+
+  it('membuka: alasan wajib, hanya kunci TERBARU, riwayat period_unlocked membawa alasannya', () => {
+    const b = handler(ONE, 'DELETE')
+    expect(b).toContain('validateUnlockReason(')
+    expect(b).toContain('latestLock(semua)?.id !== row.id')
+    const batch = b.indexOf('await db.batch(')
+    expect(b.indexOf('db.delete(periodLocks)')).toBeLessThan(batch)
+    expect(b.indexOf("event: 'period_unlocked'")).toBeLessThan(batch)
+    expect(b).toContain('catatan: alasan.value')
+  })
+
+  it('baris DIBACA dulu, baru kliennya diperiksa (P7)', () => {
+    const b = handler(ONE, 'DELETE')
+    expect(b.indexOf('.from(periodLocks)')).toBeLessThan(b.indexOf('canAccessClientData('))
+  })
+})
