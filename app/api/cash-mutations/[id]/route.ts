@@ -5,12 +5,13 @@ import { db } from '@/lib/db'
 import { cashMutations, journalEntries } from '@/lib/db/schema'
 import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData, type Role } from '@/lib/roles'
-import { fingerprintMutasi, validateCashMutation } from '@/lib/cash-mutation'
+import { fingerprintMutasi, jurnalMengunciMutasi, validateCashMutation } from '@/lib/cash-mutation'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { resolveUserId } from '@/lib/api/journal-queries'
 import { purgeAuditEvents } from '@/lib/api/audit'
 import {
   assertAccountBelongsToClient,
+  lapisPembalik,
   loadCashAccount,
   loadMutationAllocations,
   loadMutationDetail,
@@ -205,21 +206,28 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // Jurnal TERPOSTING menahan penghapusan: angkanya sudah masuk buku besar, dan
   // menghapus mutasinya akan meninggalkan buku besar yang tidak bisa dijelaskan
   // dari dokumen mana pun.
+  //
+  // Jurnal terposting yang SUDAH DIBALIK tidak menahan, tapi juga tidak ikut
+  // dihapus: pasangan asli + pembalik adalah riwayat buku besar yang sudah
+  // saling menihilkan (dan reversal_of_id RESTRICT menolak penghapusannya).
+  let jurnalRiwayat = false
   if (row.journalId) {
     const [jurnal] = await db
       .select({ status: journalEntries.status })
       .from(journalEntries)
       .where(eq(journalEntries.id, row.journalId))
       .limit(1)
-    if (jurnal?.status === 'posted') {
+    const lapis = jurnal?.status === 'posted' ? await lapisPembalik(row.journalId) : 0
+    if (jurnalMengunciMutasi(jurnal ?? null, lapis)) {
       return NextResponse.json(
         {
           error: 'Jurnal mutasi ini sudah diposting — mutasinya tidak bisa dihapus.',
-          details: ['Buat jurnal balik untuk jurnalnya lebih dulu.'],
+          details: ['Buat jurnal balik untuk jurnalnya dan posting pembaliknya lebih dulu.'],
         },
         { status: 409 }
       )
     }
+    jurnalRiwayat = jurnal?.status === 'posted'
   }
 
   // Tidak ada snapshot yang dibaca di sini: riwayatnya ikut terhapus (lihat
@@ -237,7 +245,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     purgeAuditEvents('cash_mutation', id),
     db.delete(cashMutations).where(eq(cashMutations.id, id)),
   ]
-  if (row.journalId) {
+  if (row.journalId && !jurnalRiwayat) {
     statements.push(
       db.delete(journalEntries).where(eq(journalEntries.id, row.journalId)),
       purgeAuditEvents('journal', row.journalId)

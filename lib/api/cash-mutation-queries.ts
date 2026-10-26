@@ -21,9 +21,11 @@ import {
   allocationRemaining,
   buildAllocationJournalLines,
   buildCounterAccountJournalLines,
+  jurnalMengunciMutasi,
   mutationStatus,
 } from '@/lib/cash-mutation'
 import { purgeAuditEvents, recordAuditEvent, recordJournalEvent } from '@/lib/api/audit'
+import { findPostedReversal } from '@/lib/api/journal-queries'
 
 // Query & penjaga mutasi kas/bank, dipakai BERSAMA route daftar, detail, impor,
 // dan alokasi. Hidup di modul terpisah karena Next menolak export non-handler di
@@ -290,6 +292,17 @@ export async function listCashMutations(opts: {
 
 // ── Jurnal mutasi ────────────────────────────────────────────
 
+/**
+ * Panjang rantai pembalik TERPOSTING di atas sebuah jurnal — masukan
+ * `jurnalMengunciMutasi`. Satu jurnal paling banyak punya satu pembalik
+ * terposting (`canReverse`), jadi rantainya lurus dan pendek.
+ */
+export async function lapisPembalik(journalId: string): Promise<number> {
+  let n = 0
+  for (let r = await findPostedReversal(journalId); r; r = await findPostedReversal(r.id)) n++
+  return n
+}
+
 export type SyncJournalResult =
   | { error: NextResponse }
   | { statements: BatchItem<'pg'>[]; journalId: string | null }
@@ -311,6 +324,11 @@ export type SyncJournalResult =
  * jurnal terposting berarti mengubah angka yang sudah masuk buku besar tanpa
  * melewati jurnal balik — persis yang D42 larang, dan di sini ia akan terjadi
  * sebagai efek samping dari menambah satu alokasi.
+ *
+ * Kecuali jurnal itu SUDAH DIBALIK (`jurnalMengunciMutasi`): mutasinya dilepas
+ * dan dijurnal ulang sebagai draf baru, jurnal lama + pembaliknya tidak
+ * disentuh. Tanpa pengecualian ini, saran "buat jurnal balik dulu" di pesan
+ * 409 adalah jalan buntu — mutasinya tetap terkunci selamanya.
  */
 export async function syncMutationJournal(opts: {
   mutation: {
@@ -343,19 +361,30 @@ export async function syncMutationJournal(opts: {
       .limit(1)
     jurnalLama = row ?? null
   }
-  if (jurnalLama && jurnalLama.status === 'posted') {
+  const lapis = jurnalLama?.status === 'posted' ? await lapisPembalik(jurnalLama.id) : 0
+  if (jurnalMengunciMutasi(jurnalLama, lapis)) {
     return {
       error: NextResponse.json(
         {
           error: 'Jurnal mutasi ini sudah diposting dan tidak bisa dibangun ulang.',
           details: [
-            'Buat jurnal balik untuk jurnal itu lebih dulu, baru ubah mutasinya.',
+            'Buat jurnal balik untuk jurnal itu dan posting pembaliknya, baru ubah mutasinya.',
             'Mengubahnya di sini akan memindahkan angka yang sudah masuk buku besar tanpa jejak pembalik.',
           ],
         },
         { status: 409 }
       ),
     }
+  }
+  // Terposting tapi SUDAH dibalik: pasangan asli + pembalik adalah riwayat buku
+  // besar dan tidak disentuh sama sekali. Mutasinya dilepas dari jurnal itu,
+  // lalu dijurnal dari nol seperti mutasi yang belum berjurnal — draf baru, atau
+  // tanpa jurnal bila tak ada lagi yang dijurnalkan.
+  if (jurnalLama && jurnalLama.status === 'posted') {
+    statements.push(
+      db.update(cashMutations).set({ journalId: null, updatedAt: new Date() }).where(eq(cashMutations.id, m.id))
+    )
+    jurnalLama = null
   }
 
   const alokasiSah = opts.alokasi.filter(a => a.akunHutangId !== null)

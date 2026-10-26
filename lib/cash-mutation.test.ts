@@ -5,6 +5,7 @@ import {
   buildAllocationJournalLines,
   buildCounterAccountJournalLines,
   fingerprintMutasi,
+  jurnalMengunciMutasi,
   mutationAmountMinor,
   mutationStatus,
   normalizeKeterangan,
@@ -368,5 +369,31 @@ describe('buildCounterAccountJournalLines — kasus (b) COA lawan bebas', () => 
       keterangan: 'Biaya admin bank',
     })
     expect(lines.every(l => l.keterangan === 'Biaya admin bank')).toBe(true)
+  })
+})
+
+describe('jurnalMengunciMutasi — terposting mengunci, kecuali sudah dibalik', () => {
+  const posted = { status: 'posted' }
+
+  it('tanpa jurnal atau jurnal draf → tidak mengunci', () => {
+    expect(jurnalMengunciMutasi(null, 0)).toBe(false)
+    expect(jurnalMengunciMutasi({ status: 'draft' }, 0)).toBe(false)
+  })
+
+  it('terposting tanpa pembalik terposting → mengunci', () => {
+    expect(jurnalMengunciMutasi(posted, 0)).toBe(true)
+  })
+
+  // Inti perbaikannya: dulu jalan buntu — pesan 409 menyuruh membalik jurnal,
+  // tapi mutasinya tetap ditolak sesudah dibalik.
+  it('terposting yang sudah dibalik → terbuka', () => {
+    expect(jurnalMengunciMutasi(posted, 1)).toBe(false)
+  })
+
+  // Membalik pembalik menghidupkan lagi angka aslinya di buku besar; membuka
+  // mutasinya di sini akan menghitung angka itu dua kali.
+  it('pembaliknya ikut dibalik → mengunci lagi (genap = efek hidup)', () => {
+    expect(jurnalMengunciMutasi(posted, 2)).toBe(true)
+    expect(jurnalMengunciMutasi(posted, 3)).toBe(false)
   })
 })
