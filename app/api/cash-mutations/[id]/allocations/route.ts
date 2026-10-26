@@ -17,6 +17,7 @@ import {
   recordMutationEvent,
   syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -49,6 +50,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!canAccessClientData(g.user.role, g.user.clientId, mutation.clientId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(mutation.clientId, [mutation.tanggal])
+  if (terkunci) return terkunci
 
   let body: unknown
   try {

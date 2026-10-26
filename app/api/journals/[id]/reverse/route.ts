@@ -15,6 +15,7 @@ import {
   resolveUserId,
 } from '@/lib/api/journal-queries'
 import { recordJournalEvent } from '@/lib/api/audit'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -79,6 +80,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(asli.clientId, [check.value.tanggal])
+  if (terkunci) return terkunci
 
   // ══ SUPPLIER DICERMINKAN, BUKAN DIPUTUSKAN ULANG (F1) ════════════════
   // validateJournalInput di atas dipanggil TANPA peta tipe akun, jadi ia

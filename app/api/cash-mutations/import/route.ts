@@ -20,6 +20,7 @@ import {
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { resolveUserId } from '@/lib/api/journal-queries'
 import { loadCashAccount } from '@/lib/api/cash-mutation-queries'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -196,6 +197,10 @@ export async function POST(req: Request) {
   }
 
   const { rows, bermasalah } = mapRows({ rows: parsed.rows, mapping, mulaiDariIndex })
+  // Ditolak SELURUHNYA, juga saat dryRun: baris di periode terkunci bukan baris
+  // bermasalah yang boleh dilewati — ia tanda berkasnya salah periode.
+  const terkunci = await tolakBilaPeriodeTerkunci(clientId, [...rows.map(r => r.tanggal)])
+  if (terkunci) return terkunci
   if (rows.length === 0) {
     return NextResponse.json(
       {

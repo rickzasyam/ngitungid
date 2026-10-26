@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { journalEntries, journalLines } from '@/lib/db/schema'
 import { bolehEditPosting } from '@/lib/accounting-settings'
 import { loadAccountingSettings } from '@/lib/api/accounting-settings'
-import { periodLockChecker } from '@/lib/api/period-lock'
+import { periodLockChecker, tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import {
@@ -216,6 +216,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(g.row.clientId, [g.row.tanggal, check.value.tanggal])
+  if (terkunci) return terkunci
 
   const guardSupplier = await assertSuppliersBelongToClient(
     check.value.lines.map(l => l.supplierId),
@@ -316,6 +318,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const izin = await assertEditable(g.row)
   if ('error' in izin) return izin.error
+  const terkunci = await tolakBilaPeriodeTerkunci(g.row.clientId, [g.row.tanggal])
+  if (terkunci) return terkunci
 
   const statements: BatchItem<'pg'>[] = [
     purgeAuditEvents('journal', g.row.id),

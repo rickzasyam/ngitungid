@@ -17,6 +17,7 @@ import {
   assertSuppliersBelongToClient,
 } from '@/lib/api/journal-queries'
 import { recordJournalEvent } from '@/lib/api/audit'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -199,6 +200,8 @@ export async function POST(req: Request) {
       { status: 400 }
     )
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(clientId, [check.value.tanggal])
+  if (terkunci) return terkunci
 
   const guard = await assertAccountsBelongToClient(check.value.lines, clientId)
   if (guard) return guard

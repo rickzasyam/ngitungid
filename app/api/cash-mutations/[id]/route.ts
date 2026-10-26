@@ -19,6 +19,7 @@ import {
   snapshotMutation,
   syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -92,6 +93,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(row.clientId, [row.tanggal, check.value.tanggal])
+  if (terkunci) return terkunci
 
   const akunKas = await loadCashAccount(row.clientId, check.value.akunKasId)
   if (!akunKas) {
@@ -201,6 +204,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const guard = await guardMutation(id, g.user.role, g.user.clientId)
   if ('error' in guard) return guard.error
   const { row } = guard
+  const terkunci = await tolakBilaPeriodeTerkunci(row.clientId, [row.tanggal])
+  if (terkunci) return terkunci
 
   // Jurnal TERPOSTING menahan penghapusan: angkanya sudah masuk buku besar, dan
   // menghapus mutasinya akan meninggalkan buku besar yang tidak bisa dijelaskan

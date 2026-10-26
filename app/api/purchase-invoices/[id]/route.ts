@@ -27,6 +27,7 @@ import {
 } from '@/lib/api/purchase-queries'
 import { loadAccountingSettings } from '@/lib/api/accounting-settings'
 import { purgeAuditEvents, recordAuditEvent } from '@/lib/api/audit'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -116,6 +117,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(g.row.clientId, [g.row.tanggal, check.value.tanggal])
+  if (terkunci) return terkunci
 
   const accountGuard = await assertInvoiceAccountsBelongToClient(
     [check.value.akunTujuanId, check.value.akunKasId, check.value.akunHutangId, check.value.akunPpnMasukanId],
@@ -230,6 +233,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await guard(params, true)
   if ('error' in g) return g.error
+  const terkunci = await tolakBilaPeriodeTerkunci(g.row.clientId, [g.row.tanggal])
+  if (terkunci) return terkunci
 
   // Aturan yang SAMA dengan mutasi kas (nasibJurnalModul): jurnal terposting
   // yang belum dibalik menahan penghapusan, dan setelan "posting bisa diedit"

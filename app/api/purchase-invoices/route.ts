@@ -29,6 +29,7 @@ import {
 } from '@/lib/api/purchase-queries'
 import { loadAccountingSettings } from '@/lib/api/accounting-settings'
 import { recordAuditEvent, recordJournalEvent } from '@/lib/api/audit'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -142,6 +143,8 @@ export async function POST(req: Request) {
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(clientId, [check.value.tanggal])
+  if (terkunci) return terkunci
 
   const guard = await assertInvoiceAccountsBelongToClient(
     [check.value.akunTujuanId, check.value.akunKasId, check.value.akunHutangId, check.value.akunPpnMasukanId],

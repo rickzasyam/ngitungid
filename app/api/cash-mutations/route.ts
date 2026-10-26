@@ -18,6 +18,7 @@ import {
   recordMutationEvent,
   syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
+import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -110,6 +111,8 @@ export async function POST(req: Request) {
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
   }
+  const terkunci = await tolakBilaPeriodeTerkunci(clientId, [check.value.tanggal])
+  if (terkunci) return terkunci
 
   // Akun kas HARUS bertanda is_kas (E1–E3), bukan akun sembarang: daftar di
   // layar disaring dengan aturan yang sama, jadi apa pun yang lolos ke sini

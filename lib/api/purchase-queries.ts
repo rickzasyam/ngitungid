@@ -77,6 +77,7 @@ export async function loadInvoiceHeaderForWrite(invoiceId: string) {
       clientId: purchaseInvoices.clientId,
       supplierId: purchaseInvoices.supplierId,
       noInvoice: purchaseInvoices.noInvoice,
+      tanggal: purchaseInvoices.tanggal,
       journalId: purchaseInvoices.journalId,
     })
     .from(purchaseInvoices)
