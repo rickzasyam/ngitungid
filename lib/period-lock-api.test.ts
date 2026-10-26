@@ -147,3 +147,51 @@ describe('route /api/period-locks (K3)', () => {
     expect(b.indexOf('.from(periodLocks)')).toBeLessThan(b.indexOf('canAccessClientData('))
   })
 })
+
+// K4 — layar. Layar tidak menegakkan apa pun (server sudah, K2/K3), tapi pesan
+// dan tombolnya wajib memakai aturan murni yang SAMA — kalau tidak, layar
+// mengizinkan yang ditolak server, atau sebaliknya.
+describe('UI kunci periode (K4)', () => {
+  const KARTU = read('components', 'settings', 'kunci-periode-card.tsx')
+  const SETTINGS = read('app', 'settings', 'page.tsx')
+  const FORM = read('components', 'jurnal', 'journal-form-modal.tsx')
+  const JURNAL = read('app', 'jurnal', 'page.tsx')
+  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+
+  it('tab Pembukuan memuat kartu Kunci Periode; membuka = owner saja (D17)', () => {
+    expect(SETTINGS).toContain('<KunciPeriodeCard clientId={clientId} bolehKunci={!readOnly} bolehBuka={bolehBuka} />')
+    expect(SETTINGS).toContain('bolehBuka={isOwner}')
+  })
+
+  it('kartu memakai aturan murni yang sama dengan server, dan batas hari ini WIB', () => {
+    expect(KARTU).toContain('validateLockInput({ terkunciSampai: tanggal }, { latest, hariIni })')
+    expect(KARTU).toContain('validateUnlockReason(alasan)')
+    expect(KARTU).toContain('const hariIni = hariIniJakarta()')
+    expect(KARTU).toContain('max={hariIni}')
+  })
+
+  it('kartu: kunci lewat POST, buka lewat DELETE kunci TERBARU, tombol mengikuti hak akses', () => {
+    expect(KARTU).toContain("fetch('/api/period-locks', {")
+    expect(KARTU).toContain('fetch(`/api/period-locks/${terbaru.id}`, {')
+    expect(KARTU).toContain('{!loading && bolehKunci && (')
+    expect(KARTU).toContain('{!loading && bolehBuka && kunci.length > 0 && (')
+    expect(KARTU).toContain('<ModalShell')
+  })
+
+  it('form jurnal: tanggal BARU dan LAMA diperiksa lewat isDateLocked, Simpan tertahan', () => {
+    expect(FORM).toContain("isDateLocked(form.tanggal, kunci) || (mode === 'edit' && isDateLocked(initial.tanggal, kunci))")
+    expect(FORM).toContain('!submitting && !tanggalTerkunci')
+  })
+
+  it('halaman /jurnal membaca kunci, meneruskannya ke form, dan menahan tombol Posting', () => {
+    expect(JURNAL).toContain('fetch(`/api/period-locks?clientId=${clientId}`)')
+    expect(JURNAL).toContain('terkunciSampai={terkunciSampai}')
+    expect(JURNAL).toContain('isDateLocked(postingTarget.tanggal, [{ terkunciSampai }])')
+    expect(JURNAL).toContain('disabled={postingBusy || postingTerkunci}')
+  })
+
+  it('wizard impor memperingatkan bahwa berkas akan ditolak seluruhnya', () => {
+    expect(WIZARD).toContain('fetch(`/api/period-locks?clientId=${clientId}`)')
+    expect(WIZARD).toContain('ditolak seluruhnya')
+  })
+})

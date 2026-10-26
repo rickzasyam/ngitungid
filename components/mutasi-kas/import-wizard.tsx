@@ -13,11 +13,12 @@
 // hari yang sama adalah hal yang nyata; yang dibutuhkan akunting adalah
 // peringatan yang bisa ia abaikan, bukan penolakan yang harus ia akali.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeftRight, CopyCheck, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { MUTASI_FIELD_LABEL, MUTASI_FIELDS, type MutasiField } from '@/lib/csv/mutasi-kas'
+import { fmtTanggal } from '@/components/jurnal/journal-detail'
 
 type BarisPratinjau = {
   nomor: number
@@ -67,6 +68,20 @@ export function ImportWizard({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [details, setDetails] = useState<string[]>([])
+  // Kunci periode (K4) — hanya PERINGATAN di muka; server menolak berkasnya (K2).
+  const [terkunciSampai, setTerkunciSampai] = useState<string | null>(null)
+  useEffect(() => {
+    let batal = false
+    fetch(`/api/period-locks?clientId=${clientId}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { terkunciSampai?: string | null } | null) => {
+        if (!batal) setTerkunciSampai(d?.terkunciSampai ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      batal = true
+    }
+  }, [clientId])
 
   const [pratinjau, setPratinjau] = useState<Pratinjau | null>(null)
   const [pemetaan, setPemetaan] = useState<ButuhPemetaan | null>(null)
@@ -138,6 +153,12 @@ export function ImportWizard({
       </div>
 
       <div className="px-5 sm:px-6 py-4 flex flex-col gap-3.5 overflow-y-auto" style={{ maxHeight: '64vh' }}>
+        {terkunciSampai && (
+          <p role="note" className="text-xs rounded-2xl px-3.5 py-2.5" style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)' }}>
+            Periode klien ini terkunci sampai <strong>{fmtTanggal(terkunciSampai)}</strong>. Berkas yang memuat baris
+            bertanggal sampai hari itu akan <strong>ditolak seluruhnya</strong>.
+          </p>
+        )}
         {error && (
           <div
             role="alert"

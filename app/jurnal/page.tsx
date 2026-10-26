@@ -62,6 +62,7 @@ import {
   JournalReverseModal,
   type ReverseValue,
 } from '@/components/jurnal/journal-reverse-modal'
+import { isDateLocked } from '@/lib/period-lock'
 
 interface JournalRow {
   id: string
@@ -127,8 +128,12 @@ export default function JurnalPage() {
   const [balikTarget, setBalikTarget] = useState<JournalRow | null>(null)
   const [balikBusy, setBalikBusy] = useState(false)
   const [balikErrors, setBalikErrors] = useState<string[]>([])
+  // Kunci periode (K4) — hanya untuk PERINGATAN; server menolak 409 sendiri (K2).
+  const [terkunciSampai, setTerkunciSampai] = useState<string | null>(null)
 
   const clientId = activeClient?.id ?? null
+  const postingTerkunci =
+    postingTarget !== null && terkunciSampai !== null && isDateLocked(postingTarget.tanggal, [{ terkunciSampai }])
 
   // TIDAK menyentuh state sebelum await pertama, dan efek di bawah memanggilnya
   // dari dalam fungsi async — dua-duanya supaya tidak ada setState yang berjalan
@@ -175,13 +180,18 @@ export default function JurnalPage() {
     let batal = false
     void (async () => {
       try {
-        const [res, resSup] = await Promise.all([
+        const [res, resSup, resKunci] = await Promise.all([
           fetch(`/api/clients/${clientId}/coa`),
           fetch(`/api/clients/${clientId}/suppliers`),
+          fetch(`/api/period-locks?clientId=${clientId}`),
         ])
         const payload = (await res.json().catch(() => null)) as { accounts?: CoaOption[] } | null
         const pSup = (await resSup.json().catch(() => null)) as { suppliers?: SupplierOption[] } | null
+        const pKunci = (await resKunci.json().catch(() => null)) as { terkunciSampai?: string | null } | null
         if (batal) return
+        // Gagal membaca kunci tidak menggagalkan halaman: peringatannya sekadar
+        // tidak muncul, dan server tetap menolak.
+        setTerkunciSampai(resKunci.ok ? (pKunci?.terkunciSampai ?? null) : null)
         setAccounts(payload?.accounts ?? [])
         // Supplier untuk penanda baris berakun hutang (F4). Gagal memuatnya
         // tidak menggagalkan form: pemilihnya sekadar tidak muncul.
@@ -798,6 +808,7 @@ export default function JurnalPage() {
           initial={formInitial}
           submitting={submitting}
           serverErrors={formErrors}
+          terkunciSampai={terkunciSampai}
           onSubmit={simpan}
           onCancel={() => {
             setFormMode(null)
@@ -834,6 +845,11 @@ export default function JurnalPage() {
               </strong>{' '}
               Baris-barisnya masuk buku besar dan ikut menghitung saldo akun.
             </p>
+            {postingTerkunci && (
+              <p role="alert" className="text-xs mt-2" style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+                Periode sudah dikunci sampai {fmtTanggal(terkunciSampai ?? '')} — jurnal bertanggal ini tidak bisa diposting.
+              </p>
+            )}
           </div>
           <div
             className="flex items-center justify-end gap-2 px-5 sm:px-6 py-3.5 border-t"
@@ -851,7 +867,7 @@ export default function JurnalPage() {
             <button
               type="button"
               onClick={() => void posting()}
-              disabled={postingBusy}
+              disabled={postingBusy || postingTerkunci}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold disabled:opacity-70 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
               style={{
                 background: 'var(--color-accent-primary)',

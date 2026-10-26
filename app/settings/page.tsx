@@ -5,6 +5,7 @@ import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-repl
 import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
 import { CoaTypesDialog, type CoaTypesPreview } from '@/components/settings/coa-types-dialog'
 import { SupplierTab } from '@/components/settings/supplier-manager'
+import { KunciPeriodeCard } from '@/components/settings/kunci-periode-card'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import {
   FileSpreadsheet,
@@ -177,7 +178,7 @@ const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe;
   general:       { label: 'General',           desc: 'Bahasa & format nominal',     Icon: Globe,             scoped: false },
   coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
   supplier:      { label: 'Supplier',          desc: 'Master data rekanan klien',   Icon: Truck,             scoped: true },
-  pembukuan:     { label: 'Pembukuan',         desc: 'Akun PPN & aturan posting',   Icon: BookLock,          scoped: true },
+  pembukuan:     { label: 'Pembukuan',         desc: 'Akun PPN, posting & kunci periode', Icon: BookLock,          scoped: true },
   analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
   users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
   layanan:       { label: 'Layanan',           desc: 'Master jasa yang dijual',     Icon: Package,           scoped: false },
@@ -1273,9 +1274,10 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
 
 // ── Tab: Pembukuan (scoped ke klien aktif) ───────────────────
 //
-// Dua setelan yang mengubah PERILAKU pembukuan klien, bukan tampilannya:
+// Setelan yang mengubah PERILAKU pembukuan klien, bukan tampilannya:
 //   1. Akun PPN Masukan (D33) — dipakai route pembelian saat invoice ber-PPN.
 //   2. "Posting bisa diedit" (D42) — bawaan MATI.
+//   3. Kunci Periode (§7.B, K4) — mengunci = akunting/owner, membuka = owner.
 //
 // ══ KENAPA SAKELARNYA MINTA KONFIRMASI SAAT DINYALAKAN ═══════════════════
 // Menyalakannya berarti angka yang sudah diserahkan ke klien bisa berubah tanpa
@@ -1283,7 +1285,16 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
 // "diubah setelah posting"), tapi orang yang menyalakan sakelar ini sering
 // tidak tahu itu. Satu ketukan tambahan adalah harga yang murah; mematikannya
 // kembali tidak minta konfirmasi, karena mematikan tidak menimbulkan risiko.
-function PembukuanTab({ clientId, readOnly = false }: { clientId: string; readOnly?: boolean }) {
+function PembukuanTab({
+  clientId,
+  readOnly = false,
+  bolehBuka = false,
+}: {
+  clientId: string
+  readOnly?: boolean
+  /** Membuka kunci periode = owner saja (D17). */
+  bolehBuka?: boolean
+}) {
   const [akunPpnMasukanId, setAkunPpn] = useState<string>('')
   const [postingBisaDiedit, setPosting] = useState(false)
   const [tersimpan, setTersimpan] = useState(false)
@@ -1521,6 +1532,11 @@ function PembukuanTab({ clientId, readOnly = false }: { clientId: string; readOn
             </div>
           </div>
         )}
+      </SettingsCard>
+
+      {/* ── Kunci periode (K4) ── */}
+      <SettingsCard delay={140}>
+        <KunciPeriodeCard clientId={clientId} bolehKunci={!readOnly} bolehBuka={bolehBuka} />
       </SettingsCard>
     </>
   )
@@ -2297,6 +2313,7 @@ export default function SettingsPage() {
                   key={activeClient.id}
                   clientId={activeClient.id}
                   readOnly={!canDoAccounting}
+                  bolehBuka={isOwner}
                 />
               )}
 

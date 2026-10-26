@@ -25,6 +25,8 @@ import { useRupiah } from '@/lib/preferences-context'
 import { computeTotals, fromMinorUnits, MIN_LINES, NO_BUKTI_MAX, toMinorUnits } from '@/lib/journal'
 import { pesanGalatNominal } from '@/lib/nominal'
 import { aiFeaturesEnabled } from '@/lib/ai-features'
+import { isDateLocked } from '@/lib/period-lock'
+import { fmtTanggal } from '@/components/jurnal/journal-detail'
 
 export interface CoaOption {
   id: string
@@ -110,6 +112,7 @@ export function JournalFormModal({
   serverErrors,
   onSubmit,
   onCancel,
+  terkunciSampai = null,
 }: {
   mode: 'create' | 'edit'
   clientId: string
@@ -123,6 +126,8 @@ export function JournalFormModal({
   serverErrors: string[]
   onSubmit: (value: JournalFormValue) => void
   onCancel: () => void
+  /** Kunci periode klien (K4) — hanya untuk PERINGATAN; server tetap menolak 409 (K2). */
+  terkunciSampai?: string | null
 }) {
   const { rupiahPersis } = useRupiah()
   const [form, setForm] = useState<JournalFormValue>(initial)
@@ -193,8 +198,13 @@ export function JournalFormModal({
   // dan mewajibkannya cuma melahirkan nomor karangan. Keduanya dinormalkan
   // jadi NULL di lib/journal.ts, bukan string kosong.
   const headerLengkap = form.tanggal.trim() !== ''
+  // Tanggal LAMA ikut diperiksa saat mengubah: memindahkan jurnal keluar dari
+  // periode terkunci juga mengubah periode itu — aturan yang sama dengan server.
+  const kunci = terkunciSampai ? [{ terkunciSampai }] : []
+  const tanggalTerkunci =
+    isDateLocked(form.tanggal, kunci) || (mode === 'edit' && isDateLocked(initial.tanggal, kunci))
   const bolehSimpan =
-    headerLengkap && cukupBaris && seimbang && barisBermasalah.every(x => x === null) && !submitting
+    headerLengkap && cukupBaris && seimbang && barisBermasalah.every(x => x === null) && !submitting && !tanggalTerkunci
 
   const patch = (p: Partial<JournalFormValue>) => setForm(f => ({ ...f, ...p }))
   const patchLine = (key: string, p: Partial<FormLine>) =>
@@ -349,7 +359,13 @@ export function JournalFormModal({
               value={form.tanggal}
               onChange={e => patch({ tanggal: e.target.value })}
               style={input}
+              aria-describedby={tanggalTerkunci ? 'jurnal-tanggal-terkunci' : undefined}
             />
+            {tanggalTerkunci && (
+              <p id="jurnal-tanggal-terkunci" role="alert" className="text-[11px] mt-1.5" style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+                Periode sudah dikunci sampai {fmtTanggal(terkunciSampai ?? '')}. Jurnal bertanggal sampai hari itu tidak bisa disimpan.
+              </p>
+            )}
           </div>
           <div>
             <label style={label} htmlFor="jurnal-no-bukti">
@@ -700,7 +716,13 @@ export function JournalFormModal({
           type="button"
           onClick={() => onSubmit(form)}
           disabled={!bolehSimpan}
-          title={bolehSimpan ? undefined : 'Lengkapi isian dan seimbangkan debit dengan kredit dulu.'}
+          title={
+            bolehSimpan
+              ? undefined
+              : tanggalTerkunci
+                ? 'Tanggal ini berada di periode yang sudah dikunci.'
+                : 'Lengkapi isian dan seimbangkan debit dengan kredit dulu.'
+          }
           className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200 enabled:hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary) focus-visible:ring-offset-2"
           style={{
             background: 'var(--color-accent-primary)',
