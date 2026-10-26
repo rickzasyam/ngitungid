@@ -24,6 +24,7 @@ import { NominalInput } from '@/components/ui/nominal-input'
 import { useRupiah } from '@/lib/preferences-context'
 import { computeTotals, fromMinorUnits, MIN_LINES, NO_BUKTI_MAX, toMinorUnits } from '@/lib/journal'
 import { pesanGalatNominal } from '@/lib/nominal'
+import { aiFeaturesEnabled } from '@/lib/ai-features'
 
 export interface CoaOption {
   id: string
@@ -380,6 +381,7 @@ export function JournalFormModal({
         </div>
 
         {/* Saran AI */}
+        {aiFeaturesEnabled() && (
         <div className="mt-3">
           <button
             type="button"
@@ -459,6 +461,7 @@ export function JournalFormModal({
             </ul>
           )}
         </div>
+        )}
 
         {/* Baris D/K */}
         <h3

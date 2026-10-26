@@ -5,6 +5,7 @@ import { masterCoa } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { suggestJournalAccounts } from '@/lib/gemini/suggest-journal-account'
+import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 
 export const runtime = 'nodejs'
 // Panggilan Gemini bisa memakan puluhan detik saat free-tier sedang antre.
@@ -23,6 +24,7 @@ const KETERANGAN_MAX = 500
 export async function POST(req: Request) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
+  if (!aiFeaturesEnabled()) return NextResponse.json({ error: AI_NONAKTIF }, { status: 503 })
 
   let body: unknown
   try {
