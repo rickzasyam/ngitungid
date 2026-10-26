@@ -229,6 +229,22 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
    Untuk memecah pekerjaan jadi beberapa commit, pakai cara yang tidak membuang apa pun:
    `git add <berkas>` per commit, atau `git stash push` HANYA setelah izin diberikan.
 
+10. **JANGAN berpindah branch atau rebase di folder kerja ini selagi dev server Ricko
+    jalan** (`pnpm dev` di terminal Ricko). `git switch` / `git checkout <branch>` /
+    `git rebase` menulis ulang banyak berkas sekaligus, dan watcher Turbopack bisa macet
+    pada versi basi: setiap halaman jadi 500 dengan galat impor yang sudah tidak ada di
+    disk, dan menyentuh atau mengubah berkasnya tidak memulihkannya — hanya restart.
+    Dev server itu milik Ricko; agen tidak menghentikannya.
+
+    Kejadian nyata (2026-10-26): pindah ke branch `docs/tutup-d55` lalu rebase `main`
+    membuat dev server Ricko macet pada `jurnalMengunciMutasi` yang sudah dihapus, dan
+    uji klik K4 tertunda sampai Ricko me-restart-nya.
+
+    Untuk pekerjaan di branch lain: **pakai `git worktree`** di luar folder kerja, atau
+    **minta Ricko mematikan dev server dulu**. Catatan: worktree di folder Temp gagal
+    dijalankan sebagai dev server (Turbopack tidak menemukan root proyek) — untuk commit
+    dokumen saja ia cukup, untuk menjalankan aplikasi tidak.
+
 ## Working Conventions
 
 - **Only Ricko approves. Never write "Approved", "Decisions recorded", or any equivalent
