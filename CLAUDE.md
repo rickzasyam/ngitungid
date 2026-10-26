@@ -104,6 +104,11 @@ thing protecting production is which branch `DATABASE_URL` points at.
    variabel lingkungan yang sudah ada dengan isi `.env.local` (terbukti 2026-10-23).
 3. **Sebelum memakai `.env.local`, tetap pastikan `DATABASE_URL`-nya mengarah ke `ep-rapid-hat`.** Kalau mengarah ke
    `ep-small-mode`, **berhenti dan lapor** — itu berarti ada yang salah konfigurasi, bukan izin untuk bekerja di main.
+4. **Memeriksa isi `.env.local` = `pnpm env:cek`** (`lib/env-aman.ts`): nama kunci, panjang nilai, endpoint
+   `DATABASE_URL` + peringatan bila main — nilai tidak pernah keluar. **Jangan menyamarkan nilai sendiri dengan
+   `grep`/`sed`/`cut`** di perintah: penyamaran seperti itu gagal diam-diam (2026-10-23: `grep -n` menambah awalan
+   nomor baris, pola `^GEMINI_API_KEY=` tidak cocok, kuncinya tercetak utuh). Butuh nilai dev untuk dipakai? Pakai
+   sebagai variabel lingkungan satu perintah, jangan dicetak.
 
 Full workflow: see `README.md` § "Database environments".
 
