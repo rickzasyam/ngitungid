@@ -13,6 +13,9 @@ __v0_jsx-dev-runtime.ts
 # AUTH_SECRET & GEMINI_API_KEY produksi. Satu `git add -A` sudah cukup untuk
 # membocorkannya.
 .env*.local*
+# Connection string PRODUKSI untuk migrasi ke main (pnpm db:migrate:main) — diisi
+# Ricko, tidak pernah di-commit.
+.env.main*
 
 # Common ignores
 node_modules

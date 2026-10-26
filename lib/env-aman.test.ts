@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ringkasEnv } from './env-aman'
+import { cekEnvMain, ringkasEnv } from './env-aman'
 
 const RAHASIA = {
   gemini: 'AQ.RahasiaGeminiPalsu_1234567890abcdefghijklmnopqrstuv',
@@ -47,5 +47,26 @@ describe('ringkasEnv', () => {
     const [b] = ringkasEnv('DATABASE_URL=postgresql://u:p@ep-small-mode-ao8ouvtp.c-2.aws.neon.tech/db')
     expect(b).toContain('MAIN (produksi)')
     expect(b).not.toContain('u:p')
+  })
+})
+
+describe('cekEnvMain — .env.main harus menunjuk main, dan hanya endpoint yang keluar', () => {
+  const MAIN = `DATABASE_URL="postgresql://neondb_owner:${RAHASIA.pwd}@ep-small-mode-ao8ouvtp-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"`
+
+  it('endpoint main → ok, pesan tanpa nilai rahasia', () => {
+    const r = cekEnvMain(`# produksi\n${MAIN}\nAUTH_SECRET=${RAHASIA.auth}\n`)
+    expect(r).toEqual({ ok: true, pesan: '.env.main: endpoint ep-small-mode-ao8ouvtp (main ✓)' })
+    for (const v of Object.values(RAHASIA)) expect(r.pesan).not.toContain(v.slice(0, 8))
+  })
+
+  // Berkas "main" yang ternyata menunjuk dev akan membuat migrasi produksi
+  // diam-diam mendarat di dev — dan rilisnya dianggap selesai.
+  it('endpoint dev atau bukan Neon → TIDAK ok', () => {
+    expect(cekEnvMain(ENV).ok).toBe(false)
+    expect(cekEnvMain('DATABASE_URL=postgres://u:p@localhost:5432/db').ok).toBe(false)
+  })
+
+  it('tanpa DATABASE_URL → TIDAK ok', () => {
+    expect(cekEnvMain('AUTH_SECRET=x').ok).toBe(false)
   })
 })

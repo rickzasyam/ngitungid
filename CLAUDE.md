@@ -98,10 +98,14 @@ thing protecting production is which branch `DATABASE_URL` points at.
 1. **Rahasia DEV boleh dibaca, dipakai, dan ditampilkan bila perlu, tanpa minta izin:** isi `.env.local`, connection
    string branch Neon dev (`ep-rapid-hat-aos7vlb0`), serta `DATABASE_URL` dan `AUTH_SECRET` **Preview** di Vercel.
 2. **Rahasia PRODUKSI tetap dilarang tampil di percakapan:** connection string branch main (`ep-small-mode-ao8ouvtp`),
-   `AUTH_SECRET` **Production**, dan `GEMINI_API_KEY` selama masih dipakai bersama Production. Kalau perlu dipakai
-   (mis. migrasi ke main), ambil lewat alat dan langsung pakai sebagai **variabel lingkungan untuk satu perintah**
-   (`DATABASE_URL=... pnpm db:migrate`) — tidak ditulis ke berkas, tidak dicetak. `drizzle.config.ts` tidak menimpa
-   variabel lingkungan yang sudah ada dengan isi `.env.local` (terbukti 2026-10-23).
+   `AUTH_SECRET` **Production**, dan `GEMINI_API_KEY` **Production** (sejak 2026-10-26 terpisah: kunci di
+   `.env.local` dan Preview milik project dev free tier — rahasia dev, hanya untuk data karangan).
+   **Migrasi ke main WAJIB lewat `.env.main`** (diisi Ricko, di-gitignore): `pnpm db:migrate:main` memeriksa dulu
+   endpoint-nya harus `ep-small-mode` (`pnpm env:cek .env.main` — hanya endpoint yang dicetak; keluar kode 1 bila
+   bukan main), lalu menjalankan drizzle-kit dengan `node --env-file=.env.main`. **Jangan pernah mengambil
+   connection string main lewat alat Neon** (keputusan Ricko 2026-10-26, menggantikan cara "ambil lewat alat lalu
+   pakai sebagai variabel satu perintah"). `drizzle.config.ts` tidak menimpa variabel lingkungan yang sudah ada
+   dengan isi `.env.local` (terbukti 2026-10-23 dan 2026-10-26).
 3. **Sebelum memakai `.env.local`, tetap pastikan `DATABASE_URL`-nya mengarah ke `ep-rapid-hat`.** Kalau mengarah ke
    `ep-small-mode`, **berhenti dan lapor** — itu berarti ada yang salah konfigurasi, bukan izin untuk bekerja di main.
 4. **Memeriksa isi `.env.local` = `pnpm env:cek`** (`lib/env-aman.ts`): nama kunci, panjang nilai, endpoint

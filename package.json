@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:main": "tsx lib/env-aman-cli.ts .env.main && node --env-file=.env.main node_modules/drizzle-kit/bin.cjs migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env.local lib/db/seed.ts",
