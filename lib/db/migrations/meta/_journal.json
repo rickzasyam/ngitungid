@@ -141,6 +141,13 @@
       "when": 1790167835160,
       "tag": "0019_supplier_drop_termin",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792991626845,
+      "tag": "0020_period_locks",
+      "breakpoints": true
     }
   ]
 }

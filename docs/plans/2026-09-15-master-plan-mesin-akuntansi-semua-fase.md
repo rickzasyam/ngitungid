@@ -931,7 +931,7 @@ id · client_id NN cascade · pola text NN (2..100, disimpan apa adanya; dicocok
 | **0017** | `client_accounting_settings`, `purchase_invoices`, `purchase_invoice_lines`, `audit_events += nilai_sebelum/nilai_sesudah`, `master_supplier += bank_*` | tambah | M1 |
 | **0018** | `cash_mutation_imports`, `cash_mutations`, `cash_mutation_allocations` | tambah | N1 |
 | **0019** | **`master_supplier` DROP `termin_pembayaran`** | ⚠️ **NON-ADITIF** | D43 |
-| **0020** | `period_locks` (D26 — naik prioritas sejak D42) | tambah | K1 |
+| **0020** | `period_locks` (D26 — naik prioritas sejak D42) — ✅ **dev 2026-10-26** (`0020_period_locks.sql`), belum di main | tambah | K1 |
 | **0021** 🆕 | `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, `cash_mutation_rules` (D49, 2026-10-26 — hanya bila disetujui; tukar nomor dengan 0020 bila S1 lebih dulu dari K1) | tambah | §5.G S1 |
 | **0022** | `marketplace_settlements` + `ADD VALUE marketplace` | tambah | §6.B |
 | **0023** | `petty_cash_funds` + `ADD VALUE kas_kecil` | tambah | §6.C |

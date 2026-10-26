@@ -1079,6 +1079,27 @@ export const cashMutationAllocations = pgTable(
   ]
 )
 
+// Kunci periode (§7.B, D17 & D26 — disetujui Ricko 2026-10-26). Satu baris per
+// tindakan MENGUNCI; kunci yang berlaku = `terkunci_sampai` terbesar milik
+// klien. Membuka = menghapus baris terbaru — riwayatnya tidak hilang karena
+// setiap kunci & buka dicatat di audit_events (entity_type 'period_lock').
+// Tidak ada kolom "aktif": status terkunci DITURUNKAN dari barisnya (P3).
+export const periodLocks = pgTable(
+  'period_locks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    terkunciSampai: date('terkunci_sampai').notNull(),
+    dikunciOleh: uuid('dikunci_oleh')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('period_locks_client_tanggal_idx').on(table.clientId, table.terkunciSampai)]
+)
+
 // ── Relations ────────────────────────────────────────────────
 
 export const clientsRelations = relations(clients, ({ many }) => ({
