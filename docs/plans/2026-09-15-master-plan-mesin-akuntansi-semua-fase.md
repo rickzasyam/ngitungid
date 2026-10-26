@@ -703,8 +703,8 @@ Prasyarat: §5 selesai; §7.B (kunci periode) disarankan sudah ada (D26).
 **K1 — `lib/period-lock.ts` + test.** `isDateLocked(tanggal, locks)` (string YMD ≤ `terkunciSampai` aktif → true); `validateLockInput`; `latestLock(locks)`; `canUnlock(role) = isOwner(role)`.
 **K2 — Integrasi (perbarui langkah lama).** ✅ **dikerjakan 2026-10-26** lewat `tolakBilaPeriodeTerkunci` (13 jalur, termasuk mutasi kas & impor CSV) + `periodLockChecker` sungguhan; jalur yang belum ada (marketplace, kas kecil, saldo awal) wajib ikut — pemindai `lib/period-lock-api.test.ts` menagihnya. `canPost` di §5.A menerima `isLocked` nyata; `POST/PATCH/DELETE /api/journals` dan `reverse`, `journalize` (bank/marketplace/kas kecil), `opening-balance` semuanya menolak **409 `{ error, lockedUntil }`** bila `isDateLocked(tanggal)`. Test baca-sumber: setiap route penulis jurnal memanggil `isDateLocked`.
 **K3 — Route** `GET /api/period-locks?clientId`; `POST` `{ clientId, terkunciSampai }` `requireAkunting` → insert + `audit_events{entity_type:'period_lock', event:'period_locked'}` (`entity_id` = id kunci; CHECK hanya mewajibkannya untuk `journal`, §8.5); `DELETE /api/period-locks/[id]` body `{ alasan }` **`requireOwner`**, alasan wajib ≥ 10 karakter → hapus + event `period_unlocked` dengan `catatan=alasan`.
-**K4 — UI  ⏸ CP-13.** ✅ **kode 2026-10-26** (`components/settings/kunci-periode-card.tsx`, peringatan form jurnal/Posting/impor); menunggu uji klik Ricko. Tab "Pembukuan" bagian **Kunci Periode**: status "Terkunci sampai …", tombol Kunci (pilih tanggal ≥ kunci sebelumnya), tombol Buka (owner saja; modal alasan wajib); **peringatan** di form jurnal, tombol Posting, dan halaman impor/marketplace/kas kecil bila tanggal ≤ kunci (UI membaca `GET /api/period-locks`; server tetap menegakkan). Task vendor: "Kunci Periode", "Buka Kunci Terbatas", "Peringatan Periode Terkunci".
-**K5 — ROADMAP + sync.**
+**K4 — UI  ⏸ CP-13.** ✅ **kode 2026-10-26** (`components/settings/kunci-periode-card.tsx`, peringatan form jurnal/Posting/impor); CP-13 diuji klik agen 2026-10-26 di dev (8/9 skenario di browser; skenario akunting hanya lewat test — rincian di log ROADMAP). Tab "Pembukuan" bagian **Kunci Periode**: status "Terkunci sampai …", tombol Kunci (pilih tanggal ≥ kunci sebelumnya), tombol Buka (owner saja; modal alasan wajib); **peringatan** di form jurnal, tombol Posting, dan halaman impor/marketplace/kas kecil bila tanggal ≤ kunci (UI membaca `GET /api/period-locks`; server tetap menegakkan). Task vendor: "Kunci Periode", "Buka Kunci Terbatas", "Peringatan Periode Terkunci".
+**K5 — ROADMAP + sync.** ✅ 2026-10-26 — kode §7.B lengkap, **belum dirilis** (migrasi 0020 baru di dev; checklist rilis di ROADMAP). Sync vendor gagal (langganan workspace tidak aktif).
 
 ### 7.C Laporan dari Jurnal (D18, D19) — puncak seluruh roadmap
 
@@ -1044,7 +1044,7 @@ Berkas itu memetakan **setiap** task (15 fitur) ke langkah plan ini, dan untuk 9
 | CP-10 | H4 | 6 | marketplace: pratinjau jurnal; **konfirmasi perlakuan pajak (D20)** |
 | CP-11 | I4 | 7 | kas kecil: saldo tersedia, isi kembali |
 | CP-12 | J3 | 8 | saldo awal |
-| CP-13 | K4 | **naik prioritas** | kunci/buka periode; peringatan — **lebih mendesak sejak D42** (posting bisa diedit), lihat kotak §3.4 |
+| CP-13 | K4 | **naik prioritas** | kunci/buka periode; peringatan — **lebih mendesak sejak D42** (posting bisa diedit), lihat kotak §3.4 — **diuji klik agen 2026-10-26** (8/9; skenario akunting lewat test saja) |
 | CP-14 | L1 | 9 | **review akuntansi**: aturan tanda, arus kas metode langsung, golden test |
 | CP-15 | L4 | 10 | lencana sumber laporan; angka Dashboard/Analytics dari jurnal vs PDF |
 | **CP-19** 🆕 | **S0** | §5.G | hasil spike library grid (angka keenam kriteria) → **pilih library (D46)** |
