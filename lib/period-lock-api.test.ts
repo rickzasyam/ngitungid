@@ -121,7 +121,7 @@ describe('route /api/period-locks (K3)', () => {
   it('mengunci: divalidasi aturan murni K1 terhadap kunci berlaku & hari ini', () => {
     const b = handler(LIST, 'POST')
     expect(b).toContain('latestLock(await loadPeriodLocks(clientId))')
-    expect(b).toContain('validateLockInput({ terkunciSampai: raw.terkunciSampai }, { latest, hariIni: todayYmd() })')
+    expect(b).toContain('validateLockInput({ terkunciSampai: raw.terkunciSampai }, { latest, hariIni: hariIniJakarta() })')
   })
 
   it('mengunci: baris kunci + riwayat period_locked di SATU batch', () => {

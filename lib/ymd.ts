@@ -46,3 +46,20 @@ export function ymdToLocalDate(ymd: string): Date {
 export function todayYmd(): string {
   return localDateToYmd(new Date())
 }
+
+/**
+ * Tanggal HARI INI di Jakarta (WIB, UTC+7), sebagai 'YYYY-MM-DD' — untuk
+ * aturan yang dinilai SERVER, yang jamnya tidak mengikuti pengguna: Vercel
+ * berjalan di UTC, jadi `todayYmd()` di route masih "kemarin" antara 00.00 dan
+ * 07.00 WIB. Kunci periode memakainya supaya batas "tidak melewati hari ini"
+ * sama di server dan di layar, di zona waktu mana pun browsernya.
+ */
+export function hariIniJakarta(sekarang: Date = new Date()): string {
+  // en-CA memformat tanggal sebagai YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(sekarang)
+}

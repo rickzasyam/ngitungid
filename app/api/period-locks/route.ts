@@ -11,7 +11,7 @@ import { loadPeriodLocks } from '@/lib/api/period-lock'
 import { recordAuditEvent } from '@/lib/api/audit'
 import { resolveUserId } from '@/lib/api/journal-queries'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
-import { todayYmd } from '@/lib/ymd'
+import { hariIniJakarta } from '@/lib/ymd'
 
 export const runtime = 'nodejs'
 
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
   if (!client) return NextResponse.json({ error: 'Klien tidak ditemukan.' }, { status: 404 })
 
   const latest = latestLock(await loadPeriodLocks(clientId))
-  const check = validateLockInput({ terkunciSampai: raw.terkunciSampai }, { latest, hariIni: todayYmd() })
+  const check = validateLockInput({ terkunciSampai: raw.terkunciSampai }, { latest, hariIni: hariIniJakarta() })
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: 400 })
 
   const userId = await resolveUserId(g.user.email)

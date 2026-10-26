@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localDateToYmd, ymdToLocalDate, todayYmd } from './ymd'
+import { localDateToYmd, ymdToLocalDate, todayYmd, hariIniJakarta } from './ymd'
 
 // ══ ROUND-TRIP ADALAH IDENTITAS ══════════════════════════════════
 // Seluruh nilai modul ini ada di sini. Kalau salah satu arah diam-diam lewat
@@ -104,5 +104,22 @@ describe('todayYmd', () => {
     const t = todayYmd()
     expect(t > '2000-01-01').toBe(true)
     expect(t < '2999-12-31').toBe(true)
+  })
+})
+
+describe('hariIniJakarta — tanggal WIB, bukan jam server', () => {
+  // Pukul 00.00–07.00 WIB server UTC masih di tanggal kemarin.
+  it('18.00 UTC = 01.00 WIB keesokan harinya', () => {
+    expect(hariIniJakarta(new Date(Date.UTC(2026, 9, 26, 18, 0)))).toBe('2026-10-27')
+  })
+
+  it('16.59 UTC = 23.59 WIB hari yang sama; 17.00 UTC sudah berganti hari', () => {
+    expect(hariIniJakarta(new Date(Date.UTC(2026, 9, 26, 16, 59)))).toBe('2026-10-26')
+    expect(hariIniJakarta(new Date(Date.UTC(2026, 9, 26, 17, 0)))).toBe('2026-10-27')
+  })
+
+  it('pergantian tahun & format selalu YYYY-MM-DD', () => {
+    expect(hariIniJakarta(new Date(Date.UTC(2025, 11, 31, 17, 30)))).toBe('2026-01-01')
+    expect(hariIniJakarta()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })
