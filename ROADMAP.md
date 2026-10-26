@@ -973,6 +973,66 @@ klien nyata sampai kuncinya naik ke paid tier. Kalau kelak perlu dibatasi lebih 
 sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache saran per
 (klien, keterangan-ternormalisasi).
 
+## Checklist rilis Kunci Periode (§5.9) ke produksi (hanya Ricko)
+
+Ditulis 2026-10-26 sesudah K5. **Disiapkan saja — belum ada satu langkah pun yang dijalankan.** Satu migrasi (**0020**,
+menambah tabel `period_locks` saja) + kode `main` lokal. **Jangan dibalik urutannya:** sejak K2 setiap jalur tulis jurnal,
+invoice, mutasi kas, alokasi, dan impor menanyakan `period_locks` — kode yang naik lebih dulu dari migrasinya membuat SEMUA
+penulisan di produksi gagal 500. Sebaliknya aman: kode lama tidak mengenal tabel itu. Enum `audit_entity_type` sudah memuat
+`period_lock` sejak 0014, jadi 0020 tidak menyentuh enum.
+
+1. **Ricko mengisi `.env.main`** — `DATABASE_URL` branch main, **host tanpa `-pooler`**. Berkasnya sudah di `.gitignore`
+   (`.env.main*`). `.env.local` tidak disentuh dan tetap menunjuk dev.
+2. **`pnpm env:cek .env.main`** → harus `endpoint ep-small-mode-ao8ouvtp (main ✓)`; selain itu keluar kode 1.
+   ⚠️ Pemeriksa ini membuang `-pooler` sebelum membandingkan, jadi **tidak** menangkap host pooled — pastikan sendiri di
+   langkah 1.
+3. **Backup branch Neon dari main** — nama `backup-main-<tanggal rilis>`, mis. `backup-main-2026-10-27`.
+4. **Baca-saja: main harus di 20 migrasi.** Lewat SQL Editor Neon pada branch main (atau alat Neon `run_sql` — tidak
+   mengeluarkan connection string):
+   ```sql
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 20, last = 1790167835160 (0019)
+   select to_regclass('public.period_locks');                                                -- NULL
+   ```
+   Catat sekalian jumlah baris tabel lama untuk dibandingkan di langkah 6:
+   ```sql
+   select (select count(*) from clients) c, (select count(*) from users) u, (select count(*) from master_coa) coa,
+          (select count(*) from journal_entries) je, (select count(*) from journal_lines) jl,
+          (select count(*) from purchase_invoices) pi, (select count(*) from cash_mutations) cm,
+          (select count(*) from audit_events) ae;
+   ```
+   Bukan 20 → **berhenti**: lebih = seseorang sudah menerapkan 0020; kurang = main tertinggal.
+5. **`pnpm db:migrate:main`** → menjalankan `env:cek .env.main` lebih dulu (berhenti bila bukan main), lalu
+   `drizzle-kit migrate` dengan `.env.main`. Hasil: **21 migrasi** (0020 `period_locks`).
+6. **Verifikasi baca-saja:**
+   ```sql
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 21, last = 1792991626845 (0020)
+   select column_name, data_type from information_schema.columns where table_name = 'period_locks' order by ordinal_position;
+     -- id uuid, client_id uuid, terkunci_sampai date, dikunci_oleh uuid, created_at timestamptz
+   select conname from pg_constraint where conrelid = 'period_locks'::regclass;   -- pkey + 2 FK (clients CASCADE, users RESTRICT)
+   select indexname from pg_indexes where tablename = 'period_locks';             -- + period_locks_client_tanggal_idx
+   select count(*) from period_locks;                                             -- 0
+   ```
+   Ulangi kueri jumlah baris langkah 4 → **harus sama persis** (tidak ada tabel lama yang berubah).
+7. **Push `main`** — fast-forward, tanpa force, ikut membawa commit D55 `a8c2961` dari `docs/tutup-d55`:
+   ```bash
+   git fetch origin && git merge-base --is-ancestor origin/main main && git push origin main
+   ```
+   Saat checklist ini ditulis: `origin/main` = `8117275`, `main` lokal di depan 13 commit, nol commit origin yang tertinggal.
+   Pantau deployment Vercel `ngitungid` sampai **READY**.
+8. **Smoke test produksi, baca-saja** (owner/akunting, **jangan menekan Kunci/Buka/Simpan/Posting**):
+   Settings › Pembukuan (kartu Kunci Periode tampil "Belum ada periode yang dikunci untuk klien ini.", tanpa galat), `/jurnal`, `/mutasi-kas`,
+   `/pembelian`, `/hutang` — semuanya terbuka tanpa 500, tanggal bawaan = hari ini WIB.
+9. **Hapus branch remote `docs/tutup-d55`** setelah main ter-push — pastikan dulu `git branch -r --contains a8c2961`
+   memuat `origin/main`, lalu `git push origin --delete docs/tutup-d55`.
+
+**Sesudah rilis (bukan bagian urutan di atas):** hapus `.env.main` dari disk — isinya rahasia produksi. Jalan mundur:
+gagal di langkah 5 → branch backup langkah 3; deploy bermasalah di langkah 7 → promosikan deployment Vercel sebelumnya
+(tabel 0020 tidak mengganggu kode lama).
+
+**Terbuka sebelum rilis (keputusan Ricko, log K5):** skenario CP-13 no. 3 (akunting tidak bisa membuka kunci) belum
+pernah diklik manusia — hanya tertutup test; dua temuan kecil (tanggal mentah di pesan kunci; jalur Posting tanpa
+`lockedUntil`) belum diperbaiki.
+
 ## Checklist rilis Phase 5 (Fase 1 + Fase 2) ke produksi (hanya Ricko)
 
 Ditulis 2026-09-23 saat Fase 2 ditutup. Fase 1 belum pernah dirilis, jadi rilisnya SATU: migrasi **0010–0019** + kode
