@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ModalPortal } from '@/components/ui/modal-portal'
+import { hariIniJakarta, ymdToLocalDate } from '@/lib/ymd'
 
 interface DateRange {
   from: Date | undefined
@@ -21,7 +22,8 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
-const TODAY = new Date()
+// Tanggal kalender WIB sebagai Date tengah malam lokal (lib/ymd.ts).
+const TODAY = ymdToLocalDate(hariIniJakarta())
 
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
@@ -261,7 +263,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
   const [isOpen, setIsOpen] = useState(false)
   const [tempRange, setTempRange] = useState<DateRange | undefined>(value)
   const [hoverDate, setHoverDate] = useState<Date | null>(null)
-  const [viewYear, setViewYear] = useState(value?.from?.getFullYear() ?? new Date().getFullYear())
+  const [viewYear, setViewYear] = useState(value?.from?.getFullYear() ?? TODAY.getFullYear())
   const [viewMonth, setViewMonth] = useState(value?.from?.getMonth() ?? 0)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)

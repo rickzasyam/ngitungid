@@ -10,6 +10,7 @@ import { BalanceSheetHealth } from '@/components/dashboard/balance-sheet-health'
 import { CashflowWaterfallChart } from '@/components/dashboard/cashflow-waterfall-chart'
 import { TopReceiptsBubble } from '@/components/dashboard/top-receipts-bubble'
 import { useRupiah } from '@/lib/preferences-context'
+import { hariIniJakarta } from '@/lib/ymd'
 
 import {
   TrendingUp, DollarSign, Monitor, Activity,
@@ -95,7 +96,7 @@ export default function DashboardPage() {
   // Default = TAHUN BERJALAN (bukan hardcode) supaya tidak nyangkut di satu
   // tahun begitu kalender berganti.
   const [dashboardDateRange, setDashboardDateRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>(() => {
-    const y = new Date().getFullYear()
+    const y = Number(hariIniJakarta().slice(0, 4))
     return { from: new Date(y, 0, 1), to: new Date(y, 11, 31) }
   })
 
@@ -139,7 +140,7 @@ export default function DashboardPage() {
   // Catatan: data bulanan hanya membawa NAMA bulan (tanpa tahun), jadi rentang
   // yang melintasi pergantian tahun memakai tahun AWAL periode. Untuk presisi
   // per-bulan, API perlu mengirim tahun di tiap titik data.
-  const year = (from ?? new Date()).getFullYear()
+  const year = from ? from.getFullYear() : Number(hariIniJakarta().slice(0, 4))
   const periodLabel = monthsCount === 0
     ? String(year)
     : monthsCount === 1

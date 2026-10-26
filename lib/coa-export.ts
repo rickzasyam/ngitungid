@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import { ACCOUNT_TYPE_LABEL, type AccountType } from '@/lib/coa/account-type'
+import { hariIniJakarta, ymdToLocalDate } from '@/lib/ymd'
 
 // Export Master COA ke .xlsx. Pasangan langsung dari lib/coa-import.ts, dan
 // SENGAJA dibentuk mengikuti apa yang parser itu terima — bukan format yang
@@ -118,7 +119,7 @@ export function buildCoaWorkbook(rows: CoaExportRow[]): ArrayBuffer {
  * nama file, tapi kelas bug-nya persis yang pernah melempar periode Januari ke
  * Desember — tidak ada alasan mengulanginya di sini.
  */
-export function coaExportFilename(clientName: string, date: Date = new Date()): string {
+export function coaExportFilename(clientName: string, date: Date = ymdToLocalDate(hariIniJakarta())): string {
   const slug =
     clientName
       .trim()

@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { useRupiah } from '@/lib/preferences-context'
-import { todayYmd } from '@/lib/ymd'
+import { hariIniJakarta } from '@/lib/ymd'
 import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
 import { AGE_BUCKETS, AGE_BUCKET_LABEL, type AgeBucket } from '@/lib/hutang'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
@@ -95,7 +95,7 @@ export default function HutangPage() {
   const { activeClient, isLoaded } = useRequireClient()
   const { rupiahPersis } = useRupiah()
 
-  const [asOf, setAsOf] = useState(() => todayYmd())
+  const [asOf, setAsOf] = useState(() => hariIniJakarta())
   const [aging, setAging] = useState<AgingResponse | null>(null)
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([])
   const [jatuhTempo, setJatuhTempo] = useState<JatuhTempoItem[]>([])

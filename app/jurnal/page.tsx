@@ -34,7 +34,7 @@ import { useClient } from '@/lib/client-context'
 import { useRupiah } from '@/lib/preferences-context'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from '@/lib/ymd'
 import {
   canEditJournal,
   isSumberModul,
@@ -90,7 +90,7 @@ interface JournalRow {
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
 function bulanBerjalan(): { start: string; end: string } {
-  const [y, m] = todayYmd().split('-').map(Number)
+  const [y, m] = hariIniJakarta().split('-').map(Number)
   const akhir = new Date(y, m, 0).getDate() // hari 0 bulan berikutnya = akhir bulan ini
   const mm = String(m).padStart(2, '0')
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
@@ -237,7 +237,7 @@ export default function JurnalPage() {
     setActionError(null)
     setFormErrors([])
     setEditingId(null)
-    setFormInitial(blankJournalForm(todayYmd()))
+    setFormInitial(blankJournalForm(hariIniJakarta()))
     setFormMode('create')
   }
 

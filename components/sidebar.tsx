@@ -33,7 +33,7 @@ import { ClientSwitcherModal } from '@/components/client-switcher-modal'
 import { ROLE_LABEL, canViewContracts } from '@/lib/roles'
 import { sumUnmapped } from '@/lib/reports/mapping-status'
 import { countNeedsAttention, type ContractBadgeRow } from '@/lib/contracts'
-import { todayYmd } from '@/lib/ymd'
+import { hariIniJakarta, ymdToLocalDate } from '@/lib/ymd'
 import { navItemsForRole, navKey, type NavItemId } from '@/lib/nav-items'
 import { computeReportProgress, formatMonth, monthsBehind } from '@/lib/clients/report-progress'
 
@@ -96,7 +96,7 @@ export function Sidebar() {
   // Jam dibaca SEKALI, bukan per render — dan lewat helper yang sama dengan
   // yang dipakai halaman /kontrak, supaya badge sidebar & badge per baris tidak
   // pernah memakai "hari ini" yang berbeda.
-  const [hariIni] = useState(todayYmd)
+  const [hariIni] = useState(() => hariIniJakarta())
 
   const capsuleRef = useRef<HTMLDivElement>(null)
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -242,7 +242,7 @@ export function Sidebar() {
   // ClientProvider, jadi ini murni perhitungan di memori: tidak ada query per
   // render dan tidak ada request tambahan.
   const progress = useMemo(
-    () => computeReportProgress(activeClient?.months ?? [], new Date()),
+    () => computeReportProgress(activeClient?.months ?? [], ymdToLocalDate(hariIniJakarta())),
     [activeClient]
   )
   const behind = monthsBehind(progress)

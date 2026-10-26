@@ -25,7 +25,6 @@ import { bacaQty, pesanGalatNominal, pesanGalatQty } from '@/lib/nominal'
 import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
 import { NominalInput } from '@/components/ui/nominal-input'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
-import { todayYmd } from '@/lib/ymd'
 
 export interface SupplierOption {
   id: string
@@ -616,8 +615,6 @@ function Angka({ label, nilai, tebal }: { label: string; nilai: string; tebal?: 
     </span>
   )
 }
-
-export { todayYmd }
 
 const labelStyle: React.CSSProperties = {
   display: 'block',

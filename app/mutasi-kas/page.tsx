@@ -38,7 +38,7 @@ import { useRupiah } from '@/lib/preferences-context'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
-import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from '@/lib/ymd'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
 import {
   MutationFormModal,
@@ -75,7 +75,7 @@ interface MutasiDetail extends MutasiRow {
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
 function bulanBerjalan(): { start: string; end: string } {
-  const [y, m] = todayYmd().split('-').map(Number)
+  const [y, m] = hariIniJakarta().split('-').map(Number)
   const akhir = new Date(y, m, 0).getDate()
   const mm = String(m).padStart(2, '0')
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
@@ -245,7 +245,7 @@ function MutasiKasContent() {
   function bukaBuat() {
     setFormErrors([])
     setEditingId(null)
-    setFormInitial(blankMutationForm(todayYmd(), akunValid || (akunKas[0]?.id ?? '')))
+    setFormInitial(blankMutationForm(hariIniJakarta(), akunValid || (akunKas[0]?.id ?? '')))
     setFormMode('create')
   }
 

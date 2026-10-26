@@ -33,8 +33,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 //
 // `hariIni` TIDAK lagi ikut sebagai parameter: tidak ada satu pun logika
 // tanggal yang tersisa di server. Jam yang dipakai badge tetap milik klien
-// (browser), dibaca sekali lewat todayYmd() — keputusan 2026-08-09, alasannya
-// Vercel berjalan UTC sementara penggunanya WIB.
+// (browser), dibaca sekali lewat hariIniJakarta() — keputusan 2026-08-09 (jam
+// browser), dipertegas 2026-10-26: selalu tanggal WIB, apa pun zona perangkatnya.
 //
 // Guard SAMA dengan GET /api/contracts (requireUser + canAccessClientData),
 // bukan canViewContracts: akunting boleh membaca daftar kontrak klien yang ia

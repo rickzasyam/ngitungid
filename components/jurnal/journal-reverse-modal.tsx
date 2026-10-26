@@ -17,7 +17,7 @@ import { useState } from 'react'
 import { AlertTriangle, Loader2, Undo2 } from 'lucide-react'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { defaultReversalNoBukti, NO_BUKTI_MAX, TANPA_NO_BUKTI } from '@/lib/journal'
-import { todayYmd } from '@/lib/ymd'
+import { hariIniJakarta } from '@/lib/ymd'
 
 export interface ReverseTarget {
   id: string
@@ -48,7 +48,7 @@ export function JournalReverseModal({
   // Tanggal pembalik default HARI INI, bukan tanggal jurnal aslinya: membalik
   // adalah peristiwa baru yang terjadi sekarang, dan menaruhnya di tanggal lama
   // memindahkan koreksi ke periode yang mungkin sudah dilaporkan.
-  const [tanggal, setTanggal] = useState(todayYmd())
+  const [tanggal, setTanggal] = useState(() => hariIniJakarta())
   const [noBukti, setNoBukti] = useState(defaultReversalNoBukti(target.noBukti) ?? '')
   const [keterangan, setKeterangan] = useState('')
 

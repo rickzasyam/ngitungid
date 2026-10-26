@@ -31,7 +31,7 @@ import { useClient } from '@/lib/client-context'
 import { useRupiah } from '@/lib/preferences-context'
 import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from '@/lib/ymd'
 import { PURCHASE_PAYMENT_LABEL } from '@/lib/purchase'
 import { fmtTanggal } from '@/components/jurnal/journal-detail'
 import {
@@ -90,7 +90,7 @@ interface InvoiceDetail {
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
 function bulanBerjalan(): { start: string; end: string } {
-  const [y, m] = todayYmd().split('-').map(Number)
+  const [y, m] = hariIniJakarta().split('-').map(Number)
   const akhir = new Date(y, m, 0).getDate()
   const mm = String(m).padStart(2, '0')
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
@@ -219,7 +219,7 @@ export default function PembelianPage() {
     setActionError(null)
     setFormErrors([])
     setEditingId(null)
-    setFormInitial(blankPurchaseForm(todayYmd()))
+    setFormInitial(blankPurchaseForm(hariIniJakarta()))
     setFormMode('create')
   }
 

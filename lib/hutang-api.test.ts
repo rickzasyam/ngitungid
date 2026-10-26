@@ -59,10 +59,10 @@ describe('monitoring hutang BACA-SAJA (D45)', () => {
 })
 
 describe('asOf', () => {
-  it('punya bawaan hari ini lewat todayYmd, bukan new Date di tiap route', () => {
+  it('punya bawaan hari ini lewat hariIniJakarta (WIB), bukan new Date di tiap route', () => {
     // Pemanggil yang memakai new Date().toISOString() meleset satu hari di WIB
     // untuk sebagian jam (P2).
-    expect(GUARD).toContain('todayYmd()')
+    expect(GUARD).toContain('hariIniJakarta()')
     for (const [nama, src] of SEMUA_ROUTE) {
       expect(src.includes('new Date('), nama).toBe(false)
     }

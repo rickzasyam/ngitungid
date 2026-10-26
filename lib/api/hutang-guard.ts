@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireInternal } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { isValidYmd } from '@/lib/contracts'
-import { todayYmd } from '@/lib/ymd'
+import { hariIniJakarta } from '@/lib/ymd'
 
 // Penjaga bersama keempat route /api/hutang.
 //
@@ -46,7 +46,7 @@ export async function guardHutang(req: Request): Promise<HutangGuard> {
     }
   }
 
-  return { clientId, asOf: asOfParam ?? todayYmd() }
+  return { clientId, asOf: asOfParam ?? hariIniJakarta() }
 }
 
 export { UUID_RE }

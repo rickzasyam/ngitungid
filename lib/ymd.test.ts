@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { localDateToYmd, ymdToLocalDate, todayYmd, hariIniJakarta } from './ymd'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from './ymd'
 
 // ══ ROUND-TRIP ADALAH IDENTITAS ══════════════════════════════════
 // Seluruh nilai modul ini ada di sini. Kalau salah satu arah diam-diam lewat
@@ -91,20 +93,55 @@ describe('ymdToLocalDate — tengah malam lokal', () => {
   })
 })
 
-describe('todayYmd', () => {
-  it('berbentuk YYYY-MM-DD dan cocok dengan jam lokal', () => {
-    const t = todayYmd()
-    expect(t).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-    expect(t).toBe(localDateToYmd(new Date()))
-  })
-
+describe('hariIniJakarta — urutan string', () => {
   it('urut leksikografis terhadap tanggal jelas-lampau & jelas-depan', () => {
     // Properti yang diandalkan SELURUH logika status kontrak: 'YYYY-MM-DD'
     // bisa dibandingkan sebagai string biasa.
-    const t = todayYmd()
+    const t = hariIniJakarta()
     expect(t > '2000-01-01').toBe(true)
     expect(t < '2999-12-31').toBe(true)
   })
+})
+
+// Jendela yang dulu salah: 00.00–07.00 WIB = 17.00–24.00 UTC HARI SEBELUMNYA.
+describe('hariIniJakarta pada jam 00.00–07.00 WIB', () => {
+  for (const [jamWib, utc] of [
+    ['00.00', Date.UTC(2026, 9, 26, 17, 0)],
+    ['00.30', Date.UTC(2026, 9, 26, 17, 30)],
+    ['03.00', Date.UTC(2026, 9, 26, 20, 0)],
+    ['06.59', Date.UTC(2026, 9, 26, 23, 59)],
+  ] as const) {
+    it(`${jamWib} WIB 27 Okt → '2026-10-27', bukan tanggal UTC 26 Okt`, () => {
+      expect(hariIniJakarta(new Date(utc))).toBe('2026-10-27')
+    })
+  }
+  it('07.00 WIB = 00.00 UTC — keduanya sudah sepakat', () => {
+    expect(hariIniJakarta(new Date(Date.UTC(2026, 9, 27, 0, 0)))).toBe('2026-10-27')
+  })
+})
+
+// Satu pembaca jam (keputusan Ricko 2026-10-26). Pembaca kedua yang lahir
+// diam-diam — todayYmd lama, atau Date baru yang dipotong jadi tanggal —
+// kembali membuka jendela 00.00–07.00 WIB.
+describe('tidak ada pembaca "hari ini" selain hariIniJakarta', () => {
+  const berkas: string[] = []
+  const jelajah = (dir: string) => {
+    for (const n of readdirSync(dir)) {
+      const p = join(dir, n)
+      if (statSync(p).isDirectory()) jelajah(p)
+      else if (/\.(ts|tsx)$/.test(n) && !/\.test\.ts$/.test(n)) berkas.push(p)
+    }
+  }
+  for (const d of ['app', 'components', 'lib']) jelajah(join(process.cwd(), d))
+
+  it('pemindai menemukan berkas sumber', () => expect(berkas.length).toBeGreaterThan(100))
+
+  for (const pola of ['todayYmd', 'localDateToYmd(new Date())', 'new Date().getFullYear()', 'new Date().toISOString().slice(0, 10)']) {
+    it(`tidak ada "${pola}"`, () => {
+      const kena = berkas.filter(p => readFileSync(p, 'utf8').includes(pola))
+      expect(kena).toEqual([])
+    })
+  }
 })
 
 describe('hariIniJakarta — tanggal WIB, bukan jam server', () => {

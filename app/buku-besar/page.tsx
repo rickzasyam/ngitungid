@@ -20,7 +20,7 @@ import { useRequireClient } from '@/lib/use-require-client'
 import { useRupiah } from '@/lib/preferences-context'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { DateRangePicker } from '@/components/date-range-picker'
-import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from '@/lib/ymd'
 import { TANPA_NO_BUKTI } from '@/lib/journal'
 import type { CoaOption } from '@/components/jurnal/journal-form-modal'
 import {
@@ -71,7 +71,7 @@ type Tab = 'akun' | 'neraca'
 
 /** Awal & akhir bulan berjalan, sebagai string — tanpa objek Date (P2). */
 function bulanBerjalan(): { start: string; end: string } {
-  const [y, m] = todayYmd().split('-').map(Number)
+  const [y, m] = hariIniJakarta().split('-').map(Number)
   const akhir = new Date(y, m, 0).getDate()
   const mm = String(m).padStart(2, '0')
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }

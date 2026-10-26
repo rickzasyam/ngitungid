@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { hariIniJakarta, ymdToLocalDate } from '@/lib/ymd'
 
 // Export Master Supplier ke .xlsx. Pasangan langsung dari lib/supplier-import.ts,
 // dan SENGAJA dibentuk mengikuti apa yang parser itu terima — bukan format yang
@@ -80,7 +81,7 @@ export function buildSupplierWorkbook(rows: SupplierExportRow[]): ArrayBuffer {
  * ekspor sore hari akan berlabel tanggal kemarin kalau memakai UTC. Sama persis
  * dengan coaExportFilename.
  */
-export function supplierExportFilename(clientName: string, date: Date = new Date()): string {
+export function supplierExportFilename(clientName: string, date: Date = ymdToLocalDate(hariIniJakarta())): string {
   const slug =
     clientName
       .trim()

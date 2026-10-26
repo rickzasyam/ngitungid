@@ -27,7 +27,7 @@ import { ModalShell } from '@/components/ui/modal-portal'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { contractActions, canCreateContract } from '@/lib/contract-actions'
 import { layananOptionsForContract, type LayananRow } from '@/lib/layanan'
-import { localDateToYmd, ymdToLocalDate, todayYmd } from '@/lib/ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from '@/lib/ymd'
 import {
   CONTRACT_JENIS, MAX_DOKUMEN_BYTES, TANGGAL_PENAGIHAN_MIN, TANGGAL_PENAGIHAN_MAX,
   contractDisplayStatus, DISPLAY_STATUS_LABEL,
@@ -178,7 +178,7 @@ export default function KontrakPage() {
   // dibaca ulang per komponen: dua bagian halaman yang membaca jamnya sendiri
   // bisa berbeda tepat saat tengah malam lewat, dan satu baris akan bilang
   // "Akan Berakhir" sementara tetangganya sudah "Selesai".
-  const [hariIni] = useState(todayYmd)
+  const [hariIni] = useState(() => hariIniJakarta())
 
   const [contracts, setContracts] = useState<Contract[]>([])
   const [layanan, setLayanan] = useState<LayananRow[]>([])

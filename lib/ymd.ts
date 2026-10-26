@@ -35,24 +35,17 @@ export function ymdToLocalDate(ymd: string): Date {
 }
 
 /**
- * Tanggal HARI INI menurut jam lokal pengguna, sebagai 'YYYY-MM-DD'.
+ * Tanggal HARI INI di Jakarta (WIB, UTC+7), sebagai 'YYYY-MM-DD'.
  *
- * SATU-SATUNYA pembaca jam untuk urusan tanggal kalender. Komponen TIDAK boleh
- * memanggilnya sendiri-sendiri: halaman menghitungnya sekali lalu MENERUSKANNYA
- * ke bawah. Kalau dua komponen membacanya masing-masing, keduanya bisa berbeda
- * tepat saat tengah malam lewat — satu badge bilang "akan berakhir", tetangganya
- * bilang "selesai", pada baris yang sama.
- */
-export function todayYmd(): string {
-  return localDateToYmd(new Date())
-}
-
-/**
- * Tanggal HARI INI di Jakarta (WIB, UTC+7), sebagai 'YYYY-MM-DD' — untuk
- * aturan yang dinilai SERVER, yang jamnya tidak mengikuti pengguna: Vercel
- * berjalan di UTC, jadi `todayYmd()` di route masih "kemarin" antara 00.00 dan
- * 07.00 WIB. Kunci periode memakainya supaya batas "tidak melewati hari ini"
- * sama di server dan di layar, di zona waktu mana pun browsernya.
+ * SATU-SATUNYA pembaca jam untuk urusan tanggal kalender — di server MAUPUN
+ * browser (keputusan Ricko 2026-10-26; menggantikan pembaca lama yang memakai jam
+ * lokal). Alasannya: Vercel berjalan di UTC, jadi jam server masih "kemarin"
+ * antara 00.00 dan 07.00 WIB, dan perangkat di zona lain melihat tanggal lain.
+ * Bisnis klien berjalan di WIB, jadi "hari ini" juga WIB, di mana pun kodenya jalan.
+ *
+ * Komponen TIDAK boleh membacanya sendiri-sendiri: halaman menghitungnya sekali
+ * lalu MENERUSKANNYA ke bawah — dua pembaca bisa berbeda tepat saat tengah malam
+ * lewat. Pemanggil yang butuh objek Date memakai `ymdToLocalDate(hariIniJakarta())`.
  */
 export function hariIniJakarta(sekarang: Date = new Date()): string {
   // en-CA memformat tanggal sebagai YYYY-MM-DD.
