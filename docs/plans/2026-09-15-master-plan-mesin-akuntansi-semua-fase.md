@@ -7,6 +7,7 @@
 | Disusun | 2026-09-15, dari PRD server (seluruh fase) + 13 task fase-1 yang terlihat + pembacaan penuh basis kode (247 ringkasan) |
 | Status | **D1–D15 + R2, R4 DISETUJUI.** Fase 1 (§4.A, §4.B) dan §5.A langkah C1–C4 **sudah ter-commit** (migrasi 0010–0014 di dev). D16–D26 dan R1, R3, R5–R11 masih menunggu. **SELURUH D27–D45 DISETUJUI Ricko 2026-09-20** (D32 dan D40 dengan tambahan; D42 bawaan `false`; D43 dengan syarat jendela rilis). Lihat §3.4. |
 | Revisi besar | **2026-09-19 — perubahan konsep dari Ricko: tiga modul baru (Laporan Pembelian, Mutasi Kas/Bank, Monitoring Hutang) + perubahan pada yang sudah ada.** Ia MENGGANTIKAN §5.C lama dan **§6.A seluruhnya**. Baca **§3.4 (keputusan baru), §3.5 (apa yang dibatalkan), §5.D–§5.F (modul baru)** sebelum melanjutkan pekerjaan Fase 2 apa pun. |
+| Revisi 2026-10-26 | **Grid Mutasi Kas (Modul A) & ekstraksi PDF rekening koran (Modul B)**, direvisi hari yang sama dengan temuan template akuntan Rasyuka April 2026 — keputusan baru **D46–D62 di §3.6** (D55 sudah dijawab), rancangan di **§5.G**, checkpoint CP-19–CP-22. ⏳ Menunggu Ricko; belum ada kode. |
 | Pelaksana | Sesi agen terpisah (Opus 5). Plan ini harus cukup tanpa konteks sesi penyusunnya. |
 | Menggantikan | `docs/plans/2026-09-15-master-plan-fase-1-jurnal-umum-dan-supplier.md` (kini hanya penunjuk ke berkas ini) |
 
@@ -43,10 +44,12 @@
 | 2 | **Mutasi Kas/Bank** 🆕 | high | **COA Bertipe (`is_kas`)**, Pembelian | **§5.E** | **0018** | menunggu D35–D38 |
 | 2 | **Monitoring Hutang** 🆕 | high | Pembelian + Mutasi | **§5.F** | — (turunan) | menunggu D39–D40 |
 | 2 | Rekonsiliasi Hutang Supplier — **DIRANCANG ULANG** | medium | Modul 1 + 2 + Neraca | §5.C | — (turunan) | menunggu D41 |
+| 2+ | **Grid Mutasi Kas** 🆕 (Modul A) | high | §5.E, Kunci Periode (D53) | **§5.G** | **0021** | menunggu D46–D53, D57–D62 |
+| 2+ | **Ekstraksi PDF rekening koran** 🆕 (Modul B) | high | Modul A, AI berbayar (X0) | **§5.G** | — | menunggu D54–D56 + gerbang X0 |
 | 3 | ~~Impor Mutasi Kas/Bank~~ | — | — | ~~§6.A~~ | — | ❌ **DIBATALKAN — diserap §5.E** (§3.5) |
-| 3 | Transaksi Marketplace | medium | Jurnal Umum | §6.B | 0021 | menunggu D20 |
-| 3 | Kas Kecil | low | Jurnal Umum, Posting | §6.C | 0022 | menunggu D21/R3 |
-| 4 | Saldo Awal & Kunci Periode | medium | Posting | §7.A, §7.B | 0020, 0023 | menunggu D16, D17 |
+| 3 | Transaksi Marketplace | medium | Jurnal Umum | §6.B | 0022 | menunggu D20 |
+| 3 | Kas Kecil | low | Jurnal Umum, Posting | §6.C | 0023 | menunggu D21/R3 |
+| 4 | Saldo Awal & Kunci Periode | medium | Posting | §7.A, §7.B | 0020, 0024 | menunggu D16, D17 |
 | 4 | Laporan dari Jurnal | high | Posting, COA Bertipe, Saldo Awal | §7.C | — | menunggu D18, D19 |
 
 **Urutan eksekusi — DISETUJUI Ricko 2026-09-19:**
@@ -215,13 +218,60 @@ Tiga modul baru lahir dari itu: **Laporan Pembelian** (§5.D), **Mutasi Kas/Bank
 |---|---|---|
 | **§6.A Impor Mutasi Kas/Bank (G1–G5)** | ❌ **DIBATALKAN seluruhnya — diserap §5.E** | Fitur yang sama: unggah CSV rekening koran, pemetaan kolom, deteksi duplikat, jadikan jurnal. §5.E menambahkan alokasi ke invoice hutang di atasnya. Membangun keduanya = dua tabel mutasi bank dan dua jalur "jadikan jurnal" yang harus dijaga tetap sama. |
 | `bank_imports`, `bank_import_rows`, `bank_mapping_rules` (§8.6–§8.8) | ❌ dibatalkan | Digantikan `cash_mutation_imports`, `cash_mutations`, `cash_mutation_allocations`. |
-| **Aturan pemetaan otomatis** (`bank_mapping_rules`, `contains`/`startsWith`) | ⏸ **ditunda, tidak dibatalkan** | Berguna, tapi bukan syarat tujuan bisnisnya. Ditambahkan sebagai tabel baru murni-tambah setelah pola keterangan bank klien nyata terlihat. D22 (larangan regex) tetap mengikat saat itu tiba. |
+| **Aturan pemetaan otomatis** (`bank_mapping_rules`, `contains`/`startsWith`) | ⏸ ditunda → ✅ **dihidupkan kembali 2026-10-26 sebagai `cash_mutation_rules` (§5.G S4, D57)** | Berguna, tapi bukan syarat tujuan bisnisnya. Ditambahkan sebagai tabel baru murni-tambah setelah pola keterangan bank klien nyata terlihat. D22 (larangan regex) tetap mengikat saat itu tiba. |
 | **D22** (alias header + pemetaan kolom manual + fingerprint dedupe) | ✅ **tetap berlaku**, pindah rumah ke §5.E | Keputusannya benar; yang berubah hanya tabel tujuannya. |
 | **§5.C F1–F5 lama** (rekonsiliasi dari `journal_lines.supplier_id`) | 🔄 **dirancang ulang** (D41) | Sumber datanya kini invoice + alokasi. |
 | **F1 lama** (pemilih supplier per baris jurnal) | ⬇️ **turun prioritas**, tetap dibangun | Setelah modul pembelian ada, sebagian besar baris hutang lahir dari invoice yang sudah membawa supplier. Yang tersisa: jurnal manual yang menyentuh akun hutang. |
 | **`master_supplier.termin_pembayaran`** (§8.4) | ❌ dihapus (D43) | Pindah ke invoice. |
 | **P11 / `canEditJournal`** | 🔄 diperlunak oleh D42, **dan diperketat** oleh D32 | Terposting boleh diubah bila setelan klien mengizinkan; jurnal bersumber modul tidak boleh diubah dari `/jurnal` sama sekali. |
 | **Nomor migrasi 0014–0017 di §8.6–§8.12** | 🔄 bergeser | 0014 sudah terpakai (posting/events/supplier_id). Urutan baru di §8.14. |
+
+### 3.6 Grid Mutasi Kas & ekstraksi PDF rekening koran — keputusan BARU 2026-10-26 (D46–D62) — ⏳ MENUNGGU Ricko
+
+**Asalnya:** feedback pengguna sesudah rilis Phase 5 — input mutasi satu per satu lewat form terlalu lambat, dan alur unduh-templat → isi → unggah CSV tidak ramah bagi admin awam. **Direvisi di hari yang sama** dengan temuan Ricko dari template laporan keuangan akuntan (**Rasyuka, April 2026**). Rancangan lengkapnya di **§5.G**. Keputusan di bawah mengubah bentuk tabel, jalur tulis, atau perilaku yang sudah jalan — **pelaksana tidak boleh menyimpulkannya sendiri**. Tidak ada task vendor untuk pekerjaan ini (di luar plan `e2cbb3a7`); jangan `task start` apa pun untuknya.
+
+**Prinsip pengikat dari brief Ricko — bukan keputusan terbuka: SATU JALUR TINJAU.** Ketik langsung, tempel (paste), berkas CSV, dan PDF **semuanya** berakhir di grid yang sama sebagai **DRAF**, lalu disimpan lewat **satu route** dengan **satu perencana aturan**. Tidak ada jalur simpan kedua dengan aturan berbeda.
+
+**Ditetapkan Ricko 2026-10-26 (arahan, bukan pilihan terbuka):**
+- **ARAH UANG TIDAK PERNAH DITENTUKAN DARI JUDUL KOLOM** — menjawab pertanyaan N7 yang menggantung sejak 2026-09-22. Sheet kas template akuntan memakai **Debet = uang MASUK** (sudut pandang perusahaan); rekening koran bank asli memakai **Debet = uang KELUAR**, dan BCA menandai **DB/CR** di uraian. Kata "Debet" di judul kolom karenanya ambigu. Grid memakai **Masuk/Keluar**; arah sebuah blok tempelan/berkas/PDF ditentukan **kesinambungan saldo** (S3), dengan penanda DB/CR sebagai **petunjuk tambahan**; **tanpa kolom saldo, pengguna WAJIB memilih arah secara eksplisit** di pratinjau. Alias header impor CSV yang sekarang ("Debet" = keluar, N3) berhenti menentukan arah.
+- **Target kinerja: 10.000 baris per akun kas per bulan** (Kas Shopee 1 = 5.187 baris di April 2026).
+- **Aturan akun lawan otomatis** "uraian mengandung X → akun Y", per klien, **tanpa regex** (D22) — `bank_mapping_rules` yang ditunda (§3.5) **dihidupkan kembali**. Aturan menghasilkan **usulan yang bisa ditimpa**, bukan keputusan final.
+- **Pindah Buku:** peringatan bila saldo akun Pindah Buku ≠ 0 di akhir periode + bantuan mencocokkan pasangan transfer antar akun kas.
+- Kolom akun lawan menerima **kode ATAU nama akun persis**; kolom **catatan** opsional (template: "Konfirmasi/Reff").
+- Tanggal: terima `DD/MM/YYYY`, `DD/Mon/YYYY`, `D-Mon-YYYY`; **periode yang dipilih menentukan makna tanggal ambigu**.
+- **Class CF** (Operating Balance/Operating/Investing/Funding) sebagai bahan Cash Flow metode langsung dari mutasi kas — kolomnya sekarang, laporannya nanti.
+- Catatan untuk L1: kelompok "Pendapatan & Biaya Lain-lain" di template **ber-posisi Kredit** dan biayanya tampil **negatif** (§7.C).
+
+| | Keputusan | Rekomendasi & alasan |
+|---|---|---|
+| **D46** ⏳ | **Library grid** | **`react-data-grid` dipin PERSIS `7.0.0-beta.63`** (tanpa `^`), dibuktikan dulu di spike S0 dengan **20.000 baris** (2× target); **cadangan: `@tanstack/react-virtual`** + grid tulis sendiri. Kandidat & lisensinya di tabel bawah. |
+| **D47** ⏳ | **Nasib wizard impor CSV (N6)** | **DILEBUR menjadi pintu masuk berkas.** Wizard tetap memilih berkas, pemisah, pemetaan kolom (bila header tak dikenali), menolak berkas MM/DD, dan kini **menampilkan langkah arah** (otomatis dari saldo, atau **pilihan wajib** bila tanpa saldo) — langkah terakhirnya **"Masukkan ke grid"**, bukan "Simpan". Parsing pindah ke browser (`lib/csv/mutasi-kas.ts` sudah murni); **`POST /api/cash-mutations/import` dihapus** — dugaan duplikatnya digantikan `dryRun` route batch (D48). Ditolak: wizard tetap menulis sendiri — itu jalur simpan kedua. **Perubahan perilaku:** hari ini impor menyimpan baris terbaca dan **melewati** baris bermasalah (simpan sebagian); sesudah D47, baris bermasalah tampil merah dan **menahan Simpan**. |
+| **D48** ⏳ | **Satu jalur tulis** | **`POST /api/cash-mutations/batch`** `{ baru[], ubah[], hapus[], dryRun }` + perencana `rencanakanSimpanMutasi` (`lib/api/cash-mutation-batch.ts`). Logika POST/PATCH/DELETE yang sekarang **DIPINDAH** ke perencana itu (bukan ditulis ulang), dan ketiga route lama jadi **pembungkus tipis** — form satu-satu (HP) tetap jalan dengan aturan identik. Alokasi tetap route-nya sendiri. **Semua-atau-tidak-sama-sekali: satu `db.batch`** (boleh banyak statement di dalamnya — lihat D52). Pencatatan per sumber TIDAK berubah: baris dari berkas → satu `cash_mutation_imports` per berkas tanpa event per baris (N4); baris ketik/tempel → event `created` per baris; ubah → `updated` dengan `nilai_sebelum/sesudah`; hapus → aturan DELETE yang sekarang. |
+| **D49** ⏳ | **Skema Modul A — migrasi 0021, seluruhnya tambah** | (1) `cash_mutations.urutan integer NULL` (CHECK ≥ 1): urutan baris dalam satu hari **hilang** sesudah disimpan (insert massal → `created_at` sama, `id` acak), padahal kesinambungan saldo di mode sunting dan rekonsiliasi bank kelak butuh urutan rekening koran; urutan baku `tanggal, created_at, urutan, id`. (2) `cash_mutations.catatan text NULL` (≤ 500, **tidak** ikut fingerprint). (3) `client_accounting_settings.akun_pindah_buku_id` → `master_coa` **set null** (pola D33; D59). (4) tabel **`cash_mutation_rules`** (D57, §8.22). **Saldo TIDAK butuh kolom baru** dan **Class CF juga tidak** — keduanya sudah ada (kotak P4 & D62). |
+| **D50** ⏳ | **Saldo putus menahan Simpan?** | **Ya.** Ia pengaman utama terhadap salah baca AI dan arah terbalik; peringatan yang bisa diabaikan tidak menjaga apa pun di 10.000 baris. Jalan keluar jujur bila rekening korannya sendiri tidak konsisten: **kosongkan sel Saldo** baris itu — rantai lalu diperiksa antar baris yang masih bersaldo. Halaman yang hilang tidak bisa diakali dengan itu, dan memang tidak boleh. |
+| **D51** ⏳ | **Di mana draf hidup** | **Di memori browser saja** + penjaga "ada perubahan belum disimpan". **Tidak** `localStorage` (rekening koran di komputer bersama), **tidak** tabel draf di server. Harga: tab yang crash kehilangan draf. |
+| **D52** ⏳ | **Batas per Simpan** | **Satu Simpan harus muat satu akun-bulan: 10.000 baru** · 2.000 ubah · 2.000 hapus — angka final dari **uji beban S7**. Dua batas teknis yang sudah pasti: **65.535 parameter per statement** Postgres (10.000 baris × ±12 kolom harus dipecah jadi beberapa `INSERT` — **di dalam `db.batch` yang sama**, tetap atomik) dan **body fungsi Vercel ±4,5 MB** (diukur; bila 10.000 baris uraian panjang melampauinya, Simpan dibagi per rentang tanggal **secara terlihat**). **Tidak pernah dipecah diam-diam.** |
+| **D53** ⏳ | **Urutan kerja vs Kunci Periode** | **K1–K5 SEBELUM S7** (route batch). Grid adalah jalur sunting massal; tanpa `isDateLocked` sejak hari pertama, satu tempelan bisa menulis ulang bulan yang sudah dilaporkan. S0–S6 (spike + modul murni + aturan + Pindah Buku, tanpa jalur tulis mutasi massal) boleh lebih dulu. **Butuh D17 & D26.** |
+| **D54** ⏳ | **Penyedia AI Modul B** | **Dipilih dari uji banding X6.** Kandidat: Gemini Flash-Lite, Claude Haiku, GPT mini (atau penerus setaranya). **Syarat mengikat:** berbayar; data API **tidak dipakai melatih model**; **free tier dilarang**; API first-party **DeepSeek/Z.ai tidak dipakai untuk data klien**. Ukuran utama: **% dokumen lolos kesinambungan saldo tanpa koreksi** + perkiraan biaya per dokumen. |
+| **D55** ✅ **dijawab Ricko 2026-10-26: opsi (b)** | **Fitur AI lain & sakelar** | Saran COA Mapping dan ekstraksi PDF laporan di `/upload` **tetap menyala sementara** sambil Gemini paid tier diurus dengan NPWP kantor. Sakelar diperluas ke keduanya (commit tersendiri) dengan **bawaan MENYALA** selama `AI_FEATURES_ENABLED` tidak diisi; saran akun jurnal tetap mati. **Batas waktu: bila paid tier belum aktif sampai 9 November 2026, semua fitur AI dimatikan di produksi** (isi `AI_FEATURES_ENABLED` dengan nilai selain `true`). Risiko terbuka dicatat di ROADMAP. |
+| **D56** ⏳ | **PDF rekening koran disimpan?** | **Tidak.** Teks diekstrak **di browser**; server hanya meneruskan teks/gambar halaman ke penyedia, **tidak menulis ke DB/berkas/log**. Jejak: nama berkas + jumlah baris di `cash_mutation_imports`. |
+| **D57** ⏳ | **Aturan akun lawan** | Tabel **`cash_mutation_rules`** (menghidupkan §8.8 `bank_mapping_rules`, dinamai ulang mengikuti D35): per klien, `pola` (teks), `arah` (masuk/keluar/keduanya), `akun_lawan_id`, `akun_kas_id` opsional, `prioritas`, `aktif`. Cocok = `normalizeKeterangan(uraian).includes(normalizeKeterangan(pola))` — **tanpa RegExp**. Banyak yang cocok → prioritas tertinggi, lalu pola terpanjang; seri → **tanpa usulan** + tanda "aturan bentrok". **Usulan tidak masuk nilai sel sampai "Terapkan usulan"** ditekan (untuk baris terpilih atau semua) — sejalan dengan D10 ("tidak ada yang masuk ke baris sampai Terapkan"), satu klik untuk 5.000 baris. Kelola di tab Settings **"Aturan Mutasi"** (owner/akunting tulis, finance baca) + "Buat aturan dari baris ini" di grid. `akun_lawan_id` NOT NULL → **blokir 409** di `buildReplacePlan` bila kodenya hilang (§8.15). |
+| **D58** ⏳ | **Jurnal per baris vs jurnal RINGKASAN** | **Rekomendasi: jurnal ringkasan per (akun kas, akun lawan, tanggal) untuk mutasi berakun-lawan (kasus b); mutasi beralokasi ke invoice TETAP jurnal per mutasi.** Rincian baris tetap di `cash_mutations` (banyak mutasi → satu `journal_id`; kolomnya tidak unik, jadi **tanpa migrasi**). Analisis opsi & dampaknya di §5.G kotak D58. |
+| **D59** ⏳ | **Pindah Buku** | Akun Pindah Buku = **setelan per klien** `client_accounting_settings.akun_pindah_buku_id` (pola PPN Masukan D33). Peringatan akhir periode = **Σ(masuk − keluar) mutasi berakun-lawan Pindah Buku di seluruh akun kas klien, s.d. akhir periode ≠ 0** — turunan dari mutasi (P3/P4), mencakup yang belum diposting. Pencocok pasangan: keluar di akun kas A ↔ masuk di akun kas B, **nominal sama persis, selisih tanggal ≤ 3 hari** (`hariAntara`), hanya pasangan **tunggal** yang diusulkan; ganda → ditampilkan sebagai kandidat. Pasangan **tidak disimpan** — hasilnya hanya usulan akun lawan Pindah Buku di kedua baris (lewat "Terapkan", D57). Transfer lintas periode wajar → **peringatan, bukan galat**. |
+| **D60** ⏳ | **Tanggal: baris tanpa tanggal & di luar periode** | Dua opsi yang Ricko minta: **(a) wajib diisi** — sel merah, menahan Simpan; **(b) otomatis tanggal akhir periode** dengan penanda "tanggal diisi otomatis". **Rekomendasi: (a), ditambah aksi eksplisit "Isi tanggal akhir periode" untuk baris terpilih** — kemudahan (b) tanpa tanggal karangan yang masuk diam-diam (tanggal menentukan periode, kunci periode, dan urutan rantai saldo). Baris bertanggal **di luar periode yang dipilih → galat** (jalan keluar: perlebar periode) — rekening koran bulanan yang memuat tanggal di luar bulannya hampir selalu salah baca. |
+| **D61** ⏳ | **Saldo awal: majukan Fase 4 §7.A?** | **Tidak untuk grid.** Rantai saldo membandingkan saldo BANK dengan saldo BANK, jadi jangkarnya fakta dokumen: baris **SALDO AWAL** di tempelan/PDF → saldo baris tersimpan sebelum rentang → isian **"saldo awal rekening koran"** di bilah grid (tidak disimpan). **Saldo awal BUKU (jurnal `opening_balance`, D16) dimajukan terbatas akun kas BERSAMAAN dengan laporan Cash Flow dari mutasi** (fase sesudah grid), karena di sanalah ia dibutuhkan: saldo kas awal laporan dan cek "saldo buku = saldo bank". Bila Ricko ingin cek itu ada sejak grid rilis, J1–J3 khusus akun kas bisa disisipkan sesudah S9 — butuh D16. |
+| **D62** ⏳ | **Class CF** | **Kolomnya SUDAH ADA** (`master_coa.class_cf text NULL`, sejak 0000) dan Master COA nyata sudah memakai keempat nilai — di dev: Operating 148, Funding 16, Investing 11, **Operating Balance 22**. Yang kurang adalah **kosakatanya**: (1) baku empat nilai `Operating Balance` · `Operating` · `Investing` · `Funding`, dinormalkan saat impor/sunting COA (tetap `text`, **tanpa migrasi**); (2) `classification-health` kini menandai "Operating Balance" sebagai *tidak dikenali* — **peringatan palsu** untuk 22 akun; (3) **"Operating Balance" = akun kas/bank** (22 akun di dev: Bank BCA, Kas Shopee 1, OVO, Paypal, Sinarmas, …) **tapi `is_kas` belum tersetel pada satu pun**, dan `deriveIsKas` (nama memuat "kas"/"bank") **tidak mengenali OVO, Paypal, Sinarmas** — tab grid mereka tidak akan muncul. Rekomendasi: aksi Settings **"Tandai akun Operating Balance sebagai akun kas"** (eksplisit, ditinjau) — **bukan** mengubah `deriveIsKas`, karena predikatnya dikunci sama dengan "Kas & Setara Kas" di Dashboard. Ricko mohon mengonfirmasi makna "Operating Balance" = akun kas/bank. |
+
+**Kandidat library grid (D46) — lisensi & versi diverifikasi dari registry npm 2026-10-26:**
+
+| Kandidat | Versi | Lisensi | React 19 | Catatan |
+|---|---|---|---|---|
+| **`react-data-grid`** (adazzle) | 7.0.0-beta.63 | **MIT** | ✅ peer `^19.2` | Berbasis DOM; virtualisasi bawaan (`enableVirtualization`), `role="grid"` + `aria-*`, navigasi keyboard, editor per kolom (`renderEditCell` → **`NominalInput` N9 dipakai ulang langsung**), seleksi baris, `onCellCopy`/`onCellPaste` per sel (tempel multi-baris tetap kode kita). Risiko: rilis "beta" bertahun-tahun → pin persis, bungkus di satu komponen. |
+| **`@tanstack/react-virtual`** (+ opsional `@tanstack/react-table` 9.3.1) | 3.14.22 | **MIT** | ✅ | Headless: hanya virtualisasi. Pola grid ARIA, navigasi, seleksi, editor kita tulis sendiri — kendali penuh, kode & risiko a11y terbanyak. |
+| `@glideapps/glide-data-grid` | 6.0.3 | MIT | ❌ peer `react ≤18` | Canvas: sel kustom harus digambar di canvas (N9 tidak bisa dipakai ulang); README-nya mengakui pengembang utamanya tidak memakai pembaca layar. |
+| ~~Handsontable~~ | 18.1.2 | `SEE LICENSE IN LICENSE.txt` | — | **Dikeluarkan:** proprietary, gratis hanya non-komersial/evaluasi. |
+| ~~AG Grid~~ | 36.2.0 | Community MIT · Enterprise **Commercial** | — | **Dikeluarkan:** fitur Clipboard (copy/paste) adalah fitur **Enterprise** menurut dokumentasinya. |
+| ~~MUI X Data Grid~~ | 9.16.0 | MIT · Premium berlisensi | — | **Dikeluarkan:** "Clipboard paste" berlencana **Premium**; versi MIT menyeret `@mui/material` + emotion yang asing bagi Tailwind v4. |
 
 ---
 
@@ -428,7 +478,7 @@ Mutasi tiap akun kas: kas bank, kas marketplace, kas kecil, kas besar, dan lainn
   - Keduanya WAJIB lolos `isBalanced` (test).
 
 **N3 — `lib/csv/mutasi-kas.ts` murni + test  (D22 pindah rumah).**
-Alias header (pola `lib/coa/coa-import.ts`) + **pemetaan kolom manual** bila deteksi gagal; **tanpa regex** dari input pengguna (D22 — ReDoS). Keluaran: baris mentah bernomor + baris terpetakan + daftar baris yang tidak terbaca. MVP **CSV saja**; PDF rekening koran menyusul (aturan proyek: CSV/Excel lebih dulu karena akurasinya tidak ditebak).
+Alias header (pola `lib/coa/coa-import.ts`) + **pemetaan kolom manual** bila deteksi gagal; **tanpa regex** dari input pengguna (D22 — ReDoS). Keluaran: baris mentah bernomor + baris terpetakan + daftar baris yang tidak terbaca. MVP **CSV saja**; PDF rekening koran menyusul (aturan proyek: CSV/Excel lebih dulu karena akurasinya tidak ditebak). **→ 2026-10-26: digantikan §5.G Modul B.**
 
 **N4 — Route.**
 - `GET /api/cash-mutations?clientId&akunKasId&periodStart&periodEnd` — `requireInternal`; membawa sisa alokasi & status turunan.
@@ -470,6 +520,124 @@ Kartu ringkasan umur hutang (belum jatuh tempo · 1–30 · 31–60 · 61–90 �
 
 **U5 — ROADMAP + sync.**
 
+### 5.G Grid Mutasi Kas (Modul A) & Ekstraksi PDF Rekening Koran (Modul B) 🆕 2026-10-26 — ⏳ menunggu D46–D62
+
+**Tujuan:** `/mutasi-kas` terasa seperti sheet kas di spreadsheet — admin menempelkan ratusan sampai **10.000 baris per akun per bulan**, menyunting di tempat, dan menyimpan sekaligus; PDF rekening koran diekstrak AI ke grid yang sama. Keputusan di §3.6. **Modul A dulu, Modul B sesudahnya.** Ini langkah pertama "tiap akun kas punya sheet sendiri" dari catatan Ricko 2026-09-22 — sumber laporan Cash Flow tetap keputusan fase tersendiri, tapi bahannya (Class CF, D62) disiapkan di sini.
+
+**Revisi dari template akuntan Rasyuka April 2026:** arah uang tidak lagi dari judul kolom (kotak di bawah), target 10.000 baris, aturan akun lawan (D57), jurnal ringkasan (D58), Pindah Buku (D59), kolom catatan, akun lawan kode-atau-nama, tanggal & periode (D60), jangkar saldo (D61), Class CF (D62). **Catatan untuk §6.B:** template mencatat Kas Shopee **per baris** (5.187 baris April) — sebelum §6.B (settlement-level) dikerjakan, tinjau ulang apakah mutasi Kas Shopee + aturan akun lawan + jurnal ringkasan sudah menutup kebutuhannya.
+
+#### 5.G.0 Pakai ulang — jangan membuat aturan kedua
+
+| Kebutuhan | Yang sudah ada | Dipakai untuk |
+|---|---|---|
+| Nominal format Indonesia | `lib/nominal.ts` `bacaNominal`, `pesanGalatNominal`, `pemisahDesimal` | sel Masuk/Keluar/Saldo, tempelan, hasil AI |
+| Input terformat saat mengetik | `components/ui/nominal-input.tsx` + `lib/nominal-input.ts` (N9) | editor sel uang |
+| Pembelah teks bertabel | `lib/csv/mutasi-kas.ts` `parseCsv` (pemisah `'\t'` untuk tempelan), `detectHeader`, `mapRows`, alias header | tempelan TSV, berkas CSV, tabel hasil AI — **alias Debet/Kredit TIDAK lagi menentukan arah** |
+| Tanggal & penolakan MM/DD | `parseTanggalCell` (sudah membaca `05/Apr/2026` dan `5-Apr-2026`; `BULAN_ID` Indonesia + Inggris), `deteksiTanggalMMDD` (tingkat BLOK) | sel tanggal, blok tempelan/berkas/PDF |
+| Selisih hari | `hariAntara` (`lib/contracts.ts`) | pasangan Pindah Buku |
+| Normalisasi teks | `normalizeKeterangan` (`lib/cash-mutation.ts`, tanpa RegExp) | pencocokan aturan akun lawan |
+| Validasi satu mutasi | `validateCashMutation` (cermin CHECK D36, mengumpulkan semua galat) | setiap baris draf, di browser DAN server |
+| Duplikat | `fingerprintMutasi` + pola pencarian fingerprint route impor (D38: peringatan) | `dryRun` route batch |
+| Jurnal mutasi | `syncMutationJournal`, `buildAllocationJournalLines`, `buildCounterAccountJournalLines` | diperluas ke jurnal ringkasan (D58) |
+| Penjaga sunting | PATCH: nominal & akun kas terkunci bila ada alokasi; DELETE: terposting menahan | dipindah ke `kunciMutasi` (S7) |
+| Setelan akun per klien | `client_accounting_settings` + `akun_ppn_masukan_id` (D33) + `buildReplacePlan` "boleh diputus" | `akun_pindah_buku_id` (D59) |
+| Klasifikasi COA | `class_cf` (sudah ada), `lib/coa/classification-health.ts`, `resolveIsKas` | D62 |
+| Status & sisa turunan | `mutationStatus`, `allocationRemaining` (D37) | kolom baca-saja |
+| UI | `StyledSelect` (`badge=kode`), `ModalShell`, `useRupiah`/`rupiahPersis`, `DateRangePicker`, token `globals.css` | editor akun lawan, dialog, total |
+
+**Dilarang:** `new Date(string)` untuk tanggal (P2), float untuk uang (P1 — sen bulat lewat `toMinorUnits`), RegExp di modul pembaca/pencocok baru (D22, dikunci test pemindai sumber), status/saldo hitungan yang disimpan (P3/P4).
+
+> **Kenapa `cash_mutations.saldo` tidak melanggar P4 ("tidak ada tabel saldo").** P4 melarang menyimpan saldo **hasil hitungan kita** — angka yang bisa diturunkan dari baris terposting dan basi begitu satu baris berubah. Kolom `saldo` bukan hitungan kita: ia angka yang **dicetak bank** di rekening koran, fakta dokumen yang statusnya sama dengan `tanggal` dan `keterangan`. Ia tidak pernah dibaca untuk menghitung saldo buku besar, tidak diperbarui saat mutasi lain berubah, dan berfungsi sebagai **pembanding independen** terhadap hitungan kita — kebalikan dari cache. **Kolomnya SUDAH ADA sejak 0018** (`numeric(18,2)` nullable, di produksi sejak 2026-10-23) dan impor CSV sudah mengisinya. Disiapkan untuk nanti, **tidak dibangun sekarang**: saldo awal/akhir di cash flow, pencocokan neraca, rekonsiliasi bank — ketiganya cukup membaca baris bersaldo terakhir per periode dengan urutan baku (D49).
+
+> **Arah uang tidak pernah dari judul kolom (ditetapkan Ricko 2026-10-26).** Template akuntan: Debet = **masuk**. Rekening koran bank: Debet = **keluar** (BCA: penanda DB/CR). Judul "Debet/Kredit" hanya berarti "ada dua kolom nominal". Per **blok** (satu tempelan, satu berkas, satu PDF) arahnya diputuskan berurutan: **(1) kesinambungan saldo** — rantai diuji dengan kedua orientasi; tepat satu yang utuh → itulah arahnya, tanpa bertanya. **(2) Tanpa kolom saldo, atau kedua orientasi putus** → arah **wajib dipilih eksplisit** di pratinjau ("Kolom ‹Debet› = Uang masuk / Uang keluar"), Simpan tertahan sampai dipilih; pilihan **diisi awal** dari petunjuk, tapi tetap harus dikonfirmasi. **Petunjuk** (tidak pernah memutuskan sendirian): penanda **DB/CR** sebagai token utuh di uraian atau sel nominal (DB = keluar dari rekening), dan judul yang tak ambigu ("Masuk/Keluar", "Penerimaan/Pengeluaran"). Kolom nominal tunggal + penanda DB/CR per baris → arah per baris dari penandanya, lalu diverifikasi rantai saldo. **Impor CSV produksi hari ini masih memakai alias lama "Debet = keluar"** — berkas dari sheet template akuntan akan masuk **terbalik** sampai S2 dirilis (risiko 2).
+
+#### Modul A — Grid Mutasi Kas (S0–S11)
+
+**S0 — Spike library (branch sendiri, TIDAK di-merge)  ⏸ CP-19.** `react-data-grid@7.0.0-beta.63` di halaman uji dengan data sintetis. Kriteria lulus, diukur dan dilaporkan dengan angka: (1) **20.000 baris** (2× target) digulir halus; (2) editor sel `NominalInput` — ketik `1000000` tampil `1.000.000`, kursor tidak meloncat; (3) panah, Tab/Shift+Tab, Enter, Esc; (4) tempel **10.000 baris** TSV (Excel & Google Sheets) **< 2 detik** sampai tampil + tervalidasi; (5) NVDA membaca nama kolom + nilai sel + status galat; (6) tambahan bundle `/mutasi-kas`. Gagal yang tak bisa diatasi → ulangi dengan `@tanstack/react-virtual`. Ricko memilih (D46).
+
+**S1 — Migrasi 0021 (dev), seluruhnya tambah (D49).** `cash_mutations.urutan integer` + CHECK; `cash_mutations.catatan text`; `client_accounting_settings.akun_pindah_buku_id` → `master_coa` set null; `CREATE TABLE cash_mutation_rules` (§8.22). Komentar skema `saldo` diperbarui ("fakta dokumen"). **`buildReplacePlan` (P14) += dua perujuk**: `akun_pindah_buku_id` diperlakukan seperti `akun_ppn_masukan_id` (boleh diputus); `cash_mutation_rules.akun_lawan_id`/`akun_kas_id` disambung by kode, **blokir 409** bila hilang (§8.15) — test regresi per kolom + sabotase. **Gotcha #8:** baca SQL `db:generate` sebelum `db:migrate`. Nomornya = nomor bebas berikutnya saat dikerjakan: **0021 bila `period_locks` (K1) sudah 0020**; bila S1 lebih dulu, S1 = 0020 dan `period_locks` = 0021 — perbarui §8.14 saat itu juga.
+
+**S2 — `lib/mutasi-draf.ts` murni + test.** Satu pintu dari teks bertabel ke baris draf, untuk tempelan, berkas CSV, dan tabel hasil AI:
+- `bacaBlok({ baris: string[][], jangkarKolom, sumber, periode })`. Baris pertama dikenali `detectHeader` → pemetaan dari judul (kolom tambahan seperti No. Ref/Cabang tidak menggeser apa pun); judul Debet/Kredit dipetakan ke **dua kolom nominal tanpa arah** (kotak Arah). Tidak dikenali → posisional dari kolom jangkar (urutan grid: Tanggal · Uraian · Masuk · Keluar · Saldo · Akun lawan · Catatan).
+- **Akun lawan:** `cocokkanAkun(teks, coa)` — **kode persis dulu, lalu nama persis** (trim, abaikan huruf besar/kecil); nama yang dipakai > 1 akun → galat "nama ganda, pakai kode"; tak dikenal → galat.
+- **Catatan:** alias judul "Konfirmasi", "Reff", "Ref", "Catatan" → kolom catatan.
+- `kelasBaris(...)` → `transaksi` | dilewati: `kosong` · `judul` (header berulang tiap halaman) · `saldo` (SALDO AWAL/AKHIR: tanpa nominal, bersaldo — **saldonya jadi jangkar rantai**) · `ringkasan` (TOTAL/SUBTOTAL/MUTASI DEBET-KREDIT tanpa tanggal) · `lanjutan` (teks saja). Kata kunci: huruf kecil + `startsWith`/`includes`, **tanpa RegExp**. Baris dilewati dikembalikan sebagai daftar beralasan, bukan galat.
+- **Tanggal:** `DD/MM/YYYY`, `DD/Mon/YYYY`, `D-Mon-YYYY`, `YYYY-MM-DD` (semuanya sudah dibaca `parseTanggalCell` — dikunci test baru); `tetapkanTahun(baris, periode)` untuk tanggal tanpa tahun (`26/10`), Des→Jan dinaikkan setahun secara deterministik. **Periode yang dipilih memutus makna tanggal ambigu:** blok yang seluruh tanggalnya ≤ 12/12 dibaca DD/MM bila bacaan itu jatuh di periode; bila justru bacaan MM/DD yang jatuh di periode dan DD/MM tidak → **bukti MM/DD → blok ditolak** (keputusan Ricko 2026-09-21 tetap). Baris tanpa tanggal & di luar periode → **D60**.
+- `validasiBaris(draf)` → galat **per sel** (tanggal, uang lewat `bacaNominal`, "Masuk ATAU Keluar"), lalu `validateCashMutation` sebagai hakim terakhir.
+- Test: tempelan Excel dengan sel berkutip + baris baru di dalam sel; sheet template akuntan (Debet=masuk) **dan** rekening koran BCA (Debet=keluar, DB/CR) memakai fikstur yang sama strukturnya; kode vs nama akun, nama ganda; lima kelas baris dilewati; tahun lintas Des→Jan; 29 Februari; blok MM/DD ditolak lewat periode; **pemindai sumber: nol RegExp**.
+
+**S3 — `lib/saldo-berantai.ts` murni + test.** `periksaKesinambungan(baris, saldoJangkar?)`: untuk tiap baris bersaldo, `saldo = saldo bersaldo sebelumnya + Σ(masuk − keluar) baris di antaranya` — **dalam sen bulat**; keluaran: baris pertama yang putus + selisihnya. `tentukanArah(blok)` menjalankan rantai dengan **kedua orientasi** dan petunjuk DB/CR → `{ arah: 'normal' | 'tukar' | null, alasan }` (`null` = wajib dipilih, kotak Arah). Putus = **menahan Simpan** (D50). **Jangkar (D61):** baris kelas `saldo` di blok → saldo baris tersimpan sebelum rentang (S8) → isian "saldo awal rekening koran" di bilah grid (tidak disimpan); tanpa jangkar, baris bersaldo pertama tidak diverifikasi — dan itu terlihat. Test: rantai utuh; putus di tengah; orientasi terbalik terdeteksi tanpa bertanya; tanpa saldo → `null`; DB/CR bertentangan dengan rantai → rantai menang + peringatan; baris tanpa saldo di antara; saldo negatif (cerukan); nominal dekat batas sen aman; 10.000 baris.
+
+**S4 — Aturan akun lawan (D57).** `lib/aturan-mutasi.ts` murni: `usulkanAkunLawan(baris, aturan[]) → { akunId, aturanId } | { bentrok: aturanId[] } | null` — cocok `normalizeKeterangan(uraian).includes(normalizeKeterangan(pola))`, saring `arah` & `akun_kas_id`, urut prioritas lalu panjang pola; nonaktif dilewati. Route `GET/POST /api/clients/[id]/cash-mutation-rules`, `PATCH/DELETE …/[ruleId]` — `requireInternal` baca, `requireAkunting` tulis, pola 2..100 karakter. Tab Settings **"Aturan Mutasi"** (`SETTINGS_TABS` + `FINANCE_VISIBLE_TABS` baca-saja, test P13): daftar, tambah/ubah/nonaktifkan, **uji pola terhadap mutasi 30 hari terakhir** (berapa baris yang akan kena). Test: nol RegExp; prioritas; seri → bentrok; arah; normalisasi spasi/tanda baca; 10.000 baris × 200 aturan < 200 ms.
+
+**S5 — Pindah Buku (D59).** `lib/pindah-buku.ts` murni: `saldoPindahBuku(mutasi, akunPindahBukuId, sampai)` dalam sen; `cariPasangan(keluar[], masuk[], toleransiHari = 3)` → pasangan tunggal + kandidat ganda (A dan B **akun kas berbeda**, nominal persis sama). Setelan "Akun Pindah Buku" di tab Settings Pembukuan (memperluas `PATCH /api/clients/[id]/accounting-settings`, pola `akunPpnMasukanId`). `GET /api/cash-mutations/pindah-buku?clientId&periodEnd` → `{ saldo, belumBerpasangan, usulan }`, `requireInternal`. Test: pasangan tunggal; dua kandidat sama nominal → tidak diusulkan otomatis; batas 3/4 hari; lintas periode → peringatan bukan galat; akun kas sama tidak dipasangkan.
+
+**S6 — `lib/mutasi-grid-state.ts` murni + test.** Reducer draf: `ubahSel`, `tempel` (satu aksi), `tambahBaris`, `hapusBaris`, `pilihArah(blok)`, `terapkanUsulan(kunci[])` (aturan & Pindah Buku), `isiAkunLawanMassal`, `isiTanggalAkhirPeriode(kunci[])` (D60). **Undo/redo** (berbagi struktur), batas 100 aksi. Sel terkunci (`kunciMutasi`) ditolak reducer; baris yang dilewati aksi massal dilaporkan. `diffKeBatch(draf, snapshotServer)` → `{ baru, ubah (+updatedAt), hapus (+updatedAt) }`; Masuk/Keluar ↔ `debit`/`kredit` hanya di sini (D36). Test: undo setelah tempel 10.000 baris memulihkan keadaan persis; sel terkunci kebal tempel & aksi massal; usulan tidak masuk diff sebelum diterapkan; diff tidak memuat baris yang dikembalikan ke nilai semula.
+
+**S7 — Satu jalur tulis server (D48) + jurnal ringkasan (D58) + uji beban.** *Wajib sesudah K1–K5 (D53).*
+- `kunciMutasi({ jurnalStatus, jurnalDibalik, jumlahAlokasi, tanggal, tanggalBaru?, terkunciSampai })` (murni, `lib/cash-mutation.ts`) → alasan per kolom: **jurnal terposting & belum dibalik → seluruh baris terkunci** (`posting_bisa_diedit` D42 tidak membukanya); **jurnal terposting yang SUDAH dibalik (D13) → terbuka**, dan penyuntingannya melahirkan jurnal draf baru — menutup celah yang sudah ada (risiko 11); **ada alokasi → Masuk/Keluar terkunci**; **tanggal lama ATAU baru ≤ kunci periode → terkunci**. Dipakai **server dan grid** — satu aturan.
+- **Jurnal ringkasan (D58):** `buildDailySummaryJournalLines({ akunKas, akunLawan, tanggal, mutasi[] })` murni — D kas Σmasuk / K lawan Σmasuk, D lawan Σkeluar / K kas Σkeluar, **bruto** (≤ 4 baris), wajib `isBalanced`. Perencana mengumpulkan **kunci (akun kas, akun lawan, tanggal) yang tersentuh** oleh baru/ubah/hapus (kunci lama DAN baru), lalu membangun ulang tiap kunci **sekali**: jurnal draf yang ada diganti; tidak ada draf → dibuat; kunci kosong → draf dihapus; kunci yang jurnalnya terposting → **draf kedua** untuk anggota baru. Mutasi beralokasi tetap jalur per mutasi (`buildAllocationJournalLines`).
+- `rencanakanSimpanMutasi` (`lib/api/cash-mutation-batch.ts`): validasi → muat baris ubah/hapus, alokasi, status jurnal (+ pembalik), dan kunci periode **dalam kueri massal** (tanpa N+1) → `kunciMutasi` → **konkurensi**: `updatedAt` beda → 409 untuk seluruh batch dengan daftar barisnya → fingerprint (DB + dalam batch, **peringatan**) → susun statement (INSERT dipecah ≤ 4.000 baris per statement karena batas 65.535 parameter) → **satu `db.batch`**.
+- `POST /api/cash-mutations/batch` `requireAkunting`, `canAccessClientData`, `loadCashAccount`; **`dryRun` = jalur yang sama**; galat dikembalikan **per baris & per kolom**, nihil tertulis. POST/PATCH/DELETE lama → pembungkus perencana; `POST …/import` dihapus (D47).
+- Test: baca-sumber (P15) — setiap route penulis mutasi lewat `rencanakanSimpanMutasi`, tidak ada `db.insert/update(cashMutations)` di luar perencana & alokasi, `isDateLocked` dipanggil; perilaku dengan guard/DB di-mock (pola `lib/ai-features.test.ts`) — satu baris galat → nol statement; **Σ jurnal ringkasan per akun = Σ jurnal per baris** untuk data yang sama (permutasi urutan baris); pembalikan membuka kunci.
+- **Uji beban di dev** (skrip sekali pakai di pohon proyek, dihapus sesudahnya, **dev saja**): **10.000 baru** (separuh berakun lawan), 2.000 ubah, 2.000 hapus → waktu, ukuran body, jumlah statement, jumlah jurnal ringkasan yang lahir → **tetapkan angka D52**.
+
+**S8 — `GET /api/cash-mutations` mode grid.** `urut=buku` → urutan baku naik + per baris `updatedAt`, `catatan`, `jurnalStatus`, `jurnalDibalik`, `jumlahAlokasi`, status & sisa + `saldoJangkar` + `terkunciSampai`. Memperluas `listCashMutations`. `requireInternal`. Halaman 10.000 baris dikirim dalam satu respons terkompresi (diukur di S7).
+
+**S9 — UI `/mutasi-kas`  ⏸ CP-20.**
+- **Tab sheet per akun kas** (`role="tablist"`, dari `?kas=1`); satu grid = satu akun kas; pindah tab dengan draf kotor → konfirmasi. Rentang tanggal = **periode** yang dipakai S2.
+- **Grid = tampilan utama** (≥ `md`). Kolom: Tanggal · Uraian · Masuk · Keluar · Saldo · Akun lawan (`StyledSelect`; ketik kode **atau** nama) · Catatan · baca-saja: Status & info alokasi. Usulan aturan/Pindah Buku tampil **lilac samar** di sel akun lawan sampai "Terapkan usulan".
+- **Arah:** banner per blok — "Arah ditentukan dari saldo" (otomatis), atau pemilih wajib "Kolom ‹judul› = Uang masuk / Uang keluar" yang menahan Simpan.
+- Sel galat: border kritis + `aria-invalid` + `aria-describedby`; filter "baris bermasalah saja"; panel baris dilewati; banner saldo putus; lencana duplikat; sel terkunci (redup + gembok + alasan di tooltip **dan** `aria-description`, `aria-readonly`).
+- Bilah alat: Simpan ("Simpan 5.187 perubahan", nonaktif selama ada galat/putus/arah belum dipilih), Batalkan semua, Undo/Redo, Terapkan usulan, Isi akun lawan, Isi tanggal akhir periode, Saldo awal rekening koran, Buka berkas CSV (D47), *(Modul B: Unggah PDF)*. Ringkasan: jumlah baru/diubah/dihapus, total Masuk/Keluar (`rupiahPersis`).
+- **Panel Pindah Buku:** saldo akun Pindah Buku s.d. akhir periode (≠ 0 → peringatan), baris belum berpasangan, usulan pasangan.
+- **Form satu-satu tetap ada** dan tetap utama di **HP** (< `md`). Panel alokasi tetap per baris. Jurnal ringkasan: tautan dari baris ke jurnal kuncinya.
+- a11y: `role="grid"`, `aria-rowcount` = total baris, `aria-colindex`, live region hasil tempel, `focus-visible:ring-2`, target sentuh ≥ 32–36 px, `prefers-reduced-motion`. Tiga lapis, `rounded-3xl`, `rounded-full`, token warna (galat = Critical Pink, usulan = Lilac).
+- Test struktural: halaman tidak menghitung status/sisa/saldo Pindah Buku sendiri (pola CP-18); Simpan hanya ke route batch; Simpan terikat pada galat, putus, dan arah.
+
+**S10 — Class CF (D62).** Kosakata baku `Operating Balance` · `Operating` · `Investing` · `Funding` (`lib/coa/class-cf.ts` murni: normalisasi "operasi"/"pendanaan"/huruf kecil → baku; nilai lain → galat di impor/sunting COA, kosong tetap NULL). `classification-health` mengenali "Operating Balance" (bucket `saldo`) — **tanpa mengubah `aggregateCashflow`**, yang memang mengecualikannya dari Operating. Aksi Settings › Master COA **"Tandai akun Operating Balance sebagai akun kas"** (pratinjau daftar → PATCH `is_kas = true`). Test: normalisasi, tak ada peringatan palsu untuk Operating Balance, `cashflowBucketOf` tetap cocok dengan `aggregateCashflow`. **Tanpa migrasi; tidak bergantung pada grid** — boleh dikerjakan lebih dulu bila D62 disetujui.
+
+**S11 — ROADMAP + `graphify update .`.**
+
+> **D58 — jurnal per baris vs jurnal ringkasan (keputusan baru, butuh persetujuan Ricko).**
+> | Opsi | Jumlah jurnal (Kas Shopee 1, April: 5.187 baris) | Kelebihan | Kekurangan |
+> |---|---|---|---|
+> | A. Per baris (hari ini) | 5.187 | Jejak 1:1; posting & sunting per baris | `/jurnal` & buku besar banjir (±10.000 baris buku besar per akun kas per bulan); posting satu-satu mustahil; ribuan statement per Simpan |
+> | **B. Ringkasan per (akun kas, akun lawan, tanggal)** ✅ rekomendasi | ≈ hari × akun lawan aktif — puluhan sampai ratusan (dihitung dari data nyata di S7) | Ritme harian rekening koran; buku besar terbaca; volume statement kecil | Kunci posting menelan satu hari × satu akun lawan; sunting satu baris membangun ulang jurnal kuncinya |
+> | C. Ringkasan per (akun kas, akun lawan, bulan) | paling sedikit | Paling ringkas | Satu koreksi membangun ulang jurnal sebulan; posting = sebulan sekaligus; buku besar kehilangan ritme harian |
+> | D. Mode per akun kas (A atau B) | campuran | Fleksibel | Dua jalur pembangun jurnal + setelan baru — hanya bila data nyata memaksa |
+>
+> **Dampak opsi B:**
+> - **Bentuk jurnal:** satu jurnal draf `sumber='mutasi_kas'` per kunci; baris **bruto, tidak dinetokan** (D kas Σmasuk / K lawan; D lawan / K kas Σkeluar); keterangan "Ringkasan mutasi ‹akun kas› ‹tanggal› — ‹akun lawan› (N baris)". Rincian tiap baris tetap di `cash_mutations`.
+> - **Alokasi hutang:** **tidak diringkas** — jurnal per mutasi (D hutang invoice snapshot D30 / K kas) seperti sekarang. Pembayaran supplier sedikit, dan meringkasnya akan mencampur akun hutang beberapa invoice di satu baris buku besar. Monitoring hutang tidak terpengaruh (turunan invoice − alokasi).
+> - **D32 "Koreksi di Mutasi Kas":** dari jurnal ringkasan membuka `/mutasi-kas` tersaring (akun kas, tanggal, akun lawan); pencarian mundur `cash_mutations WHERE journal_id = ?` kini mengembalikan banyak baris, dan tombolnya menyebut jumlahnya.
+> - **Posting:** memposting satu jurnal ringkasan mengunci **semua** anggotanya; anggota baru untuk kunci yang sudah terposting masuk **draf kedua** — yang terposting tidak pernah disentuh. Posting massal tetap di luar cakupan (≈ ratusan jurnal/bulan masih bisa satu-satu, tapi layak dipertimbangkan sesudahnya).
+> - **Penyuntingan:** mengubah nominal/tanggal/akun lawan satu baris membangun ulang jurnal kunci **lama dan baru** di batch yang sama (P10); perencana membangun tiap kunci sekali per Simpan. Jurnal balik (D13) atas jurnal ringkasan membuka kembali seluruh anggotanya.
+> - **Laporan:** buku besar & L1 menjumlah, jadi hasilnya sama dengan per baris (dikunci test). Cash Flow dari mutasi membaca **baris mutasi**, bukan jurnal — tidak terpengaruh.
+> - **Data & skema:** jurnal per baris yang sudah ada tidak dimigrasi; baris lama yang disunting pindah ke jurnal ringkasan kuncinya. **Tanpa migrasi** (`journal_id` tidak unik; kunci diturunkan dari anggota).
+
+#### Modul B — Ekstraksi PDF rekening koran (X0–X8)
+
+**X0 — Gerbang (Ricko, bukan kode).** Akun **berbayar** di ≥ 1 kandidat; ketentuan data API diperiksa dan dicatat (tidak untuk pelatihan, retensi, lokasi pemrosesan); free tier dilarang; API first-party DeepSeek/Z.ai dikecualikan (D54). **Sebelum gerbang ini: hanya PDF SINTETIS** di dev — tidak ada rekening koran nyata ke penyedia mana pun, termasuk di dev.
+
+**X1 — Lapisan penyedia `lib/ai/`.** `AiProvider { nama; mintaJson({ sistem, isi: (teks | gambarPng)[], timeoutMs }) }` + adaptor. `lib/ai/gemini.ts` **memindahkan** `getGeminiClient`/`generateContentWithRetry`; adaptor `anthropic` (`@anthropic-ai/sdk`, Apache-2.0) dan `openai` (`openai`, Apache-2.0) **hanya ditambahkan saat kandidatnya lolos X0**. Pemilihan lewat env `AI_PROVIDER` (+ model); sakelar per fitur `aiFeaturesEnabled(fitur)` tetap satu-satunya gerbang. `suggestJournalAccounts`, saran COA, dan ekstraksi laporan dipindah **tanpa perubahan perilaku**. Keluaran AI selalu lewat penjaga bentuk milik kita.
+
+**X2 — Pembaca PDF di browser (D56).** `pdfjs-dist` (Apache-2.0) atau `unpdf` (MIT). Teks per halaman + posisi; `lib/pdf/susun-baris.ts` murni menyusun item teks jadi baris (kelompok y, urut x, celah kolom → tab) — diuji dengan fikstur. Halaman tanpa lapisan teks → render PNG di browser sebagai **cadangan OCR**, ditandai "dibaca dari gambar".
+
+**X3 — Penyusun tabel `lib/mutasi-pdf.ts` + prompt.** Per halaman, AI **hanya menyusun struktur**: judul kolom **sebagaimana tercetak**, sel **sebagai teks apa adanya**, teks periode dari halaman pertama. **Arah (kotak Arah, S3), tanggal, nominal, tahun diputuskan kode kita** lewat jalur S2/S3 yang sama dengan tempelan — satu aturan untuk semua sumber, tanpa parser khusus per bank. Tiap baris membawa nomor halaman; tahun konsisten satu dokumen. Test: JSON rusak/kolom hilang → halaman **gagal terlihat**, tidak diam-diam kosong; header berulang dilewati; SALDO AWAL halaman berikut jadi jangkar; DB/CR BCA terbaca sebagai petunjuk; nol RegExp.
+
+**X4 — `POST /api/cash-mutations/ekstrak-halaman`.** `{ clientId, akunKasId, halaman, teks | gambarPng }` → `{ kolom, baris, periodeTeks? }`. `requireAkunting`, **`aiFeaturesEnabled('ekstraksiRekeningKoran')` → 503 lebih dulu**, `canAccessClientData`, batas ukuran, `maxDuration`, 429/kuota. **Tidak menulis, tidak mencatat isi** (Sentry `sendDefaultPii: false`; pesan galat tanpa isi baris). Dipanggil **per halaman berurutan** — progres, ulangi per halaman, bisa dibatalkan.
+
+**X5 — UI.** Tombol **"Unggah PDF rekening koran"** (tersembunyi bila sakelarnya mati) → progres per halaman → **satu blok DRAF** berlabel nama berkas, kolom baca-saja **Hal.**, penanda **lilac** sampai disentuh. **Tidak pernah tersimpan tanpa Simpan**; dialog Simpan menyebut "N baris berasal dari AI". Pengaman utama: kesinambungan saldo (D50). Dikembangkan dengan PDF sintetis.
+
+**X6 — Uji banding penyedia (sesudah X0)  ⏸ CP-21.** 2–3 kandidat × **≥ 12 rekening koran nyata** (≥ 3 bank termasuk BCA, ≥ 1 dokumen ≥ 10 halaman, ≥ 1 scan, ≥ 1 lintas tahun). Skrip lokal (PDF dari folder di LUAR repo, tidak pernah di-commit) menjalankan X2→X3→S2→S3. **Ukuran utama: % dokumen lolos kesinambungan saldo tanpa koreksi.** Juga baris hilang/ganda, waktu per halaman, token × **harga resmi pada tanggal uji** → **biaya per dokumen**. Laporan hanya **agregat** di `docs/plans/hasil-uji-banding-ekstraksi-<tanggal>.md`. Ricko memilih (D54).
+
+**X7 — Aktivasi produksi  ⏸ CP-22.** Kunci berbayar + `AI_PROVIDER` di Vercel **Production**, lalu sakelar ekstraksi rekening koran dinyalakan — **hanya sesudah X0 dan D54**. Redeploy; satu rekening koran nyata diuji bersama Ricko.
+
+**X8 — ROADMAP + `graphify update .`.**
+
+**Urutan:** `S10 (kapan saja sesudah D62)` · `S0 → ⏸CP-19 → S1 → S2 → S3 → S4 → S5 → S6 → [K1–K5 · D53] → S7 → S8 → S9 → ⏸CP-20 → S11` lalu `X1 → X2 → X3 → X4 → X5 → [gerbang X0] → X6 → ⏸CP-21 → X7 → ⏸CP-22 → X8`. **K1–K5 boleh berjalan sejajar S1–S6**; yang mengikat hanya: K selesai sebelum S7. X1 (adaptor Gemini saja) boleh kapan saja.
+
 ---
 
 ## 6. Fase 3 — Impor Mutasi Kas/Bank · Marketplace · Kas Kecil
@@ -481,7 +649,7 @@ Prasyarat: §5 selesai; §7.B (kunci periode) disarankan sudah ada (D26).
 > **JANGAN KERJAKAN BAGIAN INI.** Fiturnya sama dengan Modul 2 (§5.E): unggah CSV rekening koran, pemetaan kolom, deteksi duplikat, jadikan jurnal. §5.E menambahkan alokasi ke invoice hutang di atasnya, dan membangun dua-duanya berarti dua tabel mutasi bank serta dua jalur "jadikan jurnal" yang harus dijaga tetap sama selamanya.
 >
 > **Yang PINDAH ke §5.E dan tetap mengikat:** alias header + pemetaan kolom manual, normalisasi tanggal ke `YYYY-MM-DD` tanpa `new Date` untuk keluaran, fingerprint duplikat, arah jurnal dari sisi debit/kredit mutasi, dan larangan regex atas input pengguna (D22).
-> **Yang DITUNDA (bukan dibatalkan):** `bank_mapping_rules` — aturan pemetaan otomatis `contains`/`startsWith`. Ia tabel murni-tambah yang bisa menyusul setelah pola keterangan bank klien nyata terlihat.
+> **Yang DITUNDA (bukan dibatalkan):** `bank_mapping_rules` — aturan pemetaan otomatis `contains`/`startsWith`. Ia tabel murni-tambah yang bisa menyusul setelah pola keterangan bank klien nyata terlihat. **→ 2026-10-26: dihidupkan kembali (§5.G S4, D57, §8.22).**
 > **Yang HILANG:** `bank_imports`, `bank_import_rows` (§8.6–§8.7) — digantikan `cash_mutation_imports` + `cash_mutations`.
 >
 > Teks lama di bawah dipertahankan **sebagai bahan** untuk §5.E N3 (alias & normalisasi tanggal sudah dirinci di sana), bukan sebagai langkah yang dikerjakan.
@@ -495,6 +663,8 @@ Prasyarat: §5 selesai; §7.B (kunci periode) disarankan sudah ada (D26).
 **G5 — ROADMAP + sync.**
 
 ### 6.B Transaksi Marketplace (D20, D23)
+
+> **⚠️ 2026-10-26:** template akuntan mencatat **Kas Shopee per baris** (5.187 baris April 2026) di sheet kas, bukan per settlement. Sebelum H1 dimulai, tinjau ulang apakah mutasi kas + aturan akun lawan (D57) + jurnal ringkasan (D58) sudah menutup kebutuhan ini (§5.G).
 
 **Migrasi 0015**: `marketplace_settlements` (§8.9); `ADD VALUE 'marketplace'`.
 **H1 — `lib/marketplace.ts` + test.** `validateSettlementInput` (platform 1..40; periode YMD; bruto, fee, pajak, net via `normalizeNominal`; **`net = bruto − fee − pajak`** dalam sen, wajib; akun: penjualan, fee, pajak, kas — UUID); `buildSettlementJournalLines(settlement) → JournalLineInput[]`: D kas (net), D beban fee (fee), D akun pajak (pajak — akun dipilih pengguna, D20), K penjualan (bruto); nol dilewati; hasil lolos `validateJournalInput`.
@@ -517,6 +687,8 @@ Prasyarat: §5 selesai; §7.B (kunci periode) disarankan sudah ada (D26).
 ## 7. Fase 4 — Saldo Awal & Kunci Periode · Laporan dari Jurnal
 
 ### 7.A Saldo Awal (D16, D23)
+
+> **2026-10-26 (D61, menunggu Ricko):** grid mutasi kas **tidak** menunggu bagian ini — jangkar rantai saldo adalah fakta dokumen (§5.G S3). Saldo awal **buku** per akun kas dibutuhkan laporan Cash Flow dari mutasi dan cek "saldo buku = saldo bank"; usulannya J1–J3 dimajukan **terbatas akun kas** bersama laporan itu.
 
 **Migrasi**: `ADD VALUE 'opening_balance'` (bagian dari 0017).
 **J1 — `lib/journal.ts` (perluasan) + test.** `buildOpeningBalanceInput({ tanggal, rows: [{ masterCoaId, saldo, posisi }] }) → JournalInput`: tiap akun → satu baris pada sisi normal-nya (Debit-normal → D, Kredit-normal → K); kontra (saldo negatif) → sisi berlawanan; `no_bukti = 'SALDO-AWAL-<tahun>'`, `keterangan` baku; hasil **wajib** lolos `validateJournalInput` — bila tak seimbang, kembalikan `selisih` untuk ditampilkan (jangan menyeimbangkan diam-diam). Hanya boleh **satu** jurnal `opening_balance` per klien (predikat murni + unique parsial via cek route).
@@ -548,6 +720,8 @@ Prasyarat: §5 selesai; §7.B (kunci periode) disarankan sudah ada (D26).
 
 - **Periode:** Laba Rugi = baris dalam `[periodStart, periodEnd]`; **Neraca = kumulatif semua baris terposting ≤ `periodEnd`** (termasuk `opening_balance`); Arus Kas = baris dalam periode.
 - **Arus kas (D19):** untuk tiap jurnal terposting dalam periode yang menyentuh akun `resolveIsKas`: mutasi kas = `D − K` pada baris kas; klasifikasi diambil dari `classCf` baris **lawan** (bila banyak lawan, bagi proporsional nominal); jurnal yang **semua** barisnya akun kas (transfer) dilewati; hasil = `AggLine` per (akun lawan) dengan `classCf` lawan dan `amount` bertanda → `aggregateCashflow`. Baris lawan tanpa `classCf` → dikumpulkan sebagai **"tak terklasifikasi"** dan dilaporkan (jangan diam-diam hilang).
+- **Catatan template akuntan (Ricko 2026-10-26):** kelompok **"Pendapatan & Biaya Lain-lain"** ber-**posisi Kredit** untuk SEMUA akunnya, dan biayanya tampil **negatif**. Aturan `lainLain` = `Σkredit − Σdebit` di atas sudah menghasilkan itu — wajib masuk golden test. Jebakannya di tempat lain: `deriveAccountType` memakai `posisi` sebagai pemutus untuk pos lain-lain Laba Rugi (D1), jadi **akun biaya di kelompok itu diturunkan sebagai `revenue`** dan pemilih akun bertipe (mis. fee marketplace → `expense`) akan salah menyaring. Butuh `tipe_akun` eksplisit (E2) untuk akun-akun itu atau aturan turunan yang tidak bersandar pada `posisi` — putuskan di CP-14.
+- **Pindah Buku (D59):** jurnal kas ↔ akun Pindah Buku adalah transfer internal — dikecualikan dari arus kas seperti jurnal yang semua barisnya akun kas. Sumber Cash Flow dari **mutasi kas** (catatan Ricko 2026-09-22) memakai `class_cf` akun lawan per baris mutasi (§5.G S10) — keputusannya tetap fase tersendiri.
 - **Golden test:** ambil fixture `seed-dev` (line item hasil "ekstraksi") klien seed, susun jurnal yang ekuivalen, jalankan `aggregatePnl`/`aggregateBalanceSheet` pada keduanya → **identik**. Ini bukti "Konsistensi Format".
 
 **L2 — `lib/reports/source.ts` + test.** `resolveReportSource({ postedCountInPeriod, hasPdfReport }) → 'journal' | 'pdf' | 'none'` (jurnal menang bila ada ≥1 terposting di periode; else PDF; else none). Murni.
@@ -648,13 +822,13 @@ Indeks: `(entity_type, entity_id, at)`, `(client_id, at)`. **Append-only.**
 ### ~~8.7 `bank_import_rows`~~ — ❌ **DIBATALKAN**, digantikan §8.18 `cash_mutations`
 ~~id · import_id → bank_imports cascade · tanggal date · keterangan text · debit numeric · kredit numeric · saldo numeric NULL · fingerprint text NN · is_duplicate boolean NN · akun_lawan_id → master_coa set null · status text NN · journal_id → journal_entries set null · line_order int.~~
 
-### ~~8.8 `bank_mapping_rules`~~ — ⏸ **DITUNDA** (bukan dibatalkan — §3.5)
+### ~~8.8 `bank_mapping_rules`~~ — ⏸ **DITUNDA** (bukan dibatalkan — §3.5) → **dihidupkan kembali sebagai §8.22 `cash_mutation_rules` (2026-10-26)**
 Aturan pemetaan otomatis `contains`/`startsWith`. Tabel murni-tambah; dibangun setelah pola keterangan bank klien nyata terlihat. Bentuk yang direncanakan bila tiba saatnya: id · client_id cascade · pola text NN · tipe_cocok text NN (`contains`/`startsWith`) · akun_id → master_coa restrict · prioritas int NN default 100 · aktif boolean NN default true · created_at. Indeks `(client_id, prioritas)`. **D22 (larangan regex) tetap mengikat.**
 
-### 8.9 `marketplace_settlements` (**0021**)
+### 8.9 `marketplace_settlements` (**0022**)
 id · client_id cascade · platform text NN · periode_mulai date · periode_akhir date · bruto, fee, pajak, net numeric NN · akun_penjualan_id, akun_fee_id, akun_pajak_id, akun_kas_id → master_coa restrict · journal_id → journal_entries set null · catatan text NULL · created_by → users restrict · created_at, updated_at. Indeks `(client_id, periode_mulai)`.
 
-### 8.10 `petty_cash_funds` (**0022**)
+### 8.10 `petty_cash_funds` (**0023**)
 id · client_id cascade · nama text NN · akun_kas_kecil_id → master_coa restrict · dana_tetap numeric NN · aktif boolean default true · created_at, updated_at. `unique(client_id, nama)`.
 
 ### 8.11 ~~`petty_cash_expenses`~~ — dihapus oleh R3
@@ -711,6 +885,8 @@ id · client_id NN cascade · **akun_kas_id NN → master_coa restrict** · tang
 **Indeks:** `(client_id, tanggal)`, `(akun_kas_id, tanggal)`, `(fingerprint)`, `(journal_id)`.
 **Fingerprint TIDAK unik** (D38) — dua pembayaran identik pada hari yang sama itu nyata; duplikat adalah peringatan, bukan penolakan. **Tidak ada kolom status** — diturunkan dari alokasi & `akun_lawan_id`/`journal_id` (D37).
 
+**🆕 2026-10-26 (§5.G, D49):** `saldo` adalah **fakta dokumen** — angka yang dicetak bank — bukan saldo hitungan, jadi tidak melanggar P4 (kotak di §5.G). Ditambah **`urutan integer NULL`** (CHECK `urutan IS NULL OR urutan >= 1`, migrasi **0021**): posisi baris dalam satu Simpan; urutan baku `tanggal, created_at, urutan, id`. Baris lama = NULL. Ditambah juga **`catatan text NULL`** (≤ 500; template akuntan menamainya Konfirmasi/Reff; **tidak** ikut fingerprint). Banyak mutasi boleh berbagi satu `journal_id` (jurnal ringkasan, D58) — kolomnya memang tidak unik.
+
 ### 8.19 `cash_mutation_imports` (0018) 🆕
 id · client_id NN cascade · akun_kas_id NN → master_coa **restrict** · nama_berkas text NN · jumlah_baris integer NN · diimpor_oleh → users restrict · created_at. Indeks `(client_id, created_at)`. *(Menggantikan `bank_imports`.)*
 
@@ -719,6 +895,7 @@ id · client_id NN cascade · akun_kas_id NN → master_coa **restrict** · nama
 |---|---|---|
 | client_id | uuid **PK** → clients cascade | satu baris per klien |
 | akun_ppn_masukan_id | uuid NULL → master_coa **set null** | D33 — kosong + PPN diisi ⇒ route menolak 409 ke Settings |
+| 🆕 akun_pindah_buku_id | uuid NULL → master_coa **set null** | D59 (2026-10-26, migrasi 0021) — akun Pindah Buku klien; kosong ⇒ panel Pindah Buku meminta disetel dulu di Settings. `buildReplacePlan` memperlakukannya seperti `akun_ppn_masukan_id` |
 | posting_bisa_diedit | boolean NN default **`false`** | D42 ✅ 2026-09-20 — **posting permanen**, dinyalakan per klien bila dibutuhkan. Lihat kotak §3.4 |
 | created_at, updated_at | timestamptz | |
 
@@ -735,6 +912,9 @@ id · mutation_id NN → cash_mutations **cascade** · invoice_id NN → purchas
 **unique(mutation_id, invoice_id)** — satu mutasi menunjuk satu invoice paling banyak sekali; beberapa invoice per mutasi tetap boleh (D37). **Indeks:** `(invoice_id)`, `(mutation_id)`.
 Batas "Σ alokasi ≤ nominal mutasi", "Σ alokasi ≤ sisa invoice", dan "`termin_urutan` ≤ `jumlah_termin` invoice" **tidak bisa** dijadikan CHECK (ketiganya lintas-baris/lintas-tabel) — ditegakkan di route dan dikunci test baca-sumber (P15).
 
+### 8.22 `cash_mutation_rules` (0021) 🆕 2026-10-26 — menghidupkan §8.8 (D57)
+id · client_id NN cascade · pola text NN (2..100, disimpan apa adanya; dicocokkan setelah `normalizeKeterangan`) · arah text NN default `'keduanya'` CHECK IN (`masuk`, `keluar`, `keduanya`) · akun_lawan_id NN → master_coa **restrict** · akun_kas_id NULL → master_coa **restrict** (NULL = semua akun kas) · prioritas integer NN default 0 · aktif boolean NN default true · created_by → users restrict · created_at, updated_at (timestamptz, D24). Indeks `(client_id, aktif)`. **Tanpa unique pada pola** — pola sama dengan arah berbeda itu sah. Pencocokan **tanpa RegExp** (D22). `buildReplacePlan`: kedua perujuk disambung by kode, **blokir 409** bila kodenya hilang (§8.15).
+
 ### 8.14 Urutan migrasi — **DIPERBARUI 2026-09-19**
 
 **Sudah diterapkan ke dev (0010–0014), belum ke produksi:**
@@ -750,9 +930,10 @@ Batas "Σ alokasi ≤ nominal mutasi", "Σ alokasi ≤ sisa invoice", dan "`term
 | **0018** | `cash_mutation_imports`, `cash_mutations`, `cash_mutation_allocations` | tambah | N1 |
 | **0019** | **`master_supplier` DROP `termin_pembayaran`** | ⚠️ **NON-ADITIF** | D43 |
 | **0020** | `period_locks` (D26 — naik prioritas sejak D42) | tambah | K1 |
-| **0021** | `marketplace_settlements` + `ADD VALUE marketplace` | tambah | §6.B |
-| **0022** | `petty_cash_funds` + `ADD VALUE kas_kecil` | tambah | §6.C |
-| **0023** | `ADD VALUE opening_balance` | tambah | §7.A |
+| **0021** 🆕 | `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, `cash_mutation_rules` (D49, 2026-10-26 — hanya bila disetujui; tukar nomor dengan 0020 bila S1 lebih dulu dari K1) | tambah | §5.G S1 |
+| **0022** | `marketplace_settlements` + `ADD VALUE marketplace` | tambah | §6.B |
+| **0023** | `petty_cash_funds` + `ADD VALUE kas_kecil` | tambah | §6.C |
+| **0024** | `ADD VALUE opening_balance` | tambah | §7.A |
 
 **Kenapa 0016 berdiri sendiri:** P8 — nilai enum yang baru ditambah lewat `ADD VALUE` **tidak boleh dipakai di transaksi yang sama**. Menggabungkannya dengan 0017 membuat migrasi gagal di tengah, setelah sebagian objek terbuat. Preseden: `0007_role_finance.sql`.
 
@@ -864,6 +1045,10 @@ Berkas itu memetakan **setiap** task (15 fitur) ke langkah plan ini, dan untuk 9
 | CP-13 | K4 | **naik prioritas** | kunci/buka periode; peringatan — **lebih mendesak sejak D42** (posting bisa diedit), lihat kotak §3.4 |
 | CP-14 | L1 | 9 | **review akuntansi**: aturan tanda, arus kas metode langsung, golden test |
 | CP-15 | L4 | 10 | lencana sumber laporan; angka Dashboard/Analytics dari jurnal vs PDF |
+| **CP-19** 🆕 | **S0** | §5.G | hasil spike library grid (angka keenam kriteria) → **pilih library (D46)** |
+| **CP-20** 🆕 | **S9** | §5.G | uji klik grid: tempel **10.000 baris** dari Excel/Google Sheets/internet banking/sheet template akuntan; **arah ditentukan saldo** (template Debet=masuk vs BCA Debet=keluar) dan **pemilih arah wajib** tanpa saldo; baris dilewati sebagai daftar; sel merah + filter; **saldo putus menahan Simpan**; akun lawan kode/nama; **usulan aturan + Terapkan**; **Pindah Buku** (peringatan & pasangan); **jurnal ringkasan** yang lahir di `/jurnal` + "Koreksi di Mutasi Kas"; duplikat sebagai peringatan; undo; sunting mutasi tersimpan (terposting/beralokasi/periode terkunci terkunci beralasan; jurnal dibalik → terbuka); wizard CSV mengisi grid; form HP; keyboard + pembaca layar |
+| **CP-21** 🆕 | **X6** | §5.G | hasil uji banding penyedia (agregat saja) → **pilih penyedia (D54)** |
+| **CP-22** 🆕 | **X5 + X7** | §5.G | PDF → grid di produksi dengan satu rekening koran nyata, hanya sesudah gerbang X0 |
 | — | sebelum tiap migrasi ke main | selalu | **hanya Ricko** |
 | — | ~~sebelum M1~~ | ✅ **lewat** | Seluruh D27–D45 dijawab Ricko 2026-09-20 — §5.D–§5.F boleh dimulai sesudah §5.B |
 
@@ -890,8 +1075,8 @@ Ditambah: `git diff lib/db/schema.ts` hanya penambahan; test lama tidak diubah k
 - **Master barang.** Baris invoice pembelian adalah teks bebas (§5.D). Tidak ada di PRD, dan menambahkannya diam-diam berarti membangun modul inventori setengah jadi.
 - **Pemisahan ongkos kirim & diskon** — belum diputuskan Ricko, sementara digabung netto ke nilai barang. Skemanya sudah dirancang agar pemisahan nanti murni-tambah (§8.17).
 - **Penyesuaian tanggal per cicilan** — disiapkan tempatnya (D34), tidak dibangun di versi ini.
-- **Aturan pemetaan otomatis mutasi bank** (`bank_mapping_rules`) — ditunda, bukan dibatalkan (§3.5).
-- **PDF rekening koran** — MVP CSV dulu, sesuai aturan proyek (akurasi parsing yang tidak ditebak lebih dulu).
+- ~~**Aturan pemetaan otomatis mutasi bank** (`bank_mapping_rules`) — ditunda~~ → **dihidupkan kembali 2026-10-26 sebagai `cash_mutation_rules` (§5.G S4, D57).**
+- ~~**PDF rekening koran** — MVP CSV dulu~~ → **dirancang 2026-10-26 di §5.G Modul B.** Yang tetap TIDAK dikerjakan di §5.G: saldo awal/akhir di cash flow, pencocokan neraca, rekonsiliasi bank (kolomnya disiapkan, fiturnya tidak), posting massal jurnal draf hasil grid, mengatur ulang urutan baris tersimpan, impor berkas `.xlsx` (tempel dari Excel menggantikannya), penyimpanan PDF asli, tabel draf di server.
 - **Alokasi pembayaran per cicilan yang dipilih manual** — FIFO (D40), bukan pilihan pengguna.
 - Penomoran otomatis `no_bukti` (putuskan setelah pola klien nyata terlihat).
 - Buku pembantu piutang / customer (cermin supplier untuk AR) — tidak ada di PRD.
@@ -921,6 +1106,23 @@ Ditambah: `git diff lib/db/schema.ts` hanya penambahan; test lama tidak diubah k
 8. **Volume `cash_mutations` tumbuh jauh lebih cepat dari `journal_lines`** — satu rekening koran bulanan bisa ratusan baris per akun kas. Indeks `(akun_kas_id, tanggal)` wajib sejak migrasi pertamanya, bukan ditambal belakangan.
 9. **P5 (satu agregator) mudah dilanggar di Modul 3.** Sisi "saldo akun hutang di Neraca" pada rekonsiliasi **wajib** lewat `lib/financial-agg.ts`. Menghitungnya sendiri dari `journal_lines` akan terasa lebih mudah dan langsung melahirkan agregator kedua.
 10. **Finance melihat `/hutang` tapi tidak `/jurnal`** (D45). Koheren, tapi kalau akunting mengira finance bisa menelusuri angkanya ke buku besar, itu salah paham yang baru ketahuan saat ada pertanyaan. Perlu dinyatakan, bukan diasumsikan.
+
+#### Risiko Grid Mutasi Kas & PDF rekening koran — 2026-10-26 (§5.G, direvisi dengan template akuntan)
+
+1. **Salah baca AI — angka, baris hilang/ganda, halaman terlewat.** Kegagalan termahal adalah yang tidak melempar galat: jurnal tetap seimbang dan bisa diposting. Pengaman berlapis: (a) AI hanya menyusun tabel, kode kita yang mengkanonikkan (X3); (b) **kesinambungan saldo menahan Simpan** (D50); (c) nomor halaman per baris; (d) penanda lilac; (e) tidak pernah tersimpan otomatis. **Sisa:** rekening koran **tanpa kolom saldo** tidak punya pengaman (b) — grid wajib menampilkan "tanpa saldo = tanpa pemeriksa kesinambungan" dan meminta arah eksplisit; halaman hasil scan lebih rawan — ditandai.
+2. **⚠️ Arah terbalik — dan importer produksi HARI INI masih rentan.** Template akuntan memakai Debet = masuk, rekening koran bank Debet = keluar; arah yang salah **tidak pernah melempar galat**. Rancangan baru memutuskan arah dari rantai saldo atau pilihan eksplisit (kotak Arah, §5.G). **Tapi impor CSV yang sedang jalan di produksi memetakan judul "Debet" = uang keluar (N3)** — berkas yang diekspor dari sheet template akuntan akan masuk **terbalik seluruhnya**, hanya dijaga peringatan arah di pratinjau (CP-17 #2). Sampai S2 dirilis: **beri tahu akunting** bahwa impor CSV hanya untuk berkas rekening koran bank, bukan sheet template.
+3. **Data paling sensitif klien.** Rekening koran memuat nomor rekening, nama lawan transaksi, dan seluruh arus kas. Penjaga: gerbang X0, sakelar per fitur mati di produksi untuk rekening koran, PDF tidak disimpan (D56), draf tidak di `localStorage` (D51), isi baris tidak masuk log/Sentry. **Risiko terbuka yang SUDAH ada:** saran COA Mapping dan ekstraksi PDF laporan **tetap mengirim data klien ke Gemini free tier** atas keputusan D55 (b) — batas waktu **9 November 2026**.
+4. **Kinerja 10.000 baris per akun per bulan.** Browser: virtualisasi, baris berkunci stabil, validasi per baris di-memo, rantai saldo O(n) dalam sen, aturan akun lawan O(baris × aturan) dengan `includes` (diukur di S4), duplikat hanya lewat `dryRun`. Server: **65.535 parameter per statement** (INSERT dipecah, tetap satu `db.batch`), body Vercel ±4,5 MB, statement per batch neon-http, `maxDuration`, dan **N+1 tersembunyi** di `syncMutationJournal` (status jurnal per panggilan — wajib dimuat massal). Tanpa D58, 5.000 baris berakun lawan = 5.000 jurnal + 10.000 baris jurnal per Simpan. Angka D52 dari uji beban, bukan tebakan.
+5. **Jurnal ringkasan (D58).** Radius kunci melebar: memposting satu jurnal ringkasan mengunci seluruh baris hari itu untuk akun lawan itu. Sunting satu baris membangun ulang jurnal kunci lama dan baru — salah hitung kunci yang tersentuh = jurnal basi yang **tetap seimbang**. Penjaga: test "Σ ringkasan = Σ per baris" dengan permutasi, dan perencana yang membangun dari **seluruh anggota kunci** yang dimuat ulang, bukan dari selisih.
+6. **Aturan akun lawan (D57).** Satu pola yang terlalu umum ("transfer") mengusulkan akun yang salah untuk ribuan baris sekaligus. Penjaga: usulan tidak masuk nilai sampai "Terapkan usulan"; uji pola terhadap 30 hari mutasi sebelum disimpan; seri → tanpa usulan; tanpa RegExp (D22, ReDoS).
+7. **Pindah Buku (D59).** Dua transfer bernominal sama dalam 3 hari bisa terpasang silang. Penjaga: hanya pasangan **tunggal** yang diusulkan, ganda ditampilkan sebagai kandidat; pasangan tidak disimpan; saldo ≠ 0 di akhir periode adalah peringatan (transfer lintas bulan wajar). **Arus kas (D19):** jurnal kas ↔ Pindah Buku **bukan** jurnal kas ↔ kas, jadi aturan "transfer dilewati" di L1 harus juga melewati lawan = akun Pindah Buku — kalau tidak, transfer internal terhitung sebagai arus kas operasi dua kali.
+8. **Menyunting mutasi yang sudah berjurnal.** Jurnal draf dibangun ulang di batch yang sama (P10); terposting & belum dibalik mengunci; ada alokasi → nominal terkunci. **Konkurensi:** `updatedAt` menolak seluruh batch (409) dengan daftar barisnya. Sunting massal = event `updated` per baris — volume `audit_events` naik.
+9. **Interaksi dengan Kunci Periode.** D53: K1–K5 sebelum S7. Diperiksa tanggal **lama dan baru**; baris baru bertanggal ≤ kunci ditolak; grid menampilkan alasannya. Buka kunci tetap owner + alasan (K3).
+10. **Hapus massal & perubahan perilaku impor.** Satu seleksi bisa menghapus ratusan mutasi (riwayatnya ikut terbuang — keputusan N4); dikecilkan konfirmasi berjumlah, kunci posting, dan D52. Impor CSV tidak lagi menyimpan sebagian (D47) — perlu disampaikan saat rilis.
+11. **⚠️ Celah yang SUDAH ADA: mutasi terkunci permanen sesudah jurnalnya dibalik.** `POST /api/journals/[id]/reverse` membuat jurnal pembalik tanpa melepas `cash_mutations.journal_id` dari jurnal asli, dan `syncMutationJournal` menolak **setiap** jurnal ber-status `posted` — padahal pesan galatnya sendiri menyuruh "buat jurnal balik lebih dulu, baru ubah mutasinya". Hari ini itu jalan buntu. `kunciMutasi` (S7) menutupnya; kemungkinan pola yang sama ada di Pembelian (perlu diperiksa).
+12. **`is_kas` belum tersetel & `deriveIsKas` buta terhadap OVO/Paypal/Sinarmas (D62).** Di dev, 22 akun "Operating Balance" tidak satu pun ber-`is_kas`, dan turunan nama ("kas"/"bank") tidak mengenali dompet digital. Tanpa aksi S10, tab grid untuk akun itu tidak muncul. Mengubah `deriveIsKas` bukan jalan keluarnya — predikatnya dikunci sama dengan "Kas & Setara Kas" Dashboard.
+13. **`react-data-grid` berstatus beta.** Dipin persis, dibungkus satu komponen.
+14. **Batas `urutan` (D49).** Baris yang disisipkan belakangan ke hari yang sudah tersimpan diurutkan di akhir hari itu — rantai saldo hari itu bisa terlihat putus sesudah dimuat ulang. Mengatur ulang urutan tidak dibangun.
 
 #### Risiko lama (tetap berlaku)
 
