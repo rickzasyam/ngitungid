@@ -19,6 +19,25 @@ import { ALASAN_BUKA_MIN, validateLockInput, validateUnlockReason } from '@/lib/
 import { hariIniJakarta } from '@/lib/ymd'
 
 type Kunci = { id: string; terkunciSampai: string; dikunciOleh: string; createdAt: string }
+type Riwayat = {
+  event: string
+  oleh: string | null
+  at: string
+  alasan: string | null
+  nilaiSebelum: { terkunciSampai?: string | null } | null
+  nilaiSesudah: { terkunciSampai?: string | null } | null
+}
+
+/** Satu baris riwayat — membuka kunci menghapus barisnya, jadi alasannya hanya ada di sini. */
+function kalimatRiwayat(r: Riwayat): string {
+  const ke = r.nilaiSesudah?.terkunciSampai
+  if (r.event === 'period_locked') return `Dikunci sampai ${ke ? fmtTanggal(ke) : '—'}`
+  if (r.event === 'period_unlocked') {
+    const dari = r.nilaiSebelum?.terkunciSampai
+    return `Dibuka dari ${dari ? fmtTanggal(dari) : '—'} → ${ke ? `terkunci sampai ${fmtTanggal(ke)}` : 'tidak ada kunci'}`
+  }
+  return r.event
+}
 
 /** Akhir bulan lalu menurut WIB — tanggal yang paling sering dikunci (tutup buku bulanan). */
 function akhirBulanLalu(hariIni: string): string {
@@ -42,6 +61,7 @@ export function KunciPeriodeCard({
   bolehBuka: boolean
 }) {
   const [kunci, setKunci] = useState<Kunci[]>([])
+  const [riwayat, setRiwayat] = useState<Riwayat[]>([])
   const [terkunciSampai, setTerkunciSampai] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,10 +77,11 @@ export function KunciPeriodeCard({
   const muat = useCallback(async () => {
     const res = await fetch(`/api/period-locks?clientId=${clientId}`)
     const data = (await res.json().catch(() => null)) as
-      | { terkunciSampai?: string | null; kunci?: Kunci[]; error?: string }
+      | { terkunciSampai?: string | null; kunci?: Kunci[]; riwayat?: Riwayat[]; error?: string }
       | null
     if (!res.ok) throw new Error(data?.error ?? 'Gagal memuat kunci periode.')
     setKunci(data?.kunci ?? [])
+    setRiwayat(data?.riwayat ?? [])
     setTerkunciSampai(data?.terkunciSampai ?? null)
     return data?.terkunciSampai ?? null
   }, [clientId])
@@ -261,16 +282,21 @@ export function KunciPeriodeCard({
         </button>
       )}
 
-      {kunci.length > 0 && (
+      {riwayat.length > 0 && (
         <div className="mt-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
-            Riwayat kunci yang berlaku
+            Riwayat kunci & buka
           </p>
-          <ul className="mt-1.5 space-y-1">
-            {kunci.slice(0, 5).map(k => (
-              <li key={k.id} className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
-                s.d. <strong>{fmtTanggal(k.terkunciSampai)}</strong>
-                <span style={{ color: 'var(--color-text-muted)' }}> · {k.dikunciOleh} · {fmtWaktu(k.createdAt)}</span>
+          <ul className="mt-1.5 space-y-1.5">
+            {riwayat.slice(0, 10).map((r, i) => (
+              <li key={`${r.at}-${i}`} className="text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                <strong>{kalimatRiwayat(r)}</strong>
+                <span style={{ color: 'var(--color-text-muted)' }}> · {r.oleh ?? 'pengguna terhapus'} · {fmtWaktu(r.at)}</span>
+                {r.alasan && (
+                  <span className="block" style={{ color: 'var(--color-text-muted)' }}>
+                    Alasan: “{r.alasan}”
+                  </span>
+                )}
               </li>
             ))}
           </ul>

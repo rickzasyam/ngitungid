@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
-import { clients, periodLocks, users } from '@/lib/db/schema'
+import { auditEvents, clients, periodLocks, users } from '@/lib/db/schema'
 import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { latestLock, validateLockInput } from '@/lib/period-lock'
@@ -17,7 +17,11 @@ export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// GET /api/period-locks?clientId — status kunci + riwayat barisnya.
+// GET /api/period-locks?clientId — status kunci, baris kunci, dan RIWAYAT kunci & buka.
+//
+// Riwayat dibaca dari audit_events, bukan dari baris period_locks: membuka kunci
+// MENGHAPUS barisnya, jadi siapa yang membuka, kapan, dan alasannya hanya hidup
+// di sana (event 'period_unlocked' dengan alasan di 'catatan').
 //
 // Baca = requireInternal: finance ikut melihat sampai kapan buku klien sudah
 // ditutup, sama seperti ia melihat /hutang (D45). Status "terkunci sampai"
@@ -46,7 +50,22 @@ export async function GET(req: Request) {
     .where(eq(periodLocks.clientId, clientId))
     .orderBy(desc(periodLocks.terkunciSampai), desc(periodLocks.createdAt))
 
-  return NextResponse.json({ terkunciSampai: latestLock(kunci)?.terkunciSampai ?? null, kunci })
+  const riwayat = await db
+    .select({
+      event: auditEvents.event,
+      oleh: users.name,
+      at: auditEvents.at,
+      alasan: auditEvents.catatan,
+      nilaiSebelum: auditEvents.nilaiSebelum,
+      nilaiSesudah: auditEvents.nilaiSesudah,
+    })
+    .from(auditEvents)
+    .leftJoin(users, eq(users.id, auditEvents.userId))
+    .where(and(eq(auditEvents.clientId, clientId), eq(auditEvents.entityType, 'period_lock')))
+    .orderBy(desc(auditEvents.at))
+    .limit(20)
+
+  return NextResponse.json({ terkunciSampai: latestLock(kunci)?.terkunciSampai ?? null, kunci, riwayat })
 }
 
 // POST /api/period-locks { clientId, terkunciSampai } — MENGUNCI (D17: akunting/owner).

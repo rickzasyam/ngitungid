@@ -195,3 +195,25 @@ describe('UI kunci periode (K4)', () => {
     expect(WIZARD).toContain('ditolak seluruhnya')
   })
 })
+
+// Membuka kunci MENGHAPUS barisnya — siapa, kapan, dan alasannya hanya hidup di
+// audit_events. Kartu yang hanya membaca period_locks tidak akan pernah
+// menampilkan pembukaan sama sekali.
+describe('riwayat kunci & buka (siapa, kapan, alasan)', () => {
+  const LIST = read('app', 'api', 'period-locks', 'route.ts')
+  const KARTU = read('components', 'settings', 'kunci-periode-card.tsx')
+
+  it('GET membaca riwayat dari audit_events klien itu, entity period_lock', () => {
+    const b = handler(LIST, 'GET')
+    expect(b).toContain('.from(auditEvents)')
+    expect(b).toContain("and(eq(auditEvents.clientId, clientId), eq(auditEvents.entityType, 'period_lock'))")
+    expect(b).toContain('alasan: auditEvents.catatan')
+    expect(b).toContain('kunci, riwayat })')
+  })
+
+  it('kartu menampilkan peristiwa buka beserta alasannya', () => {
+    expect(KARTU).toContain("if (r.event === 'period_unlocked')")
+    expect(KARTU).toContain('{r.alasan && (')
+    expect(KARTU).toContain('fmtWaktu(r.at)')
+  })
+})
