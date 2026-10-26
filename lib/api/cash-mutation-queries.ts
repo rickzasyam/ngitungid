@@ -21,11 +21,10 @@ import {
   allocationRemaining,
   buildAllocationJournalLines,
   buildCounterAccountJournalLines,
-  jurnalMengunciMutasi,
   mutationStatus,
 } from '@/lib/cash-mutation'
 import { purgeAuditEvents, recordAuditEvent, recordJournalEvent } from '@/lib/api/audit'
-import { findPostedReversal } from '@/lib/api/journal-queries'
+import { loadJournalLineValues, loadNasibJurnalModul } from '@/lib/api/journal-queries'
 
 // Query & penjaga mutasi kas/bank, dipakai BERSAMA route daftar, detail, impor,
 // dan alokasi. Hidup di modul terpisah karena Next menolak export non-handler di
@@ -292,17 +291,6 @@ export async function listCashMutations(opts: {
 
 // ── Jurnal mutasi ────────────────────────────────────────────
 
-/**
- * Panjang rantai pembalik TERPOSTING di atas sebuah jurnal — masukan
- * `jurnalMengunciMutasi`. Satu jurnal paling banyak punya satu pembalik
- * terposting (`canReverse`), jadi rantainya lurus dan pendek.
- */
-export async function lapisPembalik(journalId: string): Promise<number> {
-  let n = 0
-  for (let r = await findPostedReversal(journalId); r; r = await findPostedReversal(r.id)) n++
-  return n
-}
-
 export type SyncJournalResult =
   | { error: NextResponse }
   | { statements: BatchItem<'pg'>[]; journalId: string | null }
@@ -325,10 +313,14 @@ export type SyncJournalResult =
  * melewati jurnal balik — persis yang D42 larang, dan di sini ia akan terjadi
  * sebagai efek samping dari menambah satu alokasi.
  *
- * Kecuali jurnal itu SUDAH DIBALIK (`jurnalMengunciMutasi`): mutasinya dilepas
- * dan dijurnal ulang sebagai draf baru, jurnal lama + pembaliknya tidak
- * disentuh. Tanpa pengecualian ini, saran "buat jurnal balik dulu" di pesan
- * 409 adalah jalan buntu — mutasinya tetap terkunci selamanya.
+ * Dua pengecualian, keduanya diputuskan `nasibJurnalModul` (aturan yang SAMA
+ * dengan invoice pembelian):
+ *   - SUDAH DIBALIK: mutasinya dilepas dan dijurnal ulang sebagai draf baru;
+ *     jurnal lama + pembaliknya tidak disentuh. Tanpa ini, saran "buat jurnal
+ *     balik dulu" di pesan 409 adalah jalan buntu.
+ *   - setelan klien "posting bisa diedit" menyala (D42): dibangun ulang di
+ *     tempat, tetap terposting, riwayatnya membawa nilai_sebelum/nilai_sesudah
+ *     — lencana "diubah setelah posting" lahir dari situ, sama dengan M8.
  */
 export async function syncMutationJournal(opts: {
   mutation: {
@@ -352,17 +344,9 @@ export async function syncMutationJournal(opts: {
 
   // Keadaan jurnal LAMA dibaca lebih dulu: statusnya menentukan boleh-tidaknya
   // seluruh operasi ini, jadi ia diperiksa sebelum satu statement pun disusun.
-  let jurnalLama: { id: string; status: string } | null = null
-  if (m.journalId) {
-    const [row] = await db
-      .select({ id: journalEntries.id, status: journalEntries.status })
-      .from(journalEntries)
-      .where(eq(journalEntries.id, m.journalId))
-      .limit(1)
-    jurnalLama = row ?? null
-  }
-  const lapis = jurnalLama?.status === 'posted' ? await lapisPembalik(jurnalLama.id) : 0
-  if (jurnalMengunciMutasi(jurnalLama, lapis)) {
+  const { nasib, jurnal } = await loadNasibJurnalModul(m.journalId, m.clientId)
+  let jurnalLama = jurnal
+  if (nasib === 'terkunci') {
     return {
       error: NextResponse.json(
         {
@@ -380,12 +364,13 @@ export async function syncMutationJournal(opts: {
   // besar dan tidak disentuh sama sekali. Mutasinya dilepas dari jurnal itu,
   // lalu dijurnal dari nol seperti mutasi yang belum berjurnal — draf baru, atau
   // tanpa jurnal bila tak ada lagi yang dijurnalkan.
-  if (jurnalLama && jurnalLama.status === 'posted') {
+  if (nasib === 'sudah-dibalik') {
     statements.push(
       db.update(cashMutations).set({ journalId: null, updatedAt: new Date() }).where(eq(cashMutations.id, m.id))
     )
     jurnalLama = null
   }
+  const ubahTerposting = nasib === 'ubah-terposting'
 
   const alokasiSah = opts.alokasi.filter(a => a.akunHutangId !== null)
   if (alokasiSah.length !== opts.alokasi.length) {
@@ -423,6 +408,21 @@ export async function syncMutationJournal(opts: {
 
   // ── Tidak ada yang bisa dijurnalkan ──
   if (lines.length === 0) {
+    // Setelan D42 membuka PERUBAHAN jurnal terposting, bukan penghapusannya.
+    if (ubahTerposting) {
+      return {
+        error: NextResponse.json(
+          {
+            error: 'Perubahan ini akan menghapus jurnal yang sudah diposting.',
+            details: [
+              'Setelan "posting bisa diedit" hanya membuka perubahan, bukan penghapusan.',
+              'Buat jurnal balik untuk jurnal itu dan posting pembaliknya lebih dulu.',
+            ],
+          },
+          { status: 409 }
+        ),
+      }
+    }
     if (jurnalLama) {
       // Urutannya penting: mutasi melepas journal_id LEBIH DULU (FK-nya ON
       // DELETE set null, tapi mengandalkan itu berarti mengandalkan urutan
@@ -441,6 +441,11 @@ export async function syncMutationJournal(opts: {
     : 'Mutasi kas'
 
   if (jurnalLama) {
+    // Mitigasi (a) D42: hanya jurnal TERPOSTING yang dibuka setelan membawa
+    // nilai sebelum & sesudah — untuk draf, perubahan bagian normal menyusunnya.
+    const sebelum = ubahTerposting
+      ? { tanggal: jurnalLama.tanggal, noBukti: jurnalLama.noBukti, lines: await loadJournalLineValues(jurnalLama.id) }
+      : null
     statements.push(
       db
         .update(journalEntries)
@@ -462,6 +467,8 @@ export async function syncMutationJournal(opts: {
         journalId: jurnalLama.id,
         event: 'updated',
         userId: opts.userId,
+        nilaiSebelum: sebelum,
+        nilaiSesudah: ubahTerposting ? { tanggal: m.tanggal, noBukti: jurnalLama.noBukti, lines } : null,
       })
     )
     return { statements, journalId: jurnalLama.id }

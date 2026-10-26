@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
+import type { BatchItem } from 'drizzle-orm/batch'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
+  journalEntries,
+  journalLines,
   masterCoa,
   masterSupplier,
   purchaseInvoiceLines,
@@ -10,7 +14,9 @@ import {
 } from '@/lib/db/schema'
 import { computeInvoiceTotals } from '@/lib/purchase'
 import { buildTerminSchedule } from '@/lib/termin'
-import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
+import { fromMinorUnits, toMinorUnits, type JournalLineValue } from '@/lib/journal'
+import { recordJournalEvent } from '@/lib/api/audit'
+import { loadJournalLineValues, loadNasibJurnalModul } from '@/lib/api/journal-queries'
 
 // Query & penjaga invoice pembelian, dipakai BERSAMA route daftar dan detailnya.
 // Hidup di modul terpisah karena Next menolak export non-handler di berkas
@@ -258,4 +264,100 @@ export async function listInvoices(opts: {
               : 'belum dibayar',
     }
   })
+}
+
+/**
+ * Menyusun statement jurnal sebuah invoice yang DIUBAH — pasangan
+ * `syncMutationJournal` untuk Pembelian. Tidak menulis sendiri: hasilnya masuk
+ * `db.batch` pemanggil bersama perubahan invoicenya (D31, P10).
+ *
+ * Nasib jurnal lamanya diputuskan `nasibJurnalModul` — aturan yang SAMA dengan
+ * mutasi kas (keputusan Ricko 2026-10-26):
+ *   - `terkunci`        → 409, arahkan ke jurnal balik;
+ *   - `sudah-dibalik`   → jurnal lama + pembaliknya tidak disentuh, invoice
+ *                         mendapat jurnal draf BARU;
+ *   - `ubah-terposting` → dibangun ulang di tempat, tetap terposting, riwayatnya
+ *                         membawa nilai_sebelum/nilai_sesudah (D42, sama dengan M8);
+ *   - `bebas`           → dibangun ulang, atau dibuat bila invoice lama belum
+ *                         berjurnal (journal_id nullable — invoice tanpa jurnal
+ *                         berarti pembelian yang tidak pernah masuk buku).
+ */
+export async function syncInvoiceJournal(opts: {
+  invoice: { id: string; clientId: string; journalId: string | null }
+  tanggal: string
+  keterangan: string
+  lines: readonly JournalLineValue[]
+  userId: string | null
+}): Promise<{ error: NextResponse } | { statements: BatchItem<'pg'>[]; journalId: string }> {
+  const { invoice } = opts
+  const { nasib, jurnal } = await loadNasibJurnalModul(invoice.journalId, invoice.clientId)
+  if (nasib === 'terkunci') {
+    return {
+      error: NextResponse.json(
+        {
+          error: 'Jurnal invoice ini sudah diposting — invoicenya tidak bisa diubah.',
+          details: [
+            'Buat jurnal balik untuk jurnal itu dan posting pembaliknya, baru ubah invoicenya.',
+            'Kalau klien ini memang perlu menyunting posting, nyalakan setelannya di Settings › Pembukuan — setiap perubahan akan tercatat lengkap di riwayat.',
+          ],
+        },
+        { status: 409 }
+      ),
+    }
+  }
+
+  const lama = nasib === 'sudah-dibalik' ? null : jurnal
+  const ubahTerposting = nasib === 'ubah-terposting'
+  const journalId = lama?.id ?? randomUUID()
+  const statements: BatchItem<'pg'>[] = []
+
+  // Mitigasi (a) D42 — hanya untuk jurnal TERPOSTING yang dibuka setelan.
+  const sebelum =
+    ubahTerposting && lama
+      ? { tanggal: lama.tanggal, noBukti: lama.noBukti, lines: await loadJournalLineValues(lama.id) }
+      : null
+
+  if (lama) {
+    statements.push(
+      db
+        .update(journalEntries)
+        .set({ tanggal: opts.tanggal, keterangan: opts.keterangan, updatedAt: new Date() })
+        .where(eq(journalEntries.id, journalId)),
+      db.delete(journalLines).where(eq(journalLines.journalId, journalId))
+    )
+  } else {
+    statements.push(
+      db.insert(journalEntries).values({
+        id: journalId,
+        clientId: invoice.clientId,
+        tanggal: opts.tanggal,
+        noBukti: null,
+        keterangan: opts.keterangan,
+        sumber: 'pembelian',
+        createdBy: opts.userId ?? invoice.clientId,
+      })
+    )
+  }
+
+  statements.push(
+    db.insert(journalLines).values(
+      opts.lines.map(l => ({
+        journalId,
+        masterCoaId: l.masterCoaId,
+        debit: l.debit,
+        kredit: l.kredit,
+        keterangan: l.keterangan,
+        lineOrder: l.lineOrder,
+      }))
+    ),
+    recordJournalEvent({
+      clientId: invoice.clientId,
+      journalId,
+      event: lama ? 'updated' : 'created',
+      userId: opts.userId,
+      nilaiSebelum: sebelum,
+      nilaiSesudah: ubahTerposting ? { tanggal: opts.tanggal, noBukti: lama?.noBukti ?? null, lines: opts.lines } : null,
+    })
+  )
+  return { statements, journalId }
 }

@@ -189,34 +189,38 @@ describe('jurnal mutasi — satu pembangun, satu batch', () => {
     expect(QUERIES).toContain('noBukti: null')
   })
 
-  it('jurnal TERPOSTING menolak dibangun ulang, dengan 409 — lewat predikat bersama', () => {
-    const mulai = QUERIES.indexOf('export async function syncMutationJournal')
-    const blok = QUERIES.slice(mulai)
-    expect(blok).toContain('jurnalMengunciMutasi(jurnalLama, lapis)')
-    expect(blok).toContain('await lapisPembalik(jurnalLama.id)')
-    expect(blok).toContain('status: 409')
+  const SYNC = QUERIES.slice(QUERIES.indexOf('export async function syncMutationJournal'))
+
+  it('nasib jurnal lama dibaca lewat helper BERSAMA dengan invoice — terkunci = 409', () => {
+    expect(QUERIES).toContain("import { loadJournalLineValues, loadNasibJurnalModul } from '@/lib/api/journal-queries'")
+    expect(SYNC).toContain('await loadNasibJurnalModul(m.journalId, m.clientId)')
+    const tolak = SYNC.indexOf("if (nasib === 'terkunci')")
+    expect(tolak).toBeGreaterThan(-1)
+    expect(SYNC.slice(tolak, SYNC.indexOf("if (nasib === 'sudah-dibalik')"))).toContain('status: 409')
+    // Tidak ada aturan "posted" kedua yang ditulis sendiri di sini.
+    expect(SYNC).not.toContain("status === 'posted'")
   })
 
   // Dulu jalan buntu: pesan 409 menyuruh membalik jurnal, tapi mutasinya tetap
   // ditolak sesudah dibalik karena journal_id masih menunjuk jurnal terposting.
   it('jurnal yang SUDAH dibalik: mutasi dilepas dulu, lalu dijurnal dari nol', () => {
-    const mulai = QUERIES.indexOf('export async function syncMutationJournal')
-    const blok = QUERIES.slice(mulai)
-    const tolak = blok.indexOf('jurnalMengunciMutasi(jurnalLama, lapis)')
-    const lepas = blok.indexOf('db.update(cashMutations).set({ journalId: null')
-    const susun = blok.indexOf('const lines =')
-    expect(tolak).toBeGreaterThan(-1)
-    expect(lepas).toBeGreaterThan(tolak)
+    const lepas = SYNC.indexOf("if (nasib === 'sudah-dibalik')")
+    const susun = SYNC.indexOf('const lines =')
+    expect(lepas).toBeGreaterThan(-1)
     expect(lepas).toBeLessThan(susun)
-    // Sesudah dilepas, jurnal lama dianggap tidak ada — yang terposting + pembaliknya
-    // tidak pernah di-update atau dihapus oleh cabang di bawahnya.
-    expect(blok.slice(lepas, susun)).toContain('jurnalLama = null')
+    const blok = SYNC.slice(lepas, susun)
+    expect(blok).toContain('db.update(cashMutations).set({ journalId: null')
+    expect(blok).toContain('jurnalLama = null')
   })
 
-  it('lapisPembalik memakai definisi "sudah dibalik" yang sama dengan canReverse', () => {
-    expect(QUERIES).toContain("import { findPostedReversal } from '@/lib/api/journal-queries'")
-    const mulai = QUERIES.indexOf('export async function lapisPembalik')
-    expect(QUERIES.slice(mulai, QUERIES.indexOf('\n}', mulai))).toContain('findPostedReversal(r.id)')
+  it('D42 menyala: dibangun ulang di tempat DENGAN nilai_sebelum/nilai_sesudah, tapi tidak boleh menghapus', () => {
+    expect(SYNC).toContain("const ubahTerposting = nasib === 'ubah-terposting'")
+    expect(SYNC).toContain('await loadJournalLineValues(jurnalLama.id)')
+    expect(SYNC).toContain('nilaiSebelum: sebelum')
+    expect(SYNC).toContain('nilaiSesudah: ubahTerposting ?')
+    // Tanpa baris tersisa = jurnal terposting akan dihapus — setelan tidak membukanya.
+    const kosong = SYNC.indexOf('if (lines.length === 0)')
+    expect(SYNC.slice(kosong, SYNC.indexOf('if (jurnalLama)', kosong))).toContain('if (ubahTerposting)')
   })
 
   it('mutasi tanpa alokasi DAN tanpa akun lawan tidak punya jurnal', () => {
@@ -247,14 +251,14 @@ describe('penghapusan mutasi', () => {
     expect(body).not.toContain("event: 'deleted'")
   })
 
-  it('jurnal TERPOSTING menahan penghapusan (409) — lewat predikat bersama', () => {
-    expect(body).toContain('jurnalMengunciMutasi(jurnal ?? null, lapis)')
-    expect(body).toContain('await lapisPembalik(row.journalId)')
+  it('jurnal terposting menahan penghapusan (409) — termasuk saat setelan D42 menyala', () => {
+    expect(body).toContain('await loadNasibJurnalModul(row.journalId, row.clientId)')
+    expect(body).toContain("if (nasib === 'terkunci' || nasib === 'ubah-terposting')")
     expect(body).toContain('status: 409')
   })
 
   it('jurnal terposting yang sudah dibalik TIDAK ikut dihapus — ia riwayat buku besar', () => {
-    expect(body).toContain("jurnalRiwayat = jurnal?.status === 'posted'")
+    expect(body).toContain("const jurnalRiwayat = nasib === 'sudah-dibalik'")
     expect(body).toContain('if (row.journalId && !jurnalRiwayat)')
   })
 })

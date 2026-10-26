@@ -619,3 +619,36 @@ export function canEditJournal(
   if (opts?.sudahDibalik) return false
   return opts?.bolehEditPosting === true
 }
+
+/**
+ * Apa yang boleh terjadi pada jurnal OTOMATIS milik dokumen modul (invoice
+ * pembelian, mutasi kas) saat dokumennya diubah atau dihapus? Satu aturan untuk
+ * kedua modul — keputusan Ricko 2026-10-26.
+ *
+ *   - `bebas`           — tanpa jurnal, atau masih draf: dibangun ulang/dihapus biasa.
+ *   - `sudah-dibalik`   — terposting DAN dibalik: pasangan asli + pembalik adalah
+ *                         riwayat buku besar, TIDAK disentuh; dokumennya dijurnal
+ *                         ulang sebagai draf baru (hapus dokumen: jurnalnya tinggal).
+ *   - `ubah-terposting` — terposting, efeknya hidup, setelan "posting bisa diedit"
+ *                         menyala (D42): dibangun ulang DI TEMPAT, tetap terposting,
+ *                         riwayatnya wajib `nilai_sebelum`/`nilai_sesudah` — sama
+ *                         dengan jurnal manual (M8). Hanya MENGUBAH; menghapus tetap
+ *                         ditolak, karena setelannya membuka perubahan, bukan
+ *                         penghapusan angka yang sudah dilaporkan.
+ *   - `terkunci`        — terposting, efeknya hidup, setelan mati: 409, arahkan ke
+ *                         jurnal balik.
+ *
+ * "Dibalik" = rantai pembalik TERPOSTING (definisi `canReverse`) berpanjang
+ * GANJIL. Genap = pembaliknya ikut dibalik, angka aslinya hidup lagi di buku
+ * besar — membuka dokumennya di situ akan menghitung angka itu dua kali.
+ */
+export type NasibJurnalModul = 'bebas' | 'sudah-dibalik' | 'ubah-terposting' | 'terkunci'
+
+export function nasibJurnalModul(
+  jurnal: { status: string } | null,
+  opts: { lapisPembalik: number; bolehEditPosting: boolean }
+): NasibJurnalModul {
+  if (jurnal === null || jurnal.status !== 'posted') return 'bebas'
+  if (opts.lapisPembalik % 2 === 1) return 'sudah-dibalik'
+  return opts.bolehEditPosting ? 'ubah-terposting' : 'terkunci'
+}

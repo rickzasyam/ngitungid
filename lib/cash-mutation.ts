@@ -259,22 +259,6 @@ export function mutationStatus(
   return 'sebagian'
 }
 
-/**
- * Apakah jurnal sebuah mutasi MENGUNCI mutasinya?
- *
- * Terposting = angkanya sudah di buku besar, jadi jurnal itu tidak boleh
- * dibangun ulang. Tapi jurnal yang sudah DIBALIK — pembalik TERPOSTING, definisi
- * `canReverse` — sudah dinihilkan di buku besar: pasangan asli + pembalik tinggal
- * riwayat, dan mutasinya boleh diubah lagi dengan jurnal draf yang baru.
- *
- * `lapisPembalik` = panjang rantai pembalik terposting di atasnya. Ganjil =
- * efeknya nihil; genap = efeknya hidup lagi (pembaliknya ikut dibalik). Tanpa
- * pembeda ini, membalik pembalik akan membuka mutasi yang angkanya justru sudah
- * kembali ke buku besar — dan jurnal barunya menghitungnya dua kali.
- */
-export function jurnalMengunciMutasi(jurnal: { status: string } | null, lapisPembalik: number): boolean {
-  return jurnal !== null && jurnal.status === 'posted' && lapisPembalik % 2 === 0
-}
 
 // ── Pembangun baris jurnal ───────────────────────────────────
 

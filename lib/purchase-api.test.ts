@@ -177,14 +177,17 @@ describe('jurnal lahir, berubah, dan mati bersama invoicenya', () => {
     expect(body).not.toContain("status: 'posted'")
   })
 
-  it('PATCH memperbarui jurnalnya di batch yang sama', () => {
-    const st = potongStatements(handler(DETAIL, 'PATCH'))
-    // Needle-nya tanpa awalan "db." karena prettier memecah pemanggilannya
-    // antar-baris; needle yang menuntut keduanya menyatu akan merah karena
-    // pemformatan, bukan karena perilaku yang berubah.
+  it('PATCH memperbarui jurnalnya di batch yang sama — lewat syncInvoiceJournal', () => {
+    const body = handler(DETAIL, 'PATCH')
+    const st = potongStatements(body)
+    // Needle tanpa awalan "db." karena prettier memecah pemanggilannya.
     expect(st).toContain('.update(purchaseInvoices)')
-    expect(st).toContain('db.delete(journalLines)')
-    expect(st).toContain('db.insert(journalLines)')
+    expect(st).toContain('...jurnal.statements')
+    expect(body.indexOf('await syncInvoiceJournal(')).toBeLessThan(body.indexOf('const statements'))
+    expect(body).toContain("if ('error' in jurnal) return jurnal.error")
+    const SYNC = QUERIES.slice(QUERIES.indexOf('export async function syncInvoiceJournal'))
+    expect(SYNC).toContain('db.delete(journalLines)')
+    expect(SYNC).toContain('db.insert(journalLines)')
   })
 
   it('DELETE menghapus invoice DAN jurnalnya di batch yang sama', () => {
@@ -363,5 +366,54 @@ describe('tombol "Koreksi di Pembelian" di /jurnal', () => {
     // Pesan yang sama untuk dua sebab berbeda membuat akunting mencoba jalan
     // yang tidak akan pernah berhasil.
     expect(DET).toContain('Koreksi jurnal terposting dilakukan lewat jurnal balik')
+  })
+})
+
+// ══ JURNAL TERPOSTING — ATURAN YANG SAMA DENGAN MUTASI KAS (Ricko 2026-10-26) ══
+// Dulu PATCH membangun ulang jurnal invoice DI TEMPAT walau sudah terposting, dan
+// DELETE ikut menghapusnya — angka buku besar berubah diam-diam lewat form invoice.
+describe('invoice dengan jurnal terposting', () => {
+  const SYNC = QUERIES.slice(QUERIES.indexOf('export async function syncInvoiceJournal'))
+  const HAPUS = handler(DETAIL, 'DELETE')
+
+  it('nasibnya dibaca helper BERSAMA dengan mutasi kas', () => {
+    expect(QUERIES).toContain("import { loadJournalLineValues, loadNasibJurnalModul } from '@/lib/api/journal-queries'")
+    expect(SYNC).toContain('await loadNasibJurnalModul(invoice.journalId, invoice.clientId)')
+    expect(HAPUS).toContain('await loadNasibJurnalModul(g.row.journalId, g.row.clientId)')
+    expect(SYNC + HAPUS).not.toContain("status === 'posted'")
+  })
+
+  it('terposting & belum dibalik → PATCH 409 yang mengarah ke jurnal balik', () => {
+    const tolak = SYNC.indexOf("if (nasib === 'terkunci')")
+    expect(tolak).toBeGreaterThan(-1)
+    const blok = SYNC.slice(tolak, SYNC.indexOf("const lama = nasib === 'sudah-dibalik'"))
+    expect(blok).toContain('status: 409')
+    expect(blok).toContain('jurnal balik')
+  })
+
+  it('sudah dibalik → jurnal lama tidak disentuh, invoice mendapat jurnal draf BARU', () => {
+    expect(SYNC).toContain("const lama = nasib === 'sudah-dibalik' ? null : jurnal")
+    expect(SYNC).toContain('const journalId = lama?.id ?? randomUUID()')
+    expect(SYNC).toContain("event: lama ? 'updated' : 'created'")
+    // Jurnal BARU lahir tanpa status eksplisit = draf (bawaan skema).
+    expect(SYNC).not.toContain("status: 'posted'")
+  })
+
+  it('setelan D42 menyala → diubah di tempat dengan nilai_sebelum/nilai_sesudah (M8)', () => {
+    expect(SYNC).toContain("const ubahTerposting = nasib === 'ubah-terposting'")
+    expect(SYNC).toContain('await loadJournalLineValues(lama.id)')
+    expect(SYNC).toContain('nilaiSebelum: sebelum')
+    expect(SYNC).toContain('nilaiSesudah: ubahTerposting ?')
+  })
+
+  it('DELETE: terposting ditolak 409 — setelan D42 tidak membuka penghapusan', () => {
+    const tolak = HAPUS.indexOf("if (nasib === 'terkunci' || nasib === 'ubah-terposting')")
+    expect(tolak).toBeGreaterThan(-1)
+    expect(tolak).toBeLessThan(HAPUS.indexOf('const statements'))
+    expect(HAPUS).toContain('status: 409')
+  })
+
+  it('DELETE sesudah dibalik: invoice terhapus, jurnal lama + pembaliknya tinggal', () => {
+    expect(HAPUS).toContain("if (g.row.journalId && nasib !== 'sudah-dibalik')")
   })
 })

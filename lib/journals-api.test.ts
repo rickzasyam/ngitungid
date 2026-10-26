@@ -757,3 +757,18 @@ describe('supplierId bertahan melewati edit dan jurnal balik', () => {
     expect(body.slice(insert, insert + 120)).toContain('barisPembalik')
   })
 })
+
+describe('loadNasibJurnalModul — satu pembaca nasib jurnal modul', () => {
+  const JQ = readFileSync(join(process.cwd(), 'lib', 'api', 'journal-queries.ts'), 'utf8')
+  const muat = JQ.slice(JQ.indexOf('export async function loadNasibJurnalModul'))
+
+  it('rantai pembalik dihitung lewat findPostedReversal — definisi canReverse', () => {
+    const lapis = JQ.slice(JQ.indexOf('export async function lapisPembalik'), JQ.indexOf('export async function loadNasibJurnalModul'))
+    expect(lapis).toContain('findPostedReversal(r.id)')
+  })
+
+  it('setelan klien dibaca lewat bolehEditPosting — ketiadaan baris = false (D42)', () => {
+    expect(muat).toContain('bolehEditPosting(await loadAccountingSettings(clientId))')
+    expect(muat).toContain('nasibJurnalModul(jurnal, {')
+  })
+})

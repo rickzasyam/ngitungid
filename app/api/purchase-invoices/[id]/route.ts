@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
   journalEntries,
-  journalLines,
   purchaseInvoiceLines,
   purchaseInvoices,
 } from '@/lib/db/schema'
@@ -18,16 +16,17 @@ import {
   validatePurchaseInvoice,
 } from '@/lib/purchase'
 import { dbWriteErrorResponse, isFkViolation, isUniqueViolation } from '@/lib/api/db-errors'
-import { resolveUserId } from '@/lib/api/journal-queries'
+import { loadNasibJurnalModul, resolveUserId } from '@/lib/api/journal-queries'
 import {
   assertInvoiceAccountsBelongToClient,
   loadInvoiceDetail,
   loadInvoiceHeaderForWrite,
   loadSupplierForInvoice,
   snapshotInvoice,
+  syncInvoiceJournal,
 } from '@/lib/api/purchase-queries'
 import { loadAccountingSettings } from '@/lib/api/accounting-settings'
-import { purgeAuditEvents, recordAuditEvent, recordJournalEvent } from '@/lib/api/audit'
+import { purgeAuditEvents, recordAuditEvent } from '@/lib/api/audit'
 
 export const runtime = 'nodejs'
 
@@ -137,53 +136,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const sebelum = await snapshotInvoice(g.row.id)
   const now = new Date()
 
-  // Invoice lama bisa saja belum punya jurnal (journal_id nullable). Kalau
-  // begitu, jurnalnya DIBUAT sekarang — bukan dilewati diam-diam, karena
-  // invoice tanpa jurnal berarti pembelian yang tidak pernah masuk buku.
-  const journalId = g.row.journalId ?? randomUUID()
   const keteranganJurnal = `Pembelian — ${supplier.nama}${
     check.value.noInvoice ? ` · ${check.value.noInvoice}` : ''
   }`
+  const jurnal = await syncInvoiceJournal({
+    invoice: g.row,
+    tanggal: check.value.tanggal,
+    keterangan: keteranganJurnal,
+    lines: jurnalLines,
+    userId,
+  })
+  if ('error' in jurnal) return jurnal.error
+  const { journalId } = jurnal
 
-  const statements: BatchItem<'pg'>[] = []
-
-  if (g.row.journalId) {
-    statements.push(
-      db
-        .update(journalEntries)
-        .set({
-          tanggal: check.value.tanggal,
-          keterangan: keteranganJurnal,
-          updatedAt: now,
-        })
-        .where(eq(journalEntries.id, journalId)),
-      db.delete(journalLines).where(eq(journalLines.journalId, journalId))
-    )
-  } else {
-    statements.push(
-      db.insert(journalEntries).values({
-        id: journalId,
-        clientId,
-        tanggal: check.value.tanggal,
-        noBukti: null,
-        keterangan: keteranganJurnal,
-        sumber: 'pembelian',
-        createdBy: userId ?? g.row.clientId,
-      })
-    )
-  }
-
-  statements.push(
-    db.insert(journalLines).values(
-      jurnalLines.map(l => ({
-        journalId,
-        masterCoaId: l.masterCoaId,
-        debit: l.debit,
-        kredit: l.kredit,
-        keterangan: l.keterangan,
-        lineOrder: l.lineOrder,
-      }))
-    ),
+  const statements: BatchItem<'pg'>[] = [
+    ...jurnal.statements,
     db
       .update(purchaseInvoices)
       .set({
@@ -228,8 +195,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       nilaiSebelum: sebelum,
       nilaiSesudah: { ...check.value, supplierNama: supplier.nama },
     }),
-    recordJournalEvent({ clientId, journalId, event: 'updated', userId })
-  )
+  ]
 
   try {
     await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
@@ -265,6 +231,20 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const g = await guard(params, true)
   if ('error' in g) return g.error
 
+  // Aturan yang SAMA dengan mutasi kas (nasibJurnalModul): jurnal terposting
+  // yang belum dibalik menahan penghapusan, dan setelan "posting bisa diedit"
+  // (D42) hanya membuka perubahan — bukan penghapusan angka yang sudah dilaporkan.
+  const { nasib } = await loadNasibJurnalModul(g.row.journalId, g.row.clientId)
+  if (nasib === 'terkunci' || nasib === 'ubah-terposting') {
+    return NextResponse.json(
+      {
+        error: 'Jurnal invoice ini sudah diposting — invoicenya tidak bisa dihapus.',
+        details: ['Buat jurnal balik untuk jurnalnya dan posting pembaliknya lebih dulu.'],
+      },
+      { status: 409 }
+    )
+  }
+
   const userId = await resolveUserId(g.user.email)
   const sebelum = await snapshotInvoice(g.row.id)
 
@@ -283,7 +263,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     db.delete(purchaseInvoices).where(eq(purchaseInvoices.id, g.row.id)),
   ]
 
-  if (g.row.journalId) {
+  // Jurnal yang SUDAH dibalik tinggal: pasangan asli + pembalik adalah riwayat
+  // buku besar yang sudah saling menihilkan.
+  if (g.row.journalId && nasib !== 'sudah-dibalik') {
     statements.push(
       purgeAuditEvents('journal', g.row.journalId),
       db.delete(journalEntries).where(eq(journalEntries.id, g.row.journalId))

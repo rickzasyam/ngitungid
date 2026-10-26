@@ -5,13 +5,12 @@ import { db } from '@/lib/db'
 import { cashMutations, journalEntries } from '@/lib/db/schema'
 import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData, type Role } from '@/lib/roles'
-import { fingerprintMutasi, jurnalMengunciMutasi, validateCashMutation } from '@/lib/cash-mutation'
+import { fingerprintMutasi, validateCashMutation } from '@/lib/cash-mutation'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
-import { resolveUserId } from '@/lib/api/journal-queries'
+import { loadNasibJurnalModul, resolveUserId } from '@/lib/api/journal-queries'
 import { purgeAuditEvents } from '@/lib/api/audit'
 import {
   assertAccountBelongsToClient,
-  lapisPembalik,
   loadCashAccount,
   loadMutationAllocations,
   loadMutationDetail,
@@ -210,25 +209,19 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // Jurnal terposting yang SUDAH DIBALIK tidak menahan, tapi juga tidak ikut
   // dihapus: pasangan asli + pembalik adalah riwayat buku besar yang sudah
   // saling menihilkan (dan reversal_of_id RESTRICT menolak penghapusannya).
-  let jurnalRiwayat = false
-  if (row.journalId) {
-    const [jurnal] = await db
-      .select({ status: journalEntries.status })
-      .from(journalEntries)
-      .where(eq(journalEntries.id, row.journalId))
-      .limit(1)
-    const lapis = jurnal?.status === 'posted' ? await lapisPembalik(row.journalId) : 0
-    if (jurnalMengunciMutasi(jurnal ?? null, lapis)) {
-      return NextResponse.json(
-        {
-          error: 'Jurnal mutasi ini sudah diposting — mutasinya tidak bisa dihapus.',
-          details: ['Buat jurnal balik untuk jurnalnya dan posting pembaliknya lebih dulu.'],
-        },
-        { status: 409 }
-      )
-    }
-    jurnalRiwayat = jurnal?.status === 'posted'
+  // Setelan "posting bisa diedit" (D42) TIDAK membuka penghapusan — aturan yang
+  // sama dengan invoice pembelian (nasibJurnalModul).
+  const { nasib } = await loadNasibJurnalModul(row.journalId, row.clientId)
+  if (nasib === 'terkunci' || nasib === 'ubah-terposting') {
+    return NextResponse.json(
+      {
+        error: 'Jurnal mutasi ini sudah diposting — mutasinya tidak bisa dihapus.',
+        details: ['Buat jurnal balik untuk jurnalnya dan posting pembaliknya lebih dulu.'],
+      },
+      { status: 409 }
+    )
   }
+  const jurnalRiwayat = nasib === 'sudah-dibalik'
 
   // Tidak ada snapshot yang dibaca di sini: riwayatnya ikut terhapus (lihat
   // bawah), jadi menyimpan keadaan sebelum penghapusan tidak ada yang membaca.

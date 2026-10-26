@@ -10,6 +10,7 @@ import {
   fromMinorUnits,
   computeTotals,
   isBalanced,
+  nasibJurnalModul,
   validateJournalInput,
   canEditJournal,
   isSumberModul,
@@ -875,5 +876,39 @@ describe('validateJournalInput — supplierId per baris', () => {
       ],
     })
     expect(r.ok).toBe(true)
+  })
+})
+
+describe('nasibJurnalModul — satu aturan untuk invoice & mutasi kas (Ricko 2026-10-26)', () => {
+  const posted = { status: 'posted' }
+  const mati = { lapisPembalik: 0, bolehEditPosting: false }
+
+  it('tanpa jurnal atau jurnal draf → bebas, apa pun setelannya', () => {
+    expect(nasibJurnalModul(null, mati)).toBe('bebas')
+    expect(nasibJurnalModul({ status: 'draft' }, { lapisPembalik: 0, bolehEditPosting: true })).toBe('bebas')
+  })
+
+  it('terposting, belum dibalik, setelan mati → terkunci', () => {
+    expect(nasibJurnalModul(posted, mati)).toBe('terkunci')
+  })
+
+  it('terposting, belum dibalik, setelan "posting bisa diedit" menyala → ubah-terposting', () => {
+    expect(nasibJurnalModul(posted, { lapisPembalik: 0, bolehEditPosting: true })).toBe('ubah-terposting')
+  })
+
+  // Pasangan asli + pembalik sudah nihil di buku besar — setelan tidak relevan:
+  // mengubahnya di tempat justru membuat pasangannya tidak lagi berjumlah nol.
+  it('sudah dibalik (ganjil) → sudah-dibalik, setelan diabaikan', () => {
+    for (const boleh of [false, true]) {
+      expect(nasibJurnalModul(posted, { lapisPembalik: 1, bolehEditPosting: boleh })).toBe('sudah-dibalik')
+      expect(nasibJurnalModul(posted, { lapisPembalik: 3, bolehEditPosting: boleh })).toBe('sudah-dibalik')
+    }
+  })
+
+  // Membalik pembalik menghidupkan lagi angka aslinya — membukanya di sini
+  // akan menghitung angka itu dua kali.
+  it('pembaliknya ikut dibalik (genap) → kembali terkunci / ubah-terposting', () => {
+    expect(nasibJurnalModul(posted, { lapisPembalik: 2, bolehEditPosting: false })).toBe('terkunci')
+    expect(nasibJurnalModul(posted, { lapisPembalik: 2, bolehEditPosting: true })).toBe('ubah-terposting')
   })
 })

@@ -10,9 +10,10 @@ import {
   purchaseInvoices,
   users,
 } from '@/lib/db/schema'
-import type { JournalLineValue } from '@/lib/journal'
+import { nasibJurnalModul, type JournalLineValue, type NasibJurnalModul } from '@/lib/journal'
 import { resolveAccountType } from '@/lib/coa/account-type'
-import { diubahSetelahPosting } from '@/lib/accounting-settings'
+import { bolehEditPosting, diubahSetelahPosting } from '@/lib/accounting-settings'
+import { loadAccountingSettings } from '@/lib/api/accounting-settings'
 
 // Query & penjaga yang dipakai BERSAMA oleh route daftar jurnal dan route
 // detailnya. Hidup di modul terpisah karena Next menolak export non-handler di
@@ -327,4 +328,40 @@ export async function findPostedReversal(journalId: string) {
     .where(and(eq(journalEntries.reversalOfId, journalId), eq(journalEntries.status, 'posted')))
     .limit(1)
   return row ?? null
+}
+
+/**
+ * Panjang rantai pembalik TERPOSTING di atas sebuah jurnal — masukan
+ * `nasibJurnalModul`. Satu jurnal paling banyak punya satu pembalik terposting
+ * (`canReverse`), jadi rantainya lurus dan pendek.
+ */
+export async function lapisPembalik(journalId: string): Promise<number> {
+  let n = 0
+  for (let r = await findPostedReversal(journalId); r; r = await findPostedReversal(r.id)) n++
+  return n
+}
+
+/**
+ * Nasib jurnal otomatis sebuah dokumen modul (invoice, mutasi kas) — SATU
+ * pembaca untuk semua jalur tulis kedua modul. Rantai pembalik dan setelan
+ * klien hanya dibaca bila jurnalnya terposting; untuk draf jawabannya sudah pasti.
+ */
+export async function loadNasibJurnalModul(journalId: string | null, clientId: string) {
+  if (!journalId) return { nasib: 'bebas' as NasibJurnalModul, jurnal: null }
+  const [jurnal] = await db
+    .select({
+      id: journalEntries.id,
+      status: journalEntries.status,
+      tanggal: journalEntries.tanggal,
+      noBukti: journalEntries.noBukti,
+    })
+    .from(journalEntries)
+    .where(eq(journalEntries.id, journalId))
+    .limit(1)
+  if (!jurnal || jurnal.status !== 'posted') return { nasib: 'bebas' as NasibJurnalModul, jurnal: jurnal ?? null }
+  const nasib = nasibJurnalModul(jurnal, {
+    lapisPembalik: await lapisPembalik(journalId),
+    bolehEditPosting: bolehEditPosting(await loadAccountingSettings(clientId)),
+  })
+  return { nasib, jurnal }
 }
