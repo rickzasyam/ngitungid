@@ -381,7 +381,7 @@ export function JournalFormModal({
         </div>
 
         {/* Saran AI */}
-        {aiFeaturesEnabled() && (
+        {aiFeaturesEnabled('saranAkunJurnal') && (
         <div className="mt-3">
           <button
             type="button"

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
+import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 import { normalizeName } from '@/lib/coa-match'
 import { buildLineItemValues } from '@/lib/reports/line-items'
 import { statusAfterExtract } from '@/lib/reports/mapping-status'
@@ -32,6 +33,8 @@ const bad = (msg: string) => NextResponse.json({ error: msg }, { status: 400 })
 export async function POST(req: Request) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
+  // Ditolak SEBELUM PDF disimpan: upload tanpa ekstraksi hanya meninggalkan laporan yang nyangkut.
+  if (!aiFeaturesEnabled('ekstraksiLaporan')) return NextResponse.json({ error: AI_NONAKTIF }, { status: 503 })
 
   let form: FormData
   try {

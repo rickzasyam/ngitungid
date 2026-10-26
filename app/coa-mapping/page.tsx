@@ -21,6 +21,7 @@ import {
   Inbox,
 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
+import { aiFeaturesEnabled } from '@/lib/ai-features'
 
 // ============================================================
 // TYPES
@@ -1054,7 +1055,7 @@ export default function COAMappingPage() {
 
                     {/* Saran AI (Gemini) — hanya muncul kalau ada baris yang bahkan
                         matcher deterministik tidak bisa sarankan. */}
-                    {gapReports.length > 0 && (
+                    {gapReports.length > 0 && aiFeaturesEnabled('saranCoa') && (
                       <button
                         type="button"
                         onClick={handleAiSuggest}

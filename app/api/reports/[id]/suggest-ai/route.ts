@@ -7,6 +7,7 @@ import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { suggestCoaWithGemini, type CoaChoice, type UnmappedRef } from '@/lib/gemini/suggest-coa'
 import type { ReportType } from '@/lib/gemini/extract'
+import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 
 export const runtime = 'nodejs'
 // Panggilan Gemini bisa ~10–20s (lebih lama saat 429/5xx + retry).
@@ -32,6 +33,7 @@ const AI_MIN_CONFIDENCE = 60
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
+  if (!aiFeaturesEnabled('saranCoa')) return NextResponse.json({ error: AI_NONAKTIF }, { status: 503 })
 
   const { id: reportId } = await params
   if (!UUID_RE.test(reportId)) {

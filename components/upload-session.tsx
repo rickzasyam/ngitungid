@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { useClient } from '@/lib/client-context'
+import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 import { ClientAvatar } from '@/components/client-avatar'
 
 // Date → 'YYYY-MM-DD' dari komponen lokal (hindari geser hari akibat UTC).
@@ -155,7 +156,8 @@ export function UploadSession({
   }
 
   const uploadedCount = Object.values(uploads).filter(Boolean).length
-  const isReadyToProcess = activeClient && dateRange?.from && uploadedCount > 0
+  const ekstraksiAktif = aiFeaturesEnabled('ekstraksiLaporan')
+  const isReadyToProcess = ekstraksiAktif && activeClient && dateRange?.from && uploadedCount > 0
 
   const handleProcessSession = async () => {
     if (!activeClient || !dateRange?.from) return
@@ -512,13 +514,13 @@ export function UploadSession({
       </div>
 
       {/* Error proses */}
-      {processError && (
+      {(processError || !ekstraksiAktif) && (
         <div
           className="flex items-center gap-2 px-4 py-3 rounded-2xl animate-fade-in"
           style={{ background: '#fef2f2', border: '1px solid #fecaca' }}
         >
           <AlertCircle className="w-4 h-4 flex-shrink-0" style={{ color: '#dc2626' }} />
-          <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{processError}</span>
+          <span className="text-xs font-medium" style={{ color: '#dc2626' }}>{processError ?? AI_NONAKTIF}</span>
         </div>
       )}
 

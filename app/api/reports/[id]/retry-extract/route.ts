@@ -6,6 +6,7 @@ import { coaMappingHistory, financialReports, masterCoa, reportLineItems } from 
 import { requireAkunting } from '@/lib/api/guards'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { extractReport, type ReportType } from '@/lib/gemini/extract'
+import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 import { normalizeName } from '@/lib/coa-match'
 import { buildLineItemValues } from '@/lib/reports/line-items'
 import { statusAfterExtract } from '@/lib/reports/mapping-status'
@@ -26,6 +27,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
+  if (!aiFeaturesEnabled('ekstraksiLaporan')) return NextResponse.json({ error: AI_NONAKTIF }, { status: 503 })
 
   const { id: reportId } = await params
   if (!UUID_RE.test(reportId)) {

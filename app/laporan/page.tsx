@@ -18,6 +18,7 @@ import { useClient } from '@/lib/client-context'
 import { DateRangePicker } from '@/components/date-range-picker'
 import { PdfPreviewModal } from '@/components/ui/pdf-preview-modal'
 import type { RetryState } from '@/lib/reports/retry-policy'
+import { aiFeaturesEnabled } from '@/lib/ai-features'
 
 type ReportType = 'laba_rugi' | 'neraca' | 'arus_kas'
 type ReportMeta = {
@@ -491,7 +492,7 @@ export default function LaporanPage() {
                                         </button>
                                       )}
                                       {/* Aksi TULIS (retry/ganti/hapus) — hanya staf. User read-only. */}
-                                      {canDoAccounting && r.retry === 'retriable' && (
+                                      {canDoAccounting && r.retry === 'retriable' && aiFeaturesEnabled('ekstraksiLaporan') && (
                                         <button
                                           aria-label={`Coba lagi ekstraksi ${TYPE_LABEL[r.reportType]}`}
                                           title="Ekstrak ulang dari PDF yang sudah tersimpan (tanpa upload lagi)"
