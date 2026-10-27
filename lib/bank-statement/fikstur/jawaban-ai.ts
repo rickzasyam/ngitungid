@@ -1,15 +1,14 @@
 import type { AiProvider } from '@/lib/ai/penyedia'
 import { bukaPdf } from '../baca-pdf'
-import type { BarisMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import type { BarisAi, JawabanSusun } from '../susun-tabel'
-import type { DokumenSintetis, Peran } from './dokumen-sintetis'
+import type { BarisData, DokumenSintetis, Peran } from './dokumen-sintetis'
 
 // Jawaban AI SEMPURNA untuk halaman dokumen sintetis — dibentuk dari
 // kebenarannya dan baris tata hasil X2. Dipakai sebagai penyedia tiruan di test
 // X3 dan sebagai garis dasar harness X4 (penyedia "tiruan-sempurna" harus
 // selalu lolos; kalau tidak, yang salah harness atau fiksturnya).
 
-function selUtama(b: BarisMentah): string[] {
+function selUtama(b: BarisData): string[] {
   const n = b.nominal
   const nominal = n.bentuk === 'satu-kolom' ? [n.teks, n.penanda] : [n.pertama.teks, n.kedua.teks]
   return [b.tanggal, b.uraian, ...nominal, b.saldo, ...b.lain.map(l => l.teks)].filter(s => s !== '')
@@ -17,31 +16,51 @@ function selUtama(b: BarisMentah): string[] {
 
 const rapat = (s: string) => s.split(' ').filter(t => t !== '').join(' ')
 
+/**
+ * Jawaban AI yang benar untuk satu halaman: transaksi merujuk baris tercetaknya,
+ * lanjutan uraian digabung (satu spasi) dan dicatat di `barisLanjutan`;
+ * lanjutan di awal halaman (transaksinya di halaman sebelumnya) jadi entri sendiri.
+ */
 export function jawabanSempurna(d: DokumenSintetis, halaman: number, baris: string[]): JawabanSusun {
-  const h = d.kebenaran[halaman - 1]
+  const h = d.kebenaranHalaman[halaman - 1]
   const judul = (p: Peran) => d.tata.kolom.find(k => k.peran === p)?.judul ?? ''
   const adaJudul = h.kolom.length > 0
   const nomorBarisJudul = adaJudul ? baris.findIndex(g => h.kolom.every(k => rapat(g).includes(k))) + 1 : 0
-  const isi = halaman > 1 && adaJudul ? h.baris.slice(1) : h.baris // judul berulang disusun kode, bukan AI
 
   let terakhir = nomorBarisJudul
-  const barisAi: BarisAi[] = isi.map(b => {
-    const sel = selUtama(b)
-    const idx = baris.findIndex((g, i) => i + 1 > terakhir && sel.every(s => rapat(g).includes(s)))
-    if (idx < 0) throw new Error(`fikstur ${d.nama} hal. ${halaman}: baris "${b.uraian}" tidak ditemukan di teks`)
+  const cari = (cocok: (g: string) => boolean, apa: string) => {
+    const idx = baris.findIndex((g, i) => i + 1 > terakhir && cocok(rapat(g)))
+    if (idx < 0) throw new Error(`fikstur ${d.nama} hal. ${halaman}: "${apa}" tidak ditemukan di teks`)
     terakhir = idx + 1
-    const n = b.nominal
-    return {
-      nomorBaris: idx + 1,
-      tanggal: b.tanggal,
-      uraian: b.uraian,
+    return idx + 1
+  }
+  const barisAi: BarisAi[] = []
+  for (const c of d.cetak[halaman - 1]) {
+    if ('lanjutan' in c) {
+      const nomor = cari(g => g === rapat(c.lanjutan), c.lanjutan)
+      const atas = barisAi[barisAi.length - 1]
+      if (atas) {
+        atas.uraian = `${atas.uraian} ${c.lanjutan}`
+        atas.barisLanjutan.push(nomor)
+      } else {
+        barisAi.push({ nomorBaris: nomor, tanggal: '', uraian: c.lanjutan, nominalPertama: '', nominalKedua: '', penanda: '', saldo: '', lain: [], barisLanjutan: [] })
+      }
+      continue
+    }
+    const sel = selUtama(c)
+    const n = c.nominal
+    barisAi.push({
+      nomorBaris: cari(g => sel.every(s => g.includes(s)), c.uraian),
+      tanggal: c.tanggal,
+      uraian: c.uraian,
       nominalPertama: n.bentuk === 'satu-kolom' ? n.teks : n.pertama.teks,
       nominalKedua: n.bentuk === 'dua-kolom' ? n.kedua.teks : '',
       penanda: n.bentuk === 'satu-kolom' ? n.penanda : '',
-      saldo: b.saldo,
-      lain: b.lain,
-    }
-  })
+      saldo: c.saldo,
+      lain: c.lain,
+      barisLanjutan: [],
+    })
+  }
   return {
     periodeTeks: h.periodeTeks ?? '',
     nomorBarisJudul,

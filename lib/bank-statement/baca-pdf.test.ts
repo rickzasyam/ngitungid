@@ -3,9 +3,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { AMBANG_KARAKTER_TEKS, bukaPdf, type HalamanTeks } from './baca-pdf'
 import { susunBaris, teksBernomor, type ItemTeks } from './susun-baris'
-import { dokumenDuaKolom, dokumenSatuKolom, dokumenSebagianScan, dokumenTanpaSaldo } from './fikstur/koleksi'
-import type { DokumenSintetis } from './fikstur/dokumen-sintetis'
-import type { BarisMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
+import { dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenSebagianScan, dokumenTanpaSaldo } from './fikstur/koleksi'
+import type { BarisCetak, BarisData, DokumenSintetis } from './fikstur/dokumen-sintetis'
 
 // X2 — pembacaan PDF dengan PDF SINTETIS: lapisan teks per halaman, satu baris
 // tercetak = satu baris tata, posisi mendatar terjaga, halaman scan dikenali.
@@ -22,7 +21,7 @@ async function bacaSemua(d: DokumenSintetis): Promise<HalamanTeks[]> {
 }
 
 /** Sel utama kiri→kanan (tanggal, uraian, nominal, saldo) + sel `lain` (posisinya bebas). */
-function selBaris(b: BarisMentah): { utama: string[]; lain: string[] } {
+function selBaris(b: BarisData): { utama: string[]; lain: string[] } {
   const n = b.nominal
   const nominal = n.bentuk === 'satu-kolom' ? [n.teks + (n.penanda ? ` ${n.penanda}` : '')] : [n.pertama.teks, n.kedua.teks]
   return { utama: [b.tanggal, b.uraian, ...nominal, b.saldo].filter(s => s !== ''), lain: b.lain.map(l => l.teks) }
@@ -57,15 +56,23 @@ describe('susunBaris (murni)', () => {
 })
 
 describe('bukaPdf — PDF sintetis', () => {
-  for (const buat of [dokumenSatuKolom, dokumenDuaKolom, dokumenTanpaSaldo]) {
+  for (const buat of [dokumenSatuKolom, dokumenDuaKolom, dokumenTanpaSaldo, dokumenLanjutanLintasHalaman]) {
     const d = buat()
-    it(`${d.nama}: setiap baris kebenaran = satu baris tercetak, urut, di halamannya`, async () => {
+    it(`${d.nama}: setiap baris tercetak = satu baris tata, urut, di halamannya`, async () => {
       const hal = await bacaSemua(d)
       expect(hal.map(h => h.halaman)).toEqual(d.kebenaran.map(h => h.halaman))
       for (const [i, h] of hal.entries()) {
         expect(h.perluGambar, `hal. ${h.halaman}`).toBe(false)
         let terakhir = 0
-        for (const b of d.kebenaran[i].baris) {
+        // Judul berulang (hal. > 1) lalu baris tercetak; lanjutan uraian = satu baris tata sendiri.
+        const judul: BarisCetak[] = i > 0 && d.kebenaranHalaman[i].kolom.length > 0 ? [d.kebenaranHalaman[i].baris[0]] : []
+        for (const b of [...judul, ...d.cetak[i]]) {
+          if ('lanjutan' in b) {
+            const cocok = h.baris.find(l => l.nomor > terakhir && l.teks.trim() === b.lanjutan)
+            expect(cocok, `hal. ${h.halaman}: lanjutan ${b.lanjutan}`).toBeDefined()
+            terakhir = cocok!.nomor
+            continue
+          }
           const { utama, lain } = selBaris(b)
           const cocok = h.baris.find(l => l.nomor > terakhir && [...utama, ...lain].every(s => l.teks.includes(s)))
           expect(cocok, `hal. ${h.halaman}: ${utama.join(' | ')}`).toBeDefined()

@@ -5,10 +5,14 @@ import { buatPdf, lebarTeks, type HalamanPdf, type TeksPdf } from './pdf-sinteti
 // dihasilkan penyusun tabel). Dipakai test X2/X3 dan harness uji banding X4.
 // Semua nama & uraian berawalan UJI-B-; tidak ada data klien nyata.
 //
-// Tafsiran kontrak yang dipakai kebenaran ini (dicatat di log progres untuk
-// dikonfirmasi Ricko):
-//  - satu baris TERCETAK = satu BarisMentah; uraian yang terlipat ke baris
-//    berikutnya tetap baris sendiri (kelas "lanjutan" diputuskan S2);
+// Tafsiran kontrak yang dipakai kebenaran ini (keputusan Ricko 2026-10-27):
+//  - satu baris TRANSAKSI tercetak = satu BarisMentah; uraian yang terlipat ke
+//    baris tercetak berikutnya DIGABUNG ke uraian transaksinya: teks apa adanya,
+//    disambung satu spasi, urut dari atas;
+//  - lanjutan yang terpotong ke awal halaman berikutnya: per halaman (jawaban
+//    route) menjadi baris berisi uraian saja (`kebenaranHalaman`); di tingkat
+//    dokumen digabung ke transaksi di halaman sebelumnya (`kebenaran`,
+//    `gabungLintasHalaman`);
 //  - judul kolom halaman pertama → `kolom`, BUKAN baris;
 //  - judul kolom yang tercetak ULANG di halaman berikut → `kolom` halaman itu
 //    DAN dikirim sebagai baris biasa (kontrak: "tetap dikirim sebagai baris biasa");
@@ -28,6 +32,8 @@ export type TataLetak = {
 
 /** Baris tanpa nomor halaman — nomornya diberikan saat disusun per halaman. */
 export type BarisData = Omit<BarisMentah, 'halaman'>
+/** Satu baris TERCETAK: baris transaksi (uraian baris pertamanya saja), atau lanjutan uraian. */
+export type BarisCetak = BarisData | { lanjutan: string }
 
 export type DokumenSintetis = {
   nama: string
@@ -35,6 +41,11 @@ export type DokumenSintetis = {
   pdf: Uint8Array
   /** Halaman yang tidak punya lapisan teks (tiruan scan), mulai 1. */
   halamanGambar: number[]
+  /** Baris tercetak per halaman (tanpa baris judul) — sumber PDF dan jawaban AI tiruan. */
+  cetak: BarisCetak[][]
+  /** Jawaban route per halaman: lanjutan di awal halaman masih baris sendiri. */
+  kebenaranHalaman: HalamanMentah[]
+  /** Satu dokumen sesudah lanjutan lintas halaman digabung — yang diterima grid. */
   kebenaran: HalamanMentah[]
 }
 
@@ -70,6 +81,16 @@ function teksBaris(sel: (k: KolomTata) => string, kolom: KolomTata[], y: number)
   return out
 }
 
+/** Nominal kosong berjudul — bentuk sel nominal baris yang hanya berisi uraian. */
+export function nominalKosong(tata: TataLetak): BarisData['nominal'] {
+  const [a, b] = tata.kolom.filter(k => k.peran === 'nominal1' || k.peran === 'nominal2')
+  return tata.bentuk === 'satu-kolom'
+    ? { bentuk: 'satu-kolom', judul: a.judul, teks: '', penanda: '' }
+    : { bentuk: 'dua-kolom', pertama: { judul: a.judul, teks: '' }, kedua: { judul: b.judul, teks: '' } }
+}
+
+const lanjutan = (c: BarisCetak): c is { lanjutan: string } => 'lanjutan' in c
+
 /** Baris judul kolom sebagai BarisMentah — bentuk yang dikirim bila judul tercetak ulang. */
 export function barisJudul(tata: TataLetak): BarisData {
   const judul = (p: Peran) => tata.kolom.find(k => k.peran === p)?.judul ?? ''
@@ -96,13 +117,17 @@ export function barisJudul(tata: TataLetak): BarisData {
 export function susunDokumen(
   nama: string,
   tata: TataLetak,
-  halamanBaris: BarisData[][],
+  halamanCetak: BarisCetak[][],
   opsi: { judulTercetak?: boolean[]; gambar?: number[] } = {}
 ): DokumenSintetis {
-  const total = halamanBaris.length
+  const total = halamanCetak.length
   const pdf: HalamanPdf[] = []
+  const kebenaranHalaman: HalamanMentah[] = []
   const kebenaran: HalamanMentah[] = []
-  halamanBaris.forEach((rows, i) => {
+  const xUraian = tata.kolom.find(k => k.peran === 'uraian')!.x
+  // Transaksi terakhir di seluruh dokumen — sasaran lanjutan lintas halaman.
+  let terakhirDokumen: BarisMentah | null = null
+  halamanCetak.forEach((rows, i) => {
     const halaman = i + 1
     const adaJudul = opsi.judulTercetak?.[i] ?? true
     const teks: TeksPdf[] = []
@@ -114,22 +139,38 @@ export function susunDokumen(
       y -= JARAK + 4
     }
     for (const b of rows) {
-      teks.push(...teksBaris(k => selUntuk(b, k), tata.kolom, y))
+      if (lanjutan(b)) teks.push({ x: xUraian, y, teks: b.lanjutan })
+      else teks.push(...teksBaris(k => selUntuk(b, k), tata.kolom, y))
       y -= JARAK
     }
     teks.push({ x: 270, y: 40, teks: `Halaman ${halaman} / ${total}`, ukuran: 7 })
     const gambarSaja = opsi.gambar?.includes(halaman) ?? false
     pdf.push({ teks, gambarSaja })
 
-    const baris = [...(adaJudul && halaman > 1 ? [barisJudul(tata)] : []), ...rows].map(b => ({ halaman, ...b }))
-    kebenaran.push({
-      halaman,
-      kolom: adaJudul ? tata.kolom.map(k => k.judul) : [],
-      baris,
-      periodeTeks: halaman === 1 ? tata.periodeTeks : null,
-    })
+    const judul: BarisMentah[] = adaJudul && halaman > 1 ? [{ halaman, ...barisJudul(tata) }] : []
+    const perHalaman: BarisMentah[] = [...judul]
+    const dokumen: BarisMentah[] = judul.map(b => ({ ...b }))
+    let terakhirHalaman: BarisMentah | null = null
+    for (const b of rows) {
+      if (!lanjutan(b)) {
+        terakhirHalaman = { halaman, ...b, lain: [...b.lain] }
+        perHalaman.push(terakhirHalaman)
+        terakhirDokumen = { ...terakhirHalaman }
+        dokumen.push(terakhirDokumen)
+        continue
+      }
+      const sendiri = (): BarisMentah => ({ halaman, tanggal: '', uraian: b.lanjutan, nominal: nominalKosong(tata), saldo: '', lain: [] })
+      if (terakhirHalaman) terakhirHalaman.uraian += ` ${b.lanjutan}`
+      else perHalaman.push((terakhirHalaman = sendiri()))
+      if (terakhirDokumen) terakhirDokumen.uraian += ` ${b.lanjutan}`
+      else dokumen.push((terakhirDokumen = sendiri()))
+    }
+    const kolom = adaJudul ? tata.kolom.map(k => k.judul) : []
+    const periodeTeks = halaman === 1 ? tata.periodeTeks : null
+    kebenaranHalaman.push({ halaman, kolom, baris: perHalaman, periodeTeks })
+    kebenaran.push({ halaman, kolom, baris: dokumen, periodeTeks })
   })
-  return { nama, tata, pdf: buatPdf(pdf), halamanGambar: opsi.gambar ?? [], kebenaran }
+  return { nama, tata, pdf: buatPdf(pdf), halamanGambar: opsi.gambar ?? [], cetak: halamanCetak, kebenaranHalaman, kebenaran }
 }
 
 // ── Pembentuk angka KARANGAN (hanya untuk mencetak fikstur, bukan pembaca) ──

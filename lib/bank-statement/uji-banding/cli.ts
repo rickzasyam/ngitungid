@@ -6,7 +6,7 @@ import type { AiProvider } from '@/lib/ai/penyedia'
 import { hariIniJakarta } from '@/lib/ymd'
 import type { DokumenSintetis } from '../fikstur/dokumen-sintetis'
 import { penyediaSempurna } from '../fikstur/jawaban-ai'
-import { dokumenAcak, dokumenDuaKolom, dokumenSatuKolom, dokumenTanpaSaldo } from '../fikstur/koleksi'
+import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenTanpaSaldo } from '../fikstur/koleksi'
 import { laporanMarkdown, rangkumUji, ujiDokumen, type Harga, type HasilDokumen, type Ringkasan } from './harness'
 import { kesinambunganSementara } from './kesinambungan-sementara'
 
@@ -51,7 +51,7 @@ function penyedia(spek: string): AiProvider | 'tiruan' {
 
 async function main() {
   const jumlahAcak = Number(arg('dokumen') ?? 12)
-  const dokumen: DokumenSintetis[] = [dokumenSatuKolom(), dokumenDuaKolom(), dokumenTanpaSaldo()]
+  const dokumen: DokumenSintetis[] = [dokumenSatuKolom(), dokumenDuaKolom(), dokumenTanpaSaldo(), dokumenLanjutanLintasHalaman()]
   for (let i = 1; i <= jumlahAcak; i++) dokumen.push(dokumenAcak(1000 + i, 20 + ((i * 17) % 60)))
   const harga = bacaHarga()
   console.error(`Dokumen SINTETIS: ${dokumen.length} (${dokumen.reduce((n, d) => n + d.kebenaran.length, 0)} halaman). Tidak ada data klien nyata.`)
@@ -73,7 +73,7 @@ async function main() {
   const md = laporanMarkdown(ringkasan, {
     tanggal: hariIniJakarta(),
     pemeriksa: 'kesinambunganSementara (pengganti S3 sampai grid masuk main)',
-    dokumen: `${dokumen.length} sintetis (3 tetap + ${jumlahAcak} acak deterministik)`,
+    dokumen: `${dokumen.length} sintetis (4 tetap + ${jumlahAcak} acak deterministik)`,
   })
   const keluar = arg('keluar')
   if (keluar) writeFileSync(keluar, md)

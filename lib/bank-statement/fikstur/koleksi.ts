@@ -1,4 +1,4 @@
-import { acak, cetakSen, susunDokumen, type BarisData, type DokumenSintetis, type TataLetak } from './dokumen-sintetis'
+import { acak, cetakSen, nominalKosong, susunDokumen, type BarisCetak, type BarisData, type DokumenSintetis, type TataLetak } from './dokumen-sintetis'
 
 // Koleksi rekening koran KARANGAN untuk test & harness (UJI-B-). Bentuknya
 // meniru tata letak umum, bukan salinan dokumen bank mana pun.
@@ -44,10 +44,8 @@ const TATA_TANPA_SALDO: TataLetak = {
 
 type Transaksi = { tanggal: string; uraian: string[]; sen: number; keluar: boolean; lain?: string }
 
-const kosongSatu = { bentuk: 'satu-kolom', judul: 'MUTASI', teks: '', penanda: '' } as const
-
-/** Satu transaksi → baris utama + baris lanjutan uraian; saldo berjalan dalam sen. */
-function barisTransaksi(tata: TataLetak, t: Transaksi, saldo: number, gaya: 'koma' | 'titik'): BarisData[] {
+/** Satu transaksi → baris utama + baris lanjutan uraian (tercetak terpisah); saldo berjalan dalam sen. */
+function barisTransaksi(tata: TataLetak, t: Transaksi, saldo: number, gaya: 'koma' | 'titik'): BarisCetak[] {
   const nominal = cetakSen(t.sen, gaya)
   const judul = (i: number) => tata.kolom.filter(k => k.peran === 'nominal1' || k.peran === 'nominal2')[i].judul
   const lainJudul = tata.kolom.find(k => k.peran === 'lain')?.judul
@@ -68,18 +66,11 @@ function barisTransaksi(tata: TataLetak, t: Transaksi, saldo: number, gaya: 'kom
     saldo: tata.kolom.some(k => k.peran === 'saldo') ? cetakSen(saldo, gaya) : '',
     lain: lainJudul && t.lain ? [{ judul: lainJudul, teks: t.lain }] : [],
   }
-  const lanjutan: BarisData[] = t.uraian.slice(1).map(u => ({ tanggal: '', uraian: u, nominal: kosongNominal(tata), saldo: '', lain: [] }))
-  return [utama, ...lanjutan]
-}
-
-function kosongNominal(tata: TataLetak): BarisData['nominal'] {
-  if (tata.bentuk === 'satu-kolom') return { ...kosongSatu, judul: tata.kolom.find(k => k.peran === 'nominal1')!.judul }
-  const [a, b] = tata.kolom.filter(k => k.peran === 'nominal1' || k.peran === 'nominal2')
-  return { bentuk: 'dua-kolom', pertama: { judul: a.judul, teks: '' }, kedua: { judul: b.judul, teks: '' } }
+  return [utama, ...t.uraian.slice(1).map(u => ({ lanjutan: u }))]
 }
 
 function barisSaldoAwal(tata: TataLetak, tanggal: string, saldo: number, gaya: 'koma' | 'titik', uraian = 'SALDO AWAL'): BarisData {
-  return { tanggal, uraian, nominal: kosongNominal(tata), saldo: cetakSen(saldo, gaya), lain: [] }
+  return { tanggal, uraian, nominal: nominalKosong(tata), saldo: cetakSen(saldo, gaya), lain: [] }
 }
 
 /** Gaya BCA: satu kolom MUTASI + penanda DB, tanggal tanpa tahun, uraian terlipat, 2 halaman. */
@@ -162,7 +153,7 @@ export function dokumenAcak(benih: number, jumlahTransaksi = 40): DokumenSinteti
   const tata = benih % 2 === 0 ? TATA_SATU_KOLOM : TATA_DUA_KOLOM
   const g = tata === TATA_SATU_KOLOM ? 'koma' : 'titik'
   let saldo = (5_000_000 + Math.floor(r() * 50_000_000)) * 100
-  const rows: BarisData[] = [barisSaldoAwal(tata, tata === TATA_SATU_KOLOM ? '01/10' : '01/12/2026', saldo, g)]
+  const rows: BarisCetak[] = [barisSaldoAwal(tata, tata === TATA_SATU_KOLOM ? '01/10' : '01/12/2026', saldo, g)]
   for (let i = 0; i < jumlahTransaksi; i++) {
     const hari = 1 + Math.floor((i / jumlahTransaksi) * 28)
     const tanggal = tata === TATA_SATU_KOLOM ? `${String(hari).padStart(2, '0')}/10` : `${String(hari).padStart(2, '0')}/12/2026`
@@ -174,7 +165,37 @@ export function dokumenAcak(benih: number, jumlahTransaksi = 40): DokumenSinteti
     saldo += keluar ? -sen : sen
     rows.push(...barisTransaksi(tata, { tanggal, uraian, sen, keluar, lain: tata === TATA_SATU_KOLOM ? '0000' : `TRX-${i}` }, saldo, g))
   }
-  const halaman: BarisData[][] = []
+  // Dipotong per 25 baris TERCETAK — lanjutan uraian bisa terpotong ke halaman berikut.
+  const halaman: BarisCetak[][] = []
   for (let i = 0; i < rows.length; i += 25) halaman.push(rows.slice(i, i + 25))
   return susunDokumen(`UJI-B-acak-${benih}`, tata, halaman)
+}
+
+/**
+ * Uraian terlipat yang TERPOTONG halaman: lanjutan transaksi terakhir hal. 1
+ * tercetak di awal hal. 2 (tanpa judul), dan lanjutan transaksi terakhir hal. 2
+ * di awal hal. 3 sesudah judul yang tercetak ulang.
+ */
+export function dokumenLanjutanLintasHalaman(): DokumenSintetis {
+  const g = 'titik'
+  let saldo = 3_000_000_00
+  const susun = (daftar: Transaksi[]) =>
+    daftar.flatMap(t => {
+      saldo += t.keluar ? -t.sen : t.sen
+      return barisTransaksi(TATA_DUA_KOLOM, t, saldo, g)
+    })
+  const a = susun([
+    { tanggal: '04/12/2026', uraian: ['Transfer masuk UJI-B-301'], sen: 1_000_000_00, keluar: false, lain: 'TRX-31' },
+    { tanggal: '09/12/2026', uraian: ['Transfer keluar UJI-B-302', 'tujuan UJI-B-REK-1', 'berita sewa gudang'], sen: 750_000_00, keluar: true, lain: 'TRX-32' },
+  ])
+  const b = susun([
+    { tanggal: '18/12/2026', uraian: ['Setoran UJI-B-303'], sen: 2_500_000_00, keluar: false, lain: 'TRX-33' },
+    { tanggal: '22/12/2026', uraian: ['Bayar listrik UJI-B-304', 'ID PEL UJI-B-55'], sen: 412_345_00, keluar: true, lain: 'TRX-34' },
+  ])
+  const c = susun([{ tanggal: '28/12/2026', uraian: ['Bunga UJI-B'], sen: 1_234_00, keluar: false, lain: 'TRX-35' }])
+  const awal = barisSaldoAwal(TATA_DUA_KOLOM, '01/12/2026', 3_000_000_00, g)
+  // a = [301, 302, lanjutan, lanjutan]; b = [303, 304, lanjutan].
+  return susunDokumen('UJI-B-lanjutan-lintas-halaman', TATA_DUA_KOLOM, [[awal, ...a.slice(0, 3)], [a[3], ...b.slice(0, 2)], [b[2], ...c]], {
+    judulTercetak: [true, false, true],
+  })
 }

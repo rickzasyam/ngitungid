@@ -1,4 +1,4 @@
-import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
+import type { BarisMentah, HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 
 // Satu PDF = satu dokumen = satu blok draf di grid. Halaman disusun satu per
 // satu (X4 dipanggil per halaman), lalu dirangkum di sini sebelum diserahkan
@@ -13,6 +13,38 @@ export function kolomTerakhir(halaman: HalamanMentah[], sebelum: number): string
     if (halaman[i].halaman < sebelum && halaman[i].kolom.length > 0) return halaman[i].kolom
   }
   return []
+}
+
+/** Baris yang hanya berisi uraian — lanjutan uraian yang terlipat. */
+function hanyaUraian(b: BarisMentah): boolean {
+  const n = b.nominal
+  const nominalKosong = n.bentuk === 'satu-kolom' ? n.teks === '' && n.penanda === '' : n.pertama.teks === '' && n.kedua.teks === ''
+  return b.uraian !== '' && b.tanggal === '' && b.saldo === '' && nominalKosong && b.lain.every(l => l.teks === '')
+}
+
+/**
+ * Gabungkan lanjutan uraian yang TERPOTONG halaman (keputusan Ricko
+ * 2026-10-27: uraian terlipat digabung ke transaksinya, teks apa adanya,
+ * disambung satu spasi). Di dalam satu halaman penggabungan sudah dilakukan
+ * penyusun tabel (X3); yang tersisa hanya baris berisi uraian saja di AWAL
+ * halaman — sesudah baris judul berulang bila ada — yang transaksinya ada di
+ * halaman sebelumnya. Baris itu ditambahkan ke uraian transaksi terakhir
+ * sebelumnya (nomor halamannya tetap halaman transaksi) lalu dibuang.
+ * Wajib dipanggil sebelum hasil halaman diserahkan ke grid.
+ */
+export function gabungLintasHalaman(halaman: HalamanMentah[]): HalamanMentah[] {
+  const hasil = halaman.map(h => ({ ...h, baris: h.baris.map(b => ({ ...b })) }))
+  let terakhir: BarisMentah | null = null
+  for (const h of hasil) {
+    // Baris judul berulang disusun di indeks 0 (susun-tabel.ts `bentukHalaman`).
+    const judul = h.halaman > 1 && h.kolom.length > 0 ? 1 : 0
+    while (judul < h.baris.length && terakhir !== null && hanyaUraian(h.baris[judul])) {
+      terakhir.uraian = `${terakhir.uraian} ${h.baris[judul].uraian}`
+      h.baris.splice(judul, 1)
+    }
+    for (let k = judul; k < h.baris.length; k++) terakhir = h.baris[k]
+  }
+  return hasil
 }
 
 export type RangkumanDokumen = {

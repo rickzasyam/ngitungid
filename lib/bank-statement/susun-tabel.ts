@@ -15,6 +15,8 @@ import type { BarisMentah, HalamanMentah, NominalMentah } from '@/lib/mutasi-kas
 //    mundur/ganda, ada baris tercetak yang terlewat di tengah tabel, sel tidak
 //    tersalin persis, atau ada teks tercetak di baris itu yang tidak masuk sel
 //    mana pun (nominal/saldo yang hilang tidak pernah lolos diam-diam);
+//  - uraian yang terlipat tidak digabung ke transaksinya, atau gabungannya
+//    tidak sama persis dengan baris-baris lanjutannya;
 //  - judul yang dipakai tidak tercetak (di halaman ini atau sebelumnya).
 // Halaman dari GAMBAR tidak punya teks pembanding: hanya bentuknya yang
 // diperiksa; pemanggil (X5) menandainya "dibaca dari gambar".
@@ -72,8 +74,9 @@ export const SKEMA_SUSUN: SkemaJson = {
           penanda: STR,
           saldo: STR,
           lain: { type: 'array', items: { type: 'object', properties: { judul: STR, teks: STR }, required: ['judul', 'teks'] } },
+          barisLanjutan: { type: 'array', items: { type: 'integer' } },
         },
-        required: ['nomorBaris', 'tanggal', 'uraian', 'nominalPertama', 'nominalKedua', 'penanda', 'saldo', 'lain'],
+        required: ['nomorBaris', 'tanggal', 'uraian', 'nominalPertama', 'nominalKedua', 'penanda', 'saldo', 'lain', 'barisLanjutan'],
       },
     },
   },
@@ -90,6 +93,8 @@ export type BarisAi = {
   penanda: string
   saldo: string
   lain: { judul: string; teks: string }[]
+  /** Nomor baris tercetak lanjutan uraian yang sudah digabung ke `uraian`, urut naik. */
+  barisLanjutan: number[]
 }
 export type JawabanSusun = { periodeTeks: string; nomorBarisJudul: number; kolom: string[]; peranKolom: PeranKolom; baris: BarisAi[] }
 
@@ -97,14 +102,14 @@ export const PROMPT_SISTEM = `Kamu penyusun tabel rekening koran. Tugasmu HANYA 
 
 Aturan:
 1. Salin setiap sel PERSIS seperti tercetak, karakter demi karakter: titik, koma, tanda minus, kurung, huruf besar/kecil. Jangan mengubah format angka atau tanggal, jangan menambah tahun, jangan membuang pemisah ribuan.
-2. Satu baris tercetak di dalam tabel = satu entri "baris", termasuk baris SALDO AWAL, SALDO AKHIR, TOTAL, dan baris lanjutan uraian yang hanya berisi teks. Jangan menggabungkan dua baris tercetak, jangan memecah satu baris tercetak, dan jangan melewatkan baris apa pun di antara baris tabel pertama dan terakhir.
+2. Satu TRANSAKSI tercetak = satu entri "baris", termasuk baris SALDO AWAL, SALDO AKHIR, dan TOTAL. Uraian yang terlipat ke baris tercetak berikutnya (baris yang SELURUH isinya lanjutan uraian) DIGABUNG ke "uraian" transaksinya: teks apa adanya, disambung dengan satu spasi, urut dari atas; nomor baris-baris lanjutan itu dicatat di "barisLanjutan" ([] bila tidak ada). Bila baris tabel PERTAMA di halaman ini adalah lanjutan uraian transaksi dari halaman sebelumnya, kirim sebagai entri sendiri yang hanya berisi "uraian". Jangan memecah satu baris tercetak, dan jangan melewatkan baris apa pun di antara baris tabel pertama dan terakhir.
 3. Kop surat, nama bank, alamat, nomor rekening, keterangan periode, dan nomor halaman di luar tabel BUKAN entri "baris".
 4. "nomorBarisJudul": nomor baris judul kolom tabel di halaman ini; 0 bila halaman ini tidak mencetak judul kolom. Baris judul BUKAN entri "baris". "kolom": judul kolom persis seperti tercetak, kiri ke kanan; [] bila tidak tercetak.
 5. "peranKolom": judul kolom (persis seperti di "kolom", atau dari JUDUL HALAMAN SEBELUMNYA bila halaman ini tidak mencetak judul) untuk tanggal, uraian/keterangan, nominal pertama (kolom nominal paling KIRI), nominal kedua (kolom nominal di sebelah kanannya; "" bila hanya ada satu kolom nominal), dan saldo ("" bila tidak ada). Jangan menilai arti "Debet", "Kredit", "Masuk", atau "Keluar" — yang menentukan hanya posisinya, kiri atau kanan.
 6. Satu kolom nominal yang diikuti penanda seperti "DB"/"CR": angkanya ke "nominalPertama", penandanya ke "penanda" persis seperti tercetak ("" bila tidak ada). Dua kolom nominal: angka masuk ke kolom yang SEJAJAR TEGAK di bawah judulnya; sel yang kosong diisi "".
 7. Kolom lain (No. Ref, Cabang, Teller, dst.) masuk "lain" sebagai {judul, teks}, judulnya persis seperti tercetak; sel kosong tidak perlu dimasukkan.
 8. "periodeTeks": teks periode persis seperti tercetak (mis. "PERIODE : OKTOBER 2026"); "" bila tidak ada di halaman ini.
-9. Setiap teks yang tercetak di sebuah baris tabel harus masuk ke salah satu sel baris itu.
+9. Setiap teks yang tercetak di sebuah baris tabel harus masuk ke salah satu sel baris itu, atau ke uraian gabungan bila baris itu lanjutan uraian.
 
 Kembalikan HANYA objek JSON sesuai skema.`
 
@@ -144,7 +149,9 @@ function bentukJawaban(j: unknown, masalah: string[]): JawabanSusun | null {
         bulat(b.nomorBaris) &&
         ['tanggal', 'uraian', 'nominalPertama', 'nominalKedua', 'penanda', 'saldo'].every(k => teks(b[k])) &&
         Array.isArray(b.lain) &&
-        b.lain.every(l => objek(l) && teks(l.judul) && teks(l.teks))
+        b.lain.every(l => objek(l) && teks(l.judul) && teks(l.teks)) &&
+        Array.isArray(b.barisLanjutan) &&
+        b.barisLanjutan.every(bulat)
       if (!ok) masalah.push(`baris ke-${i + 1}: bentuk tidak lengkap`)
     })
   return masalah.length > 0 ? null : (j as unknown as JawabanSusun)
@@ -190,6 +197,9 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
   if (berteks && j.periodeTeks !== '' && !garis.some(g => rapat(g).includes(rapat(j.periodeTeks)))) masalah.push('periodeTeks tidak tercetak di halaman')
 
   let sebelumnya = 0
+  // Uraian keluaran per baris; untuk halaman berteks yang berlanjutan, disusun
+  // ulang kode dari baris tercetaknya (satu spasi antarbagian).
+  const uraianKeluar = j.baris.map(b => b.uraian)
   j.baris.forEach((b, i) => {
     const ke = `baris ke-${i + 1}`
     const sel = [b.tanggal, b.uraian, b.nominalPertama, b.nominalKedua, b.penanda, b.saldo, ...b.lain.map(l => l.teks)]
@@ -203,29 +213,56 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
     for (const l of b.lain) {
       if (!judulSah.includes(l.judul) || dipakaiPeran.has(l.judul)) masalah.push(`${ke}: judul kolom lain tidak tercetak`)
     }
-    // Urutan: nomor baris naik ketat — baris ganda atau tertukar tidak lolos.
-    if (b.nomorBaris <= sebelumnya) masalah.push(`${ke}: nomor baris tidak urut/ganda`)
-    sebelumnya = Math.max(sebelumnya, b.nomorBaris)
+    // Lanjutan uraian WAJIB digabung ke transaksinya (keputusan Ricko 2026-10-27).
+    // Hanya baris PERTAMA halaman yang boleh berisi uraian saja: lanjutan
+    // transaksi di halaman sebelumnya, digabung `gabungLintasHalaman` (dokumen.ts).
+    if (i > 0 && hanyaUraian(b)) masalah.push(`${ke}: lanjutan uraian tidak digabung ke baris transaksinya`)
+    // Urutan: nomor baris, lalu nomor baris lanjutannya, naik ketat — baris
+    // ganda, tertukar, atau lanjutan yang menunjuk baris lain tidak lolos.
+    const nomor = [b.nomorBaris, ...b.barisLanjutan]
+    if (nomor.some((n, k) => n <= (k === 0 ? sebelumnya : nomor[k - 1]))) masalah.push(`${ke}: nomor baris tidak urut/ganda`)
+    sebelumnya = Math.max(sebelumnya, ...nomor)
     if (!berteks) return
 
     const g = garis[b.nomorBaris - 1]
     if (g === undefined) return void masalah.push(`${ke}: baris [${b.nomorBaris}] tidak ada`)
     if (b.nomorBaris === j.nomorBarisJudul) return void masalah.push(`${ke}: baris judul dikirim sebagai baris`)
+
+    // Uraian gabungan = bagian di baris pertama + teks utuh tiap baris
+    // lanjutan, disambung satu spasi. Bagian baris pertama yang diperiksa
+    // terhadap baris pertama; baris lanjutan harus habis masuk uraian.
+    const lanjut: string[] = []
+    for (const n of b.barisLanjutan) {
+      const gl = garis[n - 1]
+      if (gl === undefined || n === j.nomorBarisJudul || rapat(gl) === '') return void masalah.push(`${ke}: baris lanjutan [${n}] tidak sah`)
+      lanjut.push(rapat(gl))
+    }
+    let bagianPertama = b.uraian
+    if (lanjut.length > 0) {
+      const u = rapat(b.uraian)
+      const ekor = lanjut.join(' ')
+      if (u === ekor) bagianPertama = ''
+      else if (u.endsWith(` ${ekor}`)) bagianPertama = u.slice(0, u.length - ekor.length - 1)
+      else return void masalah.push(`${ke}: uraian gabungan tidak sama persis dengan baris lanjutannya`)
+      uraianKeluar[i] = [bagianPertama, ...lanjut].filter(x => x !== '').join(' ')
+    }
+    const selPertama = [b.tanggal, bagianPertama, ...sel.slice(2)]
+
     const ruang = rapat(g)
-    if (!sel.every(s => s === '' || ruang.includes(rapat(s)))) masalah.push(`${ke}: sel tidak tersalin persis dari baris [${b.nomorBaris}]`)
+    if (!selPertama.every(s => s === '' || ruang.includes(rapat(s)))) masalah.push(`${ke}: sel tidak tersalin persis dari baris [${b.nomorBaris}]`)
     // Semua token tercetak harus masuk sel, dan sel tidak boleh berisi token lain.
     const sisa = new Map<string, number>()
     for (const t of token(g)) sisa.set(t, (sisa.get(t) ?? 0) + 1)
-    for (const t of sel.flatMap(token)) sisa.set(t, (sisa.get(t) ?? 0) - 1)
+    for (const t of selPertama.flatMap(token)) sisa.set(t, (sisa.get(t) ?? 0) - 1)
     if ([...sisa.values()].some(n => n !== 0)) masalah.push(`${ke}: teks tercetak di baris [${b.nomorBaris}] tidak cocok dengan selnya`)
   })
 
   // Cakupan: setiap baris tercetak di antara baris tabel pertama dan terakhir
   // harus menjadi baris (atau baris judul). Baris yang terlewat = mutasi hilang.
   if (berteks && j.baris.length > 0) {
-    const dipakai = new Set(j.baris.map(b => b.nomorBaris))
+    const dipakai = new Set(j.baris.flatMap(b => [b.nomorBaris, ...b.barisLanjutan]))
     const awal = j.baris[0].nomorBaris
-    const akhir = j.baris[j.baris.length - 1].nomorBaris
+    const akhir = Math.max(...dipakai)
     for (let n = awal; n <= akhir; n++) {
       if (!dipakai.has(n) && n !== j.nomorBarisJudul && garis[n - 1] !== undefined && rapat(garis[n - 1]) !== '') {
         masalah.push(`baris tercetak [${n}] terlewat`)
@@ -234,10 +271,19 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
   }
   if (masalah.length > 0) throw new GalatSusun(masalah)
 
-  return bentukHalaman(j, m.halaman, kolom, judulSah)
+  return bentukHalaman(j, m.halaman, kolom, judulSah, uraianKeluar)
 }
 
-function bentukHalaman(j: JawabanSusun, halaman: number, kolom: string[], judulSah: string[]): HalamanMentah {
+/** Baris yang hanya berisi uraian — di rekening koran: lanjutan uraian yang terlipat. */
+function hanyaUraian(b: Pick<BarisAi, 'tanggal' | 'uraian' | 'nominalPertama' | 'nominalKedua' | 'penanda' | 'saldo' | 'lain'>): boolean {
+  return (
+    b.uraian !== '' &&
+    [b.tanggal, b.nominalPertama, b.nominalKedua, b.penanda, b.saldo].every(s => s === '') &&
+    b.lain.every(l => l.teks === '')
+  )
+}
+
+function bentukHalaman(j: JawabanSusun, halaman: number, kolom: string[], judulSah: string[], uraian: string[]): HalamanMentah {
   const p = j.peranKolom
   const nominal = (b: Pick<BarisAi, 'nominalPertama' | 'nominalKedua' | 'penanda'>): NominalMentah =>
     p.nominalKedua !== ''
@@ -247,10 +293,10 @@ function bentukHalaman(j: JawabanSusun, halaman: number, kolom: string[], judulS
   const urutLain = (lain: BarisAi['lain']) =>
     lain.filter(l => l.teks !== '').sort((a, b) => judulSah.indexOf(a.judul) - judulSah.indexOf(b.judul))
 
-  const baris: BarisMentah[] = j.baris.map(b => ({
+  const baris: BarisMentah[] = j.baris.map((b, i) => ({
     halaman,
     tanggal: b.tanggal,
-    uraian: b.uraian,
+    uraian: uraian[i],
     nominal: nominal(b),
     saldo: b.saldo,
     lain: urutLain(b.lain),

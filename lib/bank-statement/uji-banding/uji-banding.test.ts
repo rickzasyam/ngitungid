@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AiProvider } from '@/lib/ai/penyedia'
 import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
-import { dokumenAcak, dokumenDuaKolom, dokumenSatuKolom, dokumenSebagianScan, dokumenTanpaSaldo } from '../fikstur/koleksi'
+import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenSebagianScan, dokumenTanpaSaldo } from '../fikstur/koleksi'
 import { penyediaSempurna } from '../fikstur/jawaban-ai'
 import type { JawabanSusun } from '../susun-tabel'
 import { laporanMarkdown, rangkumUji, ujiDokumen, type HasilDokumen } from './harness'
@@ -17,7 +17,7 @@ const salin = <T>(x: T): T => JSON.parse(JSON.stringify(x))
 
 describe('kesinambunganSementara (pengganti S3 di harness)', () => {
   it('kebenaran semua fikstur bersaldo → lolos; tanpa kolom saldo → tanpa-saldo', () => {
-    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenAcak(3), dokumenAcak(4, 70)]) expect(kesinambunganSementara(d.kebenaran), d.nama).toBe('lolos')
+    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenLanjutanLintasHalaman(), dokumenAcak(3), dokumenAcak(4, 70)]) expect(kesinambunganSementara(d.kebenaran), d.nama).toBe('lolos')
     expect(kesinambunganSementara(dokumenTanpaSaldo().kebenaran)).toBe('tanpa-saldo')
   })
 
@@ -58,7 +58,7 @@ describe('kesinambunganSementara (pengganti S3 di harness)', () => {
 
 describe('ujiDokumen', () => {
   it('penyedia sempurna → lolos tanpa koreksi, identik, tanpa baris hilang/lebih', async () => {
-    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenAcak(11, 50)]) {
+    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenLanjutanLintasHalaman(), dokumenAcak(11, 50)]) {
       const r = await ujiDokumen(await penyediaSempurna(d), d, kesinambunganSementara)
       expect(r, d.nama).toMatchObject({ halamanGagal: [], kesinambungan: 'lolos', lolosTanpaKoreksi: true, identik: true, barisHilang: 0, barisLebih: 0 })
     }

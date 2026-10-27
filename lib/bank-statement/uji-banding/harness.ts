@@ -1,7 +1,7 @@
 import { GalatAi, jenisGalatAi, type AiProvider } from '@/lib/ai/penyedia'
 import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import { bukaPdf } from '../baca-pdf'
-import { kolomTerakhir } from '../dokumen'
+import { gabungLintasHalaman, kolomTerakhir } from '../dokumen'
 import type { DokumenSintetis } from '../fikstur/dokumen-sintetis'
 import { GalatSusun, susunHalaman } from '../susun-tabel'
 import type { HasilKesinambungan, PemeriksaKesinambungan } from './kesinambungan-sementara'
@@ -82,21 +82,24 @@ export async function ujiDokumen(
   }
   const ms = jam() - mulai
 
+  // Seperti di browser (X5): lanjutan uraian yang terpotong halaman digabung
+  // dulu, baru dibandingkan & diperiksa.
+  const dokumen = gabungLintasHalaman(hasil)
   const kebenaran = tandaBaris(d.kebenaran)
-  const keluaran = tandaBaris(hasil)
+  const keluaran = tandaBaris(dokumen)
   let barisHilang = 0
   let barisLebih = 0
   for (const [k, n] of kebenaran) barisHilang += Math.max(0, n - (keluaran.get(k) ?? 0))
   for (const [k, n] of keluaran) barisLebih += Math.max(0, n - (kebenaran.get(k) ?? 0))
 
-  const kesinambungan = pemeriksa(hasil)
+  const kesinambungan = pemeriksa(dokumen)
   return {
     nama: d.nama,
     jumlahHalaman: doc.jumlahHalaman,
     halamanGagal,
     kesinambungan,
     lolosTanpaKoreksi: halamanGagal.length === 0 && kesinambungan === 'lolos',
-    identik: halamanGagal.length === 0 && JSON.stringify(hasil) === JSON.stringify(d.kebenaran),
+    identik: halamanGagal.length === 0 && JSON.stringify(dokumen) === JSON.stringify(d.kebenaran),
     barisHilang,
     barisLebih,
     msPerHalaman: doc.jumlahHalaman > 0 ? ms / doc.jumlahHalaman : 0,
