@@ -704,7 +704,7 @@ Prasyarat: §5 selesai; §7.B (kunci periode) disarankan sudah ada (D26).
 **K2 — Integrasi (perbarui langkah lama).** ✅ **dikerjakan 2026-10-26** lewat `tolakBilaPeriodeTerkunci` (13 jalur, termasuk mutasi kas & impor CSV) + `periodLockChecker` sungguhan; jalur yang belum ada (marketplace, kas kecil, saldo awal) wajib ikut — pemindai `lib/period-lock-api.test.ts` menagihnya. `canPost` di §5.A menerima `isLocked` nyata; `POST/PATCH/DELETE /api/journals` dan `reverse`, `journalize` (bank/marketplace/kas kecil), `opening-balance` semuanya menolak **409 `{ error, lockedUntil }`** bila `isDateLocked(tanggal)`. Test baca-sumber: setiap route penulis jurnal memanggil `isDateLocked`.
 **K3 — Route** `GET /api/period-locks?clientId`; `POST` `{ clientId, terkunciSampai }` `requireAkunting` → insert + `audit_events{entity_type:'period_lock', event:'period_locked'}` (`entity_id` = id kunci; CHECK hanya mewajibkannya untuk `journal`, §8.5); `DELETE /api/period-locks/[id]` body `{ alasan }` **`requireOwner`**, alasan wajib ≥ 10 karakter → hapus + event `period_unlocked` dengan `catatan=alasan`.
 **K4 — UI  ⏸ CP-13.** ✅ **kode 2026-10-26** (`components/settings/kunci-periode-card.tsx`, peringatan form jurnal/Posting/impor); CP-13 diuji klik agen 2026-10-26 di dev (8/9 skenario di browser; skenario akunting hanya lewat test — rincian di log ROADMAP). Tab "Pembukuan" bagian **Kunci Periode**: status "Terkunci sampai …", tombol Kunci (pilih tanggal ≥ kunci sebelumnya), tombol Buka (owner saja; modal alasan wajib); **peringatan** di form jurnal, tombol Posting, dan halaman impor/marketplace/kas kecil bila tanggal ≤ kunci (UI membaca `GET /api/period-locks`; server tetap menegakkan). Task vendor: "Kunci Periode", "Buka Kunci Terbatas", "Peringatan Periode Terkunci".
-**K5 — ROADMAP + sync.** ✅ 2026-10-26 — kode §7.B lengkap, **belum dirilis** (migrasi 0020 baru di dev; checklist rilis di ROADMAP). Sync vendor gagal (langganan workspace tidak aktif).
+**K5 — ROADMAP + sync.** ✅ 2026-10-26 — kode §7.B lengkap; **dirilis ke produksi 2026-10-27** (main `9716b21`, Neon main 21 migrasi). Sync vendor gagal (langganan workspace tidak aktif).
 
 ### 7.C Laporan dari Jurnal (D18, D19) — puncak seluruh roadmap
 
@@ -931,7 +931,7 @@ id · client_id NN cascade · pola text NN (2..100, disimpan apa adanya; dicocok
 | **0017** | `client_accounting_settings`, `purchase_invoices`, `purchase_invoice_lines`, `audit_events += nilai_sebelum/nilai_sesudah`, `master_supplier += bank_*` | tambah | M1 |
 | **0018** | `cash_mutation_imports`, `cash_mutations`, `cash_mutation_allocations` | tambah | N1 |
 | **0019** | **`master_supplier` DROP `termin_pembayaran`** | ⚠️ **NON-ADITIF** | D43 |
-| **0020** | `period_locks` (D26 — naik prioritas sejak D42) — ✅ **dev 2026-10-26** (`0020_period_locks.sql`), belum di main | tambah | K1 |
+| **0020** | `period_locks` (D26 — naik prioritas sejak D42) — ✅ **dev 2026-10-26** (`0020_period_locks.sql`) · ✅ **main 2026-10-27** | tambah | K1 |
 | **0021** 🆕 | `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, `cash_mutation_rules` (D49, 2026-10-26 — hanya bila disetujui; tukar nomor dengan 0020 bila S1 lebih dulu dari K1) | tambah | §5.G S1 |
 | **0022** | `marketplace_settlements` + `ADD VALUE marketplace` | tambah | §6.B |
 | **0023** | `petty_cash_funds` + `ADD VALUE kas_kecil` | tambah | §6.C |
