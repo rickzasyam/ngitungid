@@ -412,7 +412,7 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 | **D43** | `master_supplier`: **DROP `termin_pembayaran`**, ADD `bank_nama`/`bank_rekening`/`bank_atas_nama` — **satu-satunya migrasi non-aditif** | ✅ **disetujui 2026-09-20 dengan syarat rilis: 0015–0019 dalam SATU jendela rilis, atau ditunda bersama** |
 | **D44** | Tab Settings Supplier tetap **data induk saja**; saldo & detail transaksi pindah ke `/hutang` | ✅ **disetujui 2026-09-20** |
 | **D45** | `/pembelian`, `/mutasi-kas`, `/hutang` → **`INTERNAL_ONLY_PREFIXES`** + flag nav baru `internalOnly`; baca `requireInternal`, tulis `requireAkunting`. **Konsekuensi: finance melihat `/hutang` tapi TIDAK `/jurnal` maupun `/buku-besar`** | ✅ **disetujui 2026-09-20** |
-| **D46** | Library grid: `react-data-grid` 7.0.0-beta.63 (MIT) dipin persis, spike 20.000 baris; cadangan TanStack Virtual (MIT); Handsontable, AG Grid Enterprise, MUI X Premium dikeluarkan karena lisensi | ✅ **disetujui Ricko 2026-10-26** — lewat spike S0; library final di CP-19 |
+| **D46** | Library grid: `react-data-grid` 7.0.0-beta.63 (MIT) dipin persis, spike 20.000 baris; cadangan TanStack Virtual (MIT); Handsontable, AG Grid Enterprise, MUI X Premium dikeluarkan karena lisensi | ✅ **disetujui Ricko 2026-10-26** — lewat spike S0 · ✅ **CP-19 dijawab Ricko 2026-10-27: `react-data-grid` 7.0.0-beta.63, versi dipin persis** |
 | **D47** | Wizard CSV **dilebur** jadi pintu masuk berkas ke grid (+ langkah arah); `POST …/import` dihapus; tidak ada lagi simpan sebagian | ✅ **disetujui Ricko 2026-10-26** |
 | **D48** | Satu jalur tulis `POST /api/cash-mutations/batch` + `rencanakanSimpanMutasi`; POST/PATCH/DELETE lama jadi pembungkus tipis | ✅ **disetujui Ricko 2026-10-26** |
 | **D49** | Migrasi **0021**, seluruhnya tambah: `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, tabel `cash_mutation_rules` — `saldo` & `class_cf` sudah ada | ✅ **disetujui Ricko 2026-10-26** |
@@ -463,7 +463,7 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 > **Urutan:** S10 kapan saja sesudah D62 · S0 → ⏸ CP-19 → S1–S6 (**K1–K5 Kunci Periode boleh sejajar**, butuh D17/D26) → **K selesai** → S7 → S8 → S9 → ⏸ CP-20 → S11 · lalu X1–X5 (PDF sintetis) → **gerbang X0 (AI berbayar)** → X6 → ⏸ CP-21 → X7 → ⏸ CP-22 → X8.
 
 **Modul A — Grid**
-- ⏸ S0 Spike `react-data-grid@7.0.0-beta.63` (MIT, React 19), dengan cadangan `@tanstack/react-virtual` (MIT). Kriteria: **20.000 baris**, editor `NominalInput` N9, keyboard, tempel **10.000 baris < 2 detik**, NVDA, ukuran bundle — ⏸ **CP-19** (D46) — **(2026-10-27) spike selesai** di branch lokal `spike/grid-library` `ea6edde` (tidak di-merge, belum di-push). Hasil terukur: gulir wajar 59 fps tanpa frame kosong; editor N9 kursor tidak meloncat; keyboard lulus dengan tambalan Ctrl+Home/Delete; tempel 10.000 baris **41–85 ms** (4× CPU: ≤ 333 ms); pohon AX lulus tapi **NVDA belum diuji**; tambahan **±26 KB gzip**, lazy. Rincian: `docs/plans/hasil-spike-grid-s0-2026-10-27.md`. Menunggu Ricko memilih library.
+- ✅ S0 Spike `react-data-grid@7.0.0-beta.63` (MIT, React 19), dengan cadangan `@tanstack/react-virtual` (MIT). Kriteria: **20.000 baris**, editor `NominalInput` N9, keyboard, tempel **10.000 baris < 2 detik**, NVDA, ukuran bundle — ⏸ **CP-19** (D46) — **(2026-10-27) spike selesai** di branch `spike/grid-library` `ea6edde` (untuk Preview, **tidak di-merge**). Hasil terukur: gulir wajar 59 fps tanpa frame kosong; editor N9 kursor tidak meloncat; keyboard lulus dengan tambalan Ctrl+Home/Delete; tempel 10.000 baris **41–85 ms** (4× CPU: ≤ 333 ms); pohon AX lulus tapi **NVDA belum diuji**; tambahan **±26 KB gzip**, lazy. Rincian: `docs/plans/hasil-spike-grid-s0-2026-10-27.md`. **CP-19 dijawab Ricko 2026-10-27:** D46 = `react-data-grid` 7.0.0-beta.63 dipin persis; **Enter seperti Excel** (simpan lalu turun satu baris) — dibangun di S9; **NVDA diuji Ricko sendiri di Windows**, tidak menahan pekerjaan.
 - ⏳ S1 Migrasi **0021**, seluruhnya tambah (D49): `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules`. `buildReplacePlan` bertambah dua perujuk
 - ⏳ S2 `lib/mutasi-draf.ts` murni, tanpa RegExp:
   - judul Debet/Kredit = dua kolom nominal **tanpa arah**
@@ -485,6 +485,7 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
   - banner arah / pemilih arah wajib; usulan lilac + Terapkan
   - panel Pindah Buku dan isian saldo awal rekening koran
   - sel merah beralasan, sel terkunci beralasan
+  - **Enter seperti Excel: simpan lalu turun satu baris** (Ricko, CP-19 2026-10-27); bawaan library simpan-di-tempat. Tambalan S0 ikut dibawa: `onCellPaste` no-op, Ctrl+Home ke sel data pertama, Delete mengosongkan sel, galat lewat `hidden` + `aria-describedby`
   - form satu-satu tetap utama di HP
   - **draf (D51):** peringatan sebelum meninggalkan halaman, cadangan IndexedDB per (klien, akun kas) yang dihapus otomatis sesudah Simpan berhasil, tawaran "Pulihkan draf"
   - a11y grid — ⏸ **CP-20**
