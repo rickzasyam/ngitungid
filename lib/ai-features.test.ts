@@ -8,7 +8,7 @@ vi.mock('@/lib/api/guards', () => ({
   requireAkunting: vi.fn(async () => ({ user: { role: 'owner', clientId: null } })),
 }))
 vi.mock('@/lib/db', () => ({ db: {} }))
-vi.mock('@/lib/gemini/suggest-journal-account', () => ({ suggestJournalAccounts: vi.fn() }))
+vi.mock('@/lib/ai/saran-akun-jurnal', () => ({ suggestJournalAccounts: vi.fn() }))
 vi.mock('@/lib/gemini/suggest-coa', () => ({ suggestCoaWithGemini: vi.fn() }))
 vi.mock('@/lib/gemini/extract', () => ({ extractReport: vi.fn() }))
 

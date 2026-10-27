@@ -18,7 +18,8 @@ const LIST = read('app', 'api', 'journals', 'route.ts')
 const DETAIL = read('app', 'api', 'journals', '[id]', 'route.ts')
 const QUERIES = read('lib', 'api', 'journal-queries.ts')
 const SUGGEST = read('app', 'api', 'journals', 'suggest-account', 'route.ts')
-const SUGGEST_LIB = read('lib', 'gemini', 'suggest-journal-account.ts')
+const SUGGEST_LIB = read('lib', 'ai', 'saran-akun-jurnal.ts')
+const GEMINI_ADAPTER = read('lib', 'ai', 'gemini.ts')
 const POSTING = read('app', 'api', 'journals', '[id]', 'post', 'route.ts')
 const REVERSE = read('app', 'api', 'journals', '[id]', 'reverse', 'route.ts')
 const AUDIT = read('lib', 'api', 'audit.ts')
@@ -333,8 +334,11 @@ describe('modul saran akun jurnal', () => {
     expect(SUGGEST_LIB).toContain('r.debitKode !== r.kreditKode')
   })
 
+  // Sejak X1 suhu diatur adaptor Gemini (lib/ai/gemini.ts); perilakunya dikunci
+  // juga oleh lib/ai/saran-akun-jurnal.test.ts.
   it('temperature 0 — saran akuntansi tidak boleh berubah tiap ditekan', () => {
-    expect(SUGGEST_LIB).toContain('temperature: 0')
+    expect(SUGGEST_LIB).toContain('penyediaGemini()')
+    expect(GEMINI_ADAPTER).toContain('temperature: 0')
   })
 
   it('prompt meminta array kosong saat keterangannya kabur', () => {
