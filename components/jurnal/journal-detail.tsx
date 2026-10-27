@@ -7,6 +7,7 @@
 import { AlertTriangle, History, Loader2 } from 'lucide-react'
 import { useRupiah } from '@/lib/preferences-context'
 import { computeTotals, fromMinorUnits, labelEvent, TANPA_NO_BUKTI } from '@/lib/journal'
+import { BULAN_PENDEK as BULAN, fmtTanggal } from '@/lib/ymd'
 
 export interface JournalLineRow {
   id: string
@@ -57,13 +58,8 @@ export interface JournalDetailData {
   diubahSetelahPosting?: boolean
 }
 
-const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+export { fmtTanggal }
 
-/** 'YYYY-MM-DD' → '15 Sep 2026'. Dipecah sebagai STRING, tanpa objek Date (P2). */
-export function fmtTanggal(ymd: string): string {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return `${d} ${BULAN[m - 1] ?? '?'} ${y}`
-}
 
 /** Timestamp ISO dari server → '15 Sep 2026, 14:30'. Ini JAM, bukan tanggal
  *  kalender, jadi Date memang alat yang benar di sini — beda dari `tanggal`. */

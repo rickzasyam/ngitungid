@@ -613,6 +613,7 @@ describe('canPost', () => {
     expect(r.ok).toBe(false)
     if (r.ok) return
     expect(r.reason).toContain('dikunci')
+    expect(r.reason).toContain('18 Sep 2026')
   })
 
   it('tanggal yang dilewatkan ke isLocked adalah tanggal jurnalnya', () => {

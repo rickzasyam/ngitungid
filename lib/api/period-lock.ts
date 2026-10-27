@@ -17,6 +17,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { periodLocks } from '@/lib/db/schema'
 import { isDateLocked, latestLock } from '@/lib/period-lock'
+import { fmtTanggal } from '@/lib/ymd'
 
 /** Seluruh baris kunci satu klien — kunci yang berlaku = `latestLock`. */
 export async function loadPeriodLocks(clientId: string) {
@@ -53,7 +54,7 @@ export async function tolakBilaPeriodeTerkunci(
   if (!kena) return null
   return NextResponse.json(
     {
-      error: `Periode sudah dikunci sampai ${kunci.terkunciSampai} — tanggal ${kena} tidak bisa diubah.`,
+      error: `Periode sudah dikunci sampai ${fmtTanggal(kunci.terkunciSampai)} — tanggal ${fmtTanggal(kena)} tidak bisa diubah.`,
       lockedUntil: kunci.terkunciSampai,
       details: [
         'Kunci periode mengalahkan setelan "posting bisa diedit".',

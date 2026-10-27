@@ -70,6 +70,14 @@ describe('validateLockInput', () => {
     expect(validateLockInput({ terkunciSampai: '2026-09-30' }, { latest, hariIni }).ok).toBe(false)
     expect(validateLockInput({ terkunciSampai: '2026-08-31' }, { latest, hariIni }).ok).toBe(false)
   })
+
+  it('pesannya menyebut tanggal terformat, bukan YYYY-MM-DD (temuan CP-13)', () => {
+    const r = validateLockInput({ terkunciSampai: '2026-08-31' }, { latest: { terkunciSampai: '2026-09-30' }, hariIni })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toContain('30 Sep 2026')
+    expect(r.error).not.toContain('2026-09-30')
+  })
 })
 
 describe('validateUnlockReason', () => {

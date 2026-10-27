@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { localDateToYmd, ymdToLocalDate, hariIniJakarta } from './ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta, fmtTanggal } from './ymd'
 
 // ══ ROUND-TRIP ADALAH IDENTITAS ══════════════════════════════════
 // Seluruh nilai modul ini ada di sini. Kalau salah satu arah diam-diam lewat
@@ -90,6 +90,14 @@ describe('ymdToLocalDate — tengah malam lokal', () => {
     expect(d.getMonth()).toBe(2) // 0-indexed
     expect(d.getDate()).toBe(31)
     expect(d.getHours()).toBe(0)
+  })
+})
+
+describe('fmtTanggal — dipakai UI DAN pesan server', () => {
+  it('YYYY-MM-DD → "30 Sep 2026", tanpa geser hari di batas tahun', () => {
+    expect(fmtTanggal('2026-09-30')).toBe('30 Sep 2026')
+    expect(fmtTanggal('2026-01-01')).toBe('1 Jan 2026')
+    expect(fmtTanggal('2026-12-31')).toBe('31 Des 2026')
   })
 })
 

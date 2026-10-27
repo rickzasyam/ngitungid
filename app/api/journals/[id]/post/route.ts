@@ -14,7 +14,7 @@ import {
   resolveUserId,
 } from '@/lib/api/journal-queries'
 import { recordJournalEvent } from '@/lib/api/audit'
-import { periodLockChecker } from '@/lib/api/period-lock'
+import { periodLockChecker, tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
 
@@ -47,8 +47,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const terkunci = await tolakBilaPeriodeTerkunci(header.clientId, [header.tanggal])
+  if (terkunci) return terkunci
+
   const lines = await loadJournalLineValues(id)
 
+  // Kunci ditolak di atas dengan 409 { error, lockedUntil } yang sama dengan
+  // jalur tulis lain; canPost tetap menerima kunci sungguhan sebagai pagar kedua.
   const isLocked = await periodLockChecker(header.clientId)
   const verdict = canPost({ status: header.status, tanggal: header.tanggal, lines }, { isLocked })
   if (!verdict.ok) {

@@ -14,6 +14,7 @@
 
 import { isValidYmd } from '@/lib/contracts'
 import { canDoAccounting, isOwner, type Role } from '@/lib/roles'
+import { fmtTanggal } from '@/lib/ymd'
 
 export type PeriodLockLike = { terkunciSampai: string }
 
@@ -56,7 +57,7 @@ export function validateLockInput(
   if (opts.latest && t <= opts.latest.terkunciSampai) {
     return {
       ok: false,
-      error: `Periode sudah terkunci sampai ${opts.latest.terkunciSampai} — tanggal kunci baru harus sesudahnya.`,
+      error: `Periode sudah terkunci sampai ${fmtTanggal(opts.latest.terkunciSampai)} — tanggal kunci baru harus sesudahnya.`,
     }
   }
   return { ok: true, value: { terkunciSampai: t } }

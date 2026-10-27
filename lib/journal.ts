@@ -28,6 +28,7 @@
 // Yang ada di sini hanya aturan yang benar tanpa melihat isi database.
 
 import { normalizeNominal, isValidYmd } from '@/lib/contracts'
+import { fmtTanggal } from '@/lib/ymd'
 
 // Konvensi basis kode: UUID_RE dideklarasikan per modul, bukan diimpor dari
 // satu tempat (lihat lib/api/account.ts, lib/contracts.ts, dan route COA).
@@ -462,7 +463,7 @@ export function canPost(
     }
   }
   if (isLocked(entry.tanggal)) {
-    return { ok: false, reason: `Periode ${entry.tanggal} sudah dikunci.` }
+    return { ok: false, reason: `Periode ${fmtTanggal(entry.tanggal)} sudah dikunci.` }
   }
   return { ok: true }
 }

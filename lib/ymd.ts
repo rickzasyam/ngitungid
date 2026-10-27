@@ -56,3 +56,12 @@ export function hariIniJakarta(sekarang: Date = new Date()): string {
     day: '2-digit',
   }).format(sekarang)
 }
+
+export const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+
+/** 'YYYY-MM-DD' → '15 Sep 2026'. Dipecah sebagai STRING, tanpa objek Date (P2).
+ *  Di sini, bukan di komponen, supaya pesan server memakai format yang sama. */
+export function fmtTanggal(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return `${d} ${BULAN_PENDEK[m - 1] ?? '?'} ${y}`
+}

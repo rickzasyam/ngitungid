@@ -49,6 +49,8 @@ const JALUR: [string, string, string][] = [
   ['app/api/cash-mutations/[id]/allocations/route.ts', 'POST', '[mutation.tanggal]'],
   ['app/api/cash-mutations/[id]/allocations/[allocId]/route.ts', 'DELETE', '[mutation.tanggal]'],
   ['app/api/cash-mutations/import/route.ts', 'POST', '[...rows.map(r => r.tanggal)]'],
+  // Posting: bentuk penolakannya wajib sama dengan jalur tulis lain (temuan CP-13).
+  ['app/api/journals/[id]/post/route.ts', 'POST', '[header.tanggal]'],
 ]
 
 describe('setiap jalur tulis memeriksa kunci SEBELUM menulis', () => {
@@ -67,10 +69,10 @@ describe('setiap jalur tulis memeriksa kunci SEBELUM menulis', () => {
     })
   }
 
-  it('posting memakai kunci sungguhan lewat canPost', () => {
-    const body = handler(read('app', 'api', 'journals', '[id]', 'post', 'route.ts'), 'POST')
-    expect(body).toContain('await periodLockChecker(header.clientId)')
-    expect(body).toContain('{ isLocked }')
+  it('pesan penolakan memakai tanggal terformat ("30 Sep 2026"), bukan YYYY-MM-DD', () => {
+    const f = PL.slice(PL.indexOf('export async function tolakBilaPeriodeTerkunci'))
+    expect(f).toContain('fmtTanggal(kunci.terkunciSampai)')
+    expect(f).toContain('fmtTanggal(kena)')
   })
 })
 
