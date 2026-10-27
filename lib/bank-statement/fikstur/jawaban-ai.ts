@@ -1,4 +1,5 @@
 import type { AiProvider } from '@/lib/ai/penyedia'
+import { bukaPdf } from '../baca-pdf'
 import type { BarisMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import type { BarisAi, JawabanSusun } from '../susun-tabel'
 import type { DokumenSintetis, Peran } from './dokumen-sintetis'
@@ -63,7 +64,41 @@ export function penyediaTiruan(jawab: (isiTeks: string) => string): AiProvider {
     model: 'tiruan',
     async mintaJson({ isi }) {
       const teks = jawab(isi.map(b => (b.jenis === 'teks' ? b.teks : '')).join('\n'))
-      return { teks, model: 'tiruan', pemakaian: { tokenMasuk: Math.ceil(teks.length / 4), tokenKeluar: Math.ceil(teks.length / 4) } }
+      // Token tiruan = 0: biaya garis dasar memang nol, bukan perkiraan.
+      return { teks, model: 'tiruan', pemakaian: { tokenMasuk: 0, tokenKeluar: 0 } }
     },
   }
+}
+
+/** Nomor halaman dari isi permintaan X3 ("HALAMAN: n"), tanpa ekspresi reguler. */
+export function halamanDariPermintaan(isiTeks: string): number {
+  const awal = isiTeks.indexOf('HALAMAN: ')
+  if (awal < 0) return 0
+  let n = 0
+  for (const c of isiTeks.slice(awal + 'HALAMAN: '.length)) {
+    if (c < '0' || c > '9') break
+    n = n * 10 + (c.charCodeAt(0) - 48)
+  }
+  return n
+}
+
+/**
+ * Penyedia tiruan yang menjawab SEMPURNA untuk dokumen `d` (garis dasar harness).
+ * `ubah` boleh merusak jawaban per halaman untuk menguji kepekaan ukuran.
+ */
+export async function penyediaSempurna(
+  d: DokumenSintetis,
+  ubah: (j: JawabanSusun, halaman: number) => JawabanSusun = j => j
+): Promise<AiProvider> {
+  const doc = await bukaPdf(d.pdf)
+  const baris: string[][] = []
+  try {
+    for (let i = 1; i <= doc.jumlahHalaman; i++) baris.push((await doc.bacaHalaman(i)).baris.map(b => b.teks))
+  } finally {
+    await doc.tutup()
+  }
+  return penyediaTiruan(isi => {
+    const h = halamanDariPermintaan(isi)
+    return JSON.stringify(ubah(jawabanSempurna(d, h, baris[h - 1]), h))
+  })
 }
