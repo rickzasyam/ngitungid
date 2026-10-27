@@ -166,8 +166,9 @@ export function dokumenAcak(benih: number, jumlahTransaksi = 40): DokumenSinteti
   for (let i = 0; i < jumlahTransaksi; i++) {
     const hari = 1 + Math.floor((i / jumlahTransaksi) * 28)
     const tanggal = tata === TATA_SATU_KOLOM ? `${String(hari).padStart(2, '0')}/10` : `${String(hari).padStart(2, '0')}/12/2026`
-    const keluar = r() < 0.55
     const sen = (1 + Math.floor(r() * 5_000_000)) * (r() < 0.3 ? 1 : 100)
+    // Saldo rekening koran karangan tidak pernah negatif.
+    const keluar = r() < 0.55 && sen <= saldo
     const uraian = [`${keluar ? 'TRSF KELUAR' : 'TRSF MASUK'} UJI-B-${benih}-${i}`]
     if (r() < 0.3) uraian.push(`UJI-B REF ${Math.floor(r() * 1e6)}`)
     saldo += keluar ? -sen : sen

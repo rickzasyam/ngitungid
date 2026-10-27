@@ -16,7 +16,7 @@ import { buatPdf, lebarTeks, type HalamanPdf, type TeksPdf } from './pdf-sinteti
 //    memakai judul halaman sebelumnya;
 //  - kop surat, alamat, dan nomor halaman di kaki BUKAN baris tabel.
 
-type Peran = 'tanggal' | 'uraian' | 'nominal1' | 'nominal2' | 'saldo' | 'lain'
+export type Peran = 'tanggal' | 'uraian' | 'nominal1' | 'nominal2' | 'saldo' | 'lain'
 type KolomTata = { judul: string; x: number; rata: 'kiri' | 'kanan'; peran: Peran }
 
 export type TataLetak = {
@@ -31,6 +31,7 @@ export type BarisData = Omit<BarisMentah, 'halaman'>
 
 export type DokumenSintetis = {
   nama: string
+  tata: TataLetak
   pdf: Uint8Array
   /** Halaman yang tidak punya lapisan teks (tiruan scan), mulai 1. */
   halamanGambar: number[]
@@ -128,7 +129,7 @@ export function susunDokumen(
       periodeTeks: halaman === 1 ? tata.periodeTeks : null,
     })
   })
-  return { nama, pdf: buatPdf(pdf), halamanGambar: opsi.gambar ?? [], kebenaran }
+  return { nama, tata, pdf: buatPdf(pdf), halamanGambar: opsi.gambar ?? [], kebenaran }
 }
 
 // ── Pembentuk angka KARANGAN (hanya untuk mencetak fikstur, bukan pembaca) ──
