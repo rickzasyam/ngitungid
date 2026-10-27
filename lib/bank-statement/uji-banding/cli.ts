@@ -3,6 +3,7 @@ import { penyediaAnthropic } from '@/lib/ai/anthropic'
 import { penyediaGemini } from '@/lib/ai/gemini'
 import { penyediaOpenAi } from '@/lib/ai/openai'
 import type { AiProvider } from '@/lib/ai/penyedia'
+import { hariIniJakarta } from '@/lib/ymd'
 import type { DokumenSintetis } from '../fikstur/dokumen-sintetis'
 import { penyediaSempurna } from '../fikstur/jawaban-ai'
 import { dokumenAcak, dokumenDuaKolom, dokumenSatuKolom, dokumenTanpaSaldo } from '../fikstur/koleksi'
@@ -70,7 +71,7 @@ async function main() {
   }
 
   const md = laporanMarkdown(ringkasan, {
-    tanggal: new Date().toISOString().slice(0, 10),
+    tanggal: hariIniJakarta(),
     pemeriksa: 'kesinambunganSementara (pengganti S3 sampai grid masuk main)',
     dokumen: `${dokumen.length} sintetis (3 tetap + ${jumlahAcak} acak deterministik)`,
   })
