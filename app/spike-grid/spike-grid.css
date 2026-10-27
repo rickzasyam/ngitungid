@@ -1,0 +1,49 @@
+/* SPIKE S0 — branch spike/grid-library, TIDAK di-merge. Tanpa @layer: gaya
+   react-data-grid hidup di @layer rdg.*, jadi aturan tak berlapis di sini menang. */
+
+.spike-rdg {
+  color-scheme: light;
+  block-size: 100%;
+  --rdg-font-size: 13px;
+  --rdg-selection-color: var(--color-accent-secondary-text);
+  --rdg-header-background-color: var(--color-muted-bg);
+  border-radius: 1rem;
+}
+
+.spike-rdg .sel-uang {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.spike-rdg .sel-galat {
+  box-shadow: inset 0 0 0 2px var(--color-accent-critical);
+  background-color: color-mix(in srgb, var(--color-accent-critical) 10%, white);
+}
+
+.spike-editor {
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 8px;
+  outline: none;
+  font: inherit;
+}
+
+.spike-editor-uang {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.spike-btn {
+  min-block-size: 36px;
+  padding-inline: 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--color-accent-primary);
+  color: var(--color-accent-primary-fg);
+}
+
+.spike-btn:focus-visible {
+  outline: 2px solid var(--color-accent-secondary-text);
+  outline-offset: 2px;
+}
