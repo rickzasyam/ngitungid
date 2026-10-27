@@ -463,7 +463,7 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 > **Urutan:** S10 kapan saja sesudah D62 · S0 → ⏸ CP-19 → S1–S6 (**K1–K5 Kunci Periode boleh sejajar**, butuh D17/D26) → **K selesai** → S7 → S8 → S9 → ⏸ CP-20 → S11 · lalu X1–X5 (PDF sintetis) → **gerbang X0 (AI berbayar)** → X6 → ⏸ CP-21 → X7 → ⏸ CP-22 → X8.
 
 **Modul A — Grid**
-- ⏳ S0 Spike `react-data-grid@7.0.0-beta.63` (MIT, React 19), dengan cadangan `@tanstack/react-virtual` (MIT). Kriteria: **20.000 baris**, editor `NominalInput` N9, keyboard, tempel **10.000 baris < 2 detik**, NVDA, ukuran bundle — ⏸ **CP-19** (D46)
+- ⏸ S0 Spike `react-data-grid@7.0.0-beta.63` (MIT, React 19), dengan cadangan `@tanstack/react-virtual` (MIT). Kriteria: **20.000 baris**, editor `NominalInput` N9, keyboard, tempel **10.000 baris < 2 detik**, NVDA, ukuran bundle — ⏸ **CP-19** (D46) — **(2026-10-27) spike selesai** di branch lokal `spike/grid-library` `ea6edde` (tidak di-merge, belum di-push). Hasil terukur: gulir wajar 59 fps tanpa frame kosong; editor N9 kursor tidak meloncat; keyboard lulus dengan tambalan Ctrl+Home/Delete; tempel 10.000 baris **41–85 ms** (4× CPU: ≤ 333 ms); pohon AX lulus tapi **NVDA belum diuji**; tambahan **±26 KB gzip**, lazy. Rincian: `docs/plans/hasil-spike-grid-s0-2026-10-27.md`. Menunggu Ricko memilih library.
 - ⏳ S1 Migrasi **0021**, seluruhnya tambah (D49): `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules`. `buildReplacePlan` bertambah dua perujuk
 - ⏳ S2 `lib/mutasi-draf.ts` murni, tanpa RegExp:
   - judul Debet/Kredit = dua kolom nominal **tanpa arah**
