@@ -1,8 +1,15 @@
 'use client'
 
 // Halaman Mutasi Kas/Bank — baris rekening koran per akun kas dan periode,
-// plus tambah manual, impor CSV, dan alokasi ke invoice hutang. Tata letaknya
-// mengikuti /jurnal, /buku-besar, dan /pembelian (shell tiga lapis).
+// plus tambah manual dan alokasi ke invoice hutang. Tata letaknya mengikuti
+// /jurnal, /buku-besar, dan /pembelian (shell tiga lapis).
+//
+// ══ DUA TAMPILAN (MP §5.G S9) ════════════════════════════════════════════
+// ≥ md: GRID per akun kas (tab sheet) per bulan — tampilan utama untuk
+// menempel, membuka berkas CSV (D47, pengganti wizard impor), dan menyunting
+// ribuan baris sekaligus. < md (HP): DAFTAR + form satu-satu, seperti dulu.
+// Daftar tetap bisa dibuka di layar lebar (dan dibuka otomatis oleh tautan
+// "Koreksi di Mutasi Kas" dari /jurnal, D32).
 //
 // Akses: owner + akunting + finance (D45 — '/mutasi-kas' ada di
 // INTERNAL_ONLY_PREFIXES). Finance MEMBACA; tombol tulisnya digerbangi
@@ -18,19 +25,21 @@
 // sama dengan yang sudah selesai. Ia mendapat warna kritis, bukan abu-abu
 // netral — baris yang tenggelam adalah baris yang tidak pernah dikerjakan.
 
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   AlertTriangle,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Inbox,
+  LayoutGrid,
+  List,
   Loader2,
   Pencil,
   Plus,
   RotateCw,
   Trash2,
-  Upload,
 } from 'lucide-react'
 import { useRequireClient } from '@/lib/use-require-client'
 import { useClient } from '@/lib/client-context'
@@ -46,8 +55,9 @@ import {
   type AkunOption,
   type MutationFormValue,
 } from '@/components/mutasi-kas/mutation-form-modal'
-import { ImportWizard } from '@/components/mutasi-kas/import-wizard'
 import { AllocationPanel, type AlokasiRow } from '@/components/mutasi-kas/allocation-panel'
+import { LembarMutasi } from '@/components/mutasi-kas/grid/lembar-mutasi'
+import type { Periode } from '@/lib/mutasi-draf'
 
 interface MutasiRow {
   id: string
@@ -80,6 +90,30 @@ function bulanBerjalan(): { start: string; end: string } {
   const mm = String(m).padStart(2, '0')
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
 }
+
+/** Bulan kalender `YYYY-MM` → periode grid (D52: satu Simpan = satu akun-bulan). */
+function periodeBulan(ym: string): Periode {
+  const [y, m] = ym.split('-').map(Number)
+  const akhir = new Date(y, m, 0).getDate()
+  const mm = String(m).padStart(2, '0')
+  return { mulai: `${y}-${mm}-01`, akhir: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
+}
+
+function geserBulan(p: Periode, delta: number): Periode {
+  const [y, m] = p.mulai.split('-').map(Number)
+  const t = y * 12 + (m - 1) + delta
+  return periodeBulan(`${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`)
+}
+
+// Grid hanya di layar ≥ md (768 px). useSyncExternalStore, bukan efek yang
+// menyetel state: tidak ada render dengan nilai basi, dan server merender daftar.
+const MQ_LEBAR = '(min-width: 768px)'
+function langgananLebar(cb: () => void) {
+  const mq = window.matchMedia(MQ_LEBAR)
+  mq.addEventListener('change', cb)
+  return () => mq.removeEventListener('change', cb)
+}
+const layarLebar = () => window.matchMedia(MQ_LEBAR).matches
 
 /**
  * Mutasi ini diselesaikan lewat AKUN LAWAN, bukan alokasi?
@@ -136,11 +170,18 @@ function MutasiKasContent() {
   const [formErrors, setFormErrors] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
 
-  const [imporBuka, setImporBuka] = useState(false)
+  const lebar = useSyncExternalStore(langgananLebar, layarLebar, () => false)
+  const [tampilan, setTampilan] = useState<'grid' | 'daftar'>(mutasiDariUrl ? 'daftar' : 'grid')
+  const pakaiGrid = lebar && tampilan === 'grid'
+  const [bulan, setBulan] = useState<Periode>(() => ({ mulai: awal.start, akhir: awal.end }))
+  const [kasTab, setKasTab] = useState('')
+  const [gridKotor, setGridKotor] = useState(false)
+  const [versiLuar, setVersiLuar] = useState(0)
+  const [rincianId, setRincianId] = useState<string | null>(null)
+
   const [hapusTarget, setHapusTarget] = useState<MutasiRow | null>(null)
   const [hapusBusy, setHapusBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
 
   const clientId = activeClient?.id ?? null
 
@@ -210,10 +251,12 @@ function MutasiKasContent() {
   }, [clientId, periode.start, periode.end, akunValid])
 
   useEffect(() => {
+    // Grid memuat datanya sendiri (S8, mode grid); daftar hanya bila tampil.
+    if (pakaiGrid) return
     void (async () => {
       await muat()
     })()
-  }, [muat])
+  }, [muat, pakaiGrid])
 
   const muatDetail = useCallback(async (id: string) => {
     setDetailLoading(true)
@@ -337,6 +380,32 @@ function MutasiKasContent() {
     [akunKas]
   )
 
+  // Tab grid: diturunkan dari daftar akun kas klien aktif (sama seperti
+  // `akunValid`) — ganti klien tidak menyisakan tab milik klien lama.
+  const kasGrid = akunKas.find(a => a.id === kasTab) ?? akunKas[0] ?? null
+  const coaGrid = useMemo(() => akunSemua.map(a => ({ id: a.id, kode: a.kode, nama: a.nama })), [akunSemua])
+  const onKotor = useCallback((k: boolean) => setGridKotor(k), [])
+
+  function pindahTab(id: string) {
+    if (id === kasGrid?.id) return
+    if (gridKotor && !window.confirm('Ada perubahan grid yang belum disimpan. Pindah akun kas? Draf tetap ada di cadangan browser ini.')) return
+    setKasTab(id)
+  }
+
+  function pindahBulan(p: Periode) {
+    if (p.mulai === bulan.mulai) return
+    if (gridKotor && !window.confirm('Ada perubahan grid yang belum disimpan. Pindah bulan? Draf tetap ada di cadangan browser ini.')) return
+    setBulan(p)
+  }
+
+  // Rincian & alokasi dari grid: memakai jalur muat rincian yang sama dengan daftar.
+  useEffect(() => {
+    if (!rincianId) return
+    void (async () => {
+      await muatDetail(rincianId)
+    })()
+  }, [rincianId, muatDetail])
+
   if (!isLoaded || !activeClient) {
     return (
       <div className="flex-1 p-3 min-w-0 overflow-hidden">
@@ -370,18 +439,88 @@ function MutasiKasContent() {
               Mutasi Kas / Bank
             </h1>
             <p style={{ fontSize: 12.5, color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
-              {activeClient.name} · {rows.length} baris pada periode ini
-              {belumDijurnal > 0 && (
+              {pakaiGrid ? (
+                <>{activeClient.name} · grid per akun kas, satu bulan per Simpan</>
+              ) : (
                 <>
-                  {' · '}
-                  <strong style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)' }}>
-                    {belumDijurnal} belum dijurnal
-                  </strong>
+                  {activeClient.name} · {rows.length} baris pada periode ini
+                  {belumDijurnal > 0 && (
+                    <>
+                      {' · '}
+                      <strong style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)' }}>
+                        {belumDijurnal} belum dijurnal
+                      </strong>
+                    </>
+                  )}
                 </>
               )}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {lebar && (
+              <div className="inline-flex items-center gap-1 rounded-full" style={{ background: 'var(--color-muted-bg)', padding: 3 }}>
+                {(
+                  [
+                    ['grid', 'Grid', LayoutGrid],
+                    ['daftar', 'Daftar', List],
+                  ] as const
+                ).map(([id, label, Ikon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={tampilan === id}
+                    onClick={() => {
+                      if (id === tampilan) return
+                      if (gridKotor && !window.confirm('Ada perubahan grid yang belum disimpan. Pindah ke daftar? Draf tetap ada di cadangan browser ini.')) return
+                      if (id === 'daftar') setLoading(true)
+                      setTampilan(id)
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: 12,
+                      minHeight: 32,
+                      border: 'none',
+                      background: tampilan === id ? 'white' : 'transparent',
+                      color: tampilan === id ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                    }}
+                  >
+                    <Ikon className="w-3.5 h-3.5" /> {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {pakaiGrid ? (
+              <div className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => pindahBulan(geserBulan(bulan, -1))}
+                  aria-label="Bulan sebelumnya"
+                  className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  style={{ width: 34, height: 34, border: '1px solid #e5e7eb', background: 'white' }}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <input
+                  type="month"
+                  aria-label="Bulan grid"
+                  value={bulan.mulai.slice(0, 7)}
+                  onChange={e => e.target.value && pindahBulan(periodeBulan(e.target.value))}
+                  className="rounded-full px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  style={{ minHeight: 34, border: '1px solid #e5e7eb', fontSize: 12.5 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => pindahBulan(geserBulan(bulan, 1))}
+                  aria-label="Bulan berikutnya"
+                  className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  style={{ width: 34, height: 34, border: '1px solid #e5e7eb', background: 'white' }}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <>
             <div style={{ width: 210 }}>
               <StyledSelect
                 options={opsiAkunKas}
@@ -424,15 +563,6 @@ function MutasiKasContent() {
             {bolehTulis && (
               <>
                 <button
-                  onClick={() => setImporBuka(true)}
-                  disabled={!akunValid}
-                  title={!akunValid ? 'Pilih akun kas dulu — berkas rekening koran milik satu rekening.' : undefined}
-                  className="inline-flex items-center gap-2 rounded-full font-medium disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
-                  style={{ padding: '8px 14px', fontSize: 12.5, minHeight: 34, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-primary)' }}
-                >
-                  <Upload className="w-3.5 h-3.5" /> Impor CSV
-                </button>
-                <button
                   onClick={bukaBuat}
                   disabled={akunKas.length === 0}
                   title={akunKas.length === 0 ? 'Belum ada akun bertanda kas/bank di Master COA klien ini.' : undefined}
@@ -443,20 +573,86 @@ function MutasiKasContent() {
                 </button>
               </>
             )}
+              </>
+            )}
           </div>
         </div>
 
+        {pakaiGrid && (
+          <div className="flex-1 min-h-0 flex flex-col" style={{ background: '#f8f8f8' }}>
+            {akunKas.length === 0 ? (
+              <p className="text-sm text-center py-16" style={{ color: 'var(--color-text-muted)' }}>
+                Belum ada akun bertanda kas/bank di Master COA klien ini.
+              </p>
+            ) : (
+              <>
+                <div role="tablist" aria-label="Akun kas" className="flex items-center gap-1 flex-wrap px-4 pt-3">
+                  {akunKas.map(a => {
+                    const terpilih = a.id === kasGrid?.id
+                    return (
+                      <button
+                        key={a.id}
+                        id={`tab-kas-${a.id}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={terpilih}
+                        aria-controls="panel-kas"
+                        tabIndex={terpilih ? 0 : -1}
+                        onClick={() => pindahTab(a.id)}
+                        onKeyDown={e => {
+                          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+                          e.preventDefault()
+                          const i = akunKas.findIndex(x => x.id === a.id)
+                          const j = (i + (e.key === 'ArrowRight' ? 1 : -1) + akunKas.length) % akunKas.length
+                          pindahTab(akunKas[j].id)
+                          document.getElementById(`tab-kas-${akunKas[j].id}`)?.focus()
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                        style={{
+                          padding: '6px 14px',
+                          fontSize: 12.5,
+                          minHeight: 34,
+                          border: terpilih ? 'none' : '1px solid #e5e7eb',
+                          background: terpilih ? 'var(--color-accent-primary)' : 'white',
+                          color: terpilih ? 'var(--color-accent-primary-fg)' : 'var(--color-text-primary)',
+                        }}
+                      >
+                        <span className="font-mono text-[11px]">{a.kode}</span> {a.nama}
+                      </button>
+                    )
+                  })}
+                </div>
+                {kasGrid && (
+                  <div id="panel-kas" role="tabpanel" aria-labelledby={`tab-kas-${kasGrid.id}`} className="flex-1 min-h-0 flex flex-col p-3 sm:p-4">
+                    <LembarMutasi
+                      key={`${kasGrid.id}:${bulan.mulai}`}
+                      clientId={activeClient.id}
+                      akunKas={{ id: kasGrid.id, kode: kasGrid.kode, nama: kasGrid.nama }}
+                      coa={coaGrid}
+                      periode={bulan}
+                      bolehTulis={bolehTulis}
+                      versiLuar={versiLuar}
+                      onKotor={onKotor}
+                      onPeriode={p => setBulan(p)}
+                      onRincian={id => {
+                        setDetail(null)
+                        setRincianId(id)
+                      }}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* Isi */}
+        {!pakaiGrid && (
         <div className="flex-1 overflow-y-auto min-h-0" style={{ background: '#f8f8f8' }}>
           <div className="p-3 sm:p-4">
             {actionError && (
               <div role="alert" className="rounded-2xl px-3.5 py-2.5 mb-3" style={{ background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)', border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)' }}>
                 <p className="text-xs" style={{ color: 'var(--color-text-primary)' }}>{actionError}</p>
-              </div>
-            )}
-            {toast && (
-              <div role="status" className="rounded-2xl px-3.5 py-2.5 mb-3" style={{ background: '#eaf7e8', border: '1px solid #cbe8c6' }}>
-                <p className="text-xs" style={{ color: '#2f6d2a' }}>{toast}</p>
               </div>
             )}
 
@@ -616,6 +812,7 @@ function MutasiKasContent() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {formMode && formInitial && (
@@ -635,19 +832,46 @@ function MutasiKasContent() {
         />
       )}
 
-      {imporBuka && clientId && akunValid && (
-        <ImportWizard
-          clientId={clientId}
-          akunKasId={akunValid}
-          akunKasNama={akunKas.find(a => a.id === akunValid)?.nama ?? 'akun kas'}
-          onClose={() => setImporBuka(false)}
-          onSelesai={n => {
-            setImporBuka(false)
-            setToast(`${n} baris berhasil diimpor. Semuanya berstatus "belum dijurnal" sampai dialokasikan.`)
-            setLoading(true)
-            void muat()
+      {rincianId && (
+        <ModalShell
+          onDismiss={() => {
+            setRincianId(null)
+            setDetail(null)
           }}
-        />
+          labelledBy="rincian-title"
+          className="max-w-3xl"
+        >
+          <div className="px-5 sm:px-6 py-4 border-b" style={{ borderColor: '#f0f0f0' }}>
+            <h2 id="rincian-title" className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>
+              Rincian & alokasi mutasi
+            </h2>
+            {detail && detail.id === rincianId && (
+              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                {fmtTanggal(detail.tanggal)} · {detail.keterangan ?? '(tanpa keterangan)'} ·{' '}
+                {Number(detail.debit) > 0 ? `masuk ${rupiahPersis(detail.debit)}` : `keluar ${rupiahPersis(detail.kredit)}`}
+              </p>
+            )}
+          </div>
+          {detailLoading || !detail || detail.id !== rincianId ? (
+            <div className="flex items-center gap-2 px-5 py-6" style={{ color: 'var(--color-text-muted)' }}>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-xs">Memuat rincian…</span>
+            </div>
+          ) : (
+            <AllocationPanel
+              mutationId={detail.id}
+              clientId={activeClient.id}
+              alokasi={detail.alokasi}
+              sisa={detail.sisa}
+              status={detail.status}
+              bolehTulis={bolehTulis}
+              onBerubah={() => {
+                void muatDetail(detail.id)
+                setVersiLuar(v => v + 1)
+              }}
+            />
+          )}
+        </ModalShell>
       )}
 
       {hapusTarget && (

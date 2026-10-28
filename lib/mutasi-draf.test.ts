@@ -478,6 +478,14 @@ describe('akun lawan: kode persis dulu, lalu nama persis', () => {
     expect(cocokkanAkun('Biaya Admin', coa).status).toBe('galat')
     expect(cocokkanAkun('  ', coa)).toEqual({ status: 'kosong' })
   })
+  it('label grid "kode · nama" (S9) sah hanya bila nama = nama akun berkode itu', () => {
+    expect(cocokkanAkun('6-2000 · Biaya Admin Bank', coa)).toEqual({ status: 'ok', akunId: 'a-admin' })
+    expect(cocokkanAkun(' 6-2000 · biaya admin bank ', coa)).toEqual({ status: 'ok', akunId: 'a-admin' })
+    // kode benar, nama milik akun LAIN → tidak ditebak
+    expect(cocokkanAkun('6-2000 · Penjualan', coa).status).toBe('galat')
+    // nama benar, kode tak dikenal → galat
+    expect(cocokkanAkun('6-0000 · Biaya Admin Bank', coa).status).toBe('galat')
+  })
 })
 
 // ── validasiBaris ────────────────────────────────────────────

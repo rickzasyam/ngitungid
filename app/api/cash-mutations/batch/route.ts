@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { bacaJsonBody } from '@/lib/api/json-gzip'
 import { eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
@@ -34,12 +35,11 @@ export async function POST(req: Request) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
 
-  let body: Record<string, unknown>
-  try {
-    body = ((await req.json()) ?? {}) as Record<string, unknown>
-  } catch {
-    return NextResponse.json({ error: 'Body harus JSON.' }, { status: 400 })
-  }
+  // Grid mengirim body gzip (batas 4,5 MB Vercel berlaku pada body
+  // permintaan juga — lib/api/json-gzip.ts); form dan skrip boleh JSON biasa.
+  const dibaca = await bacaJsonBody(req)
+  if (!dibaca.ok) return NextResponse.json({ error: dibaca.error }, { status: dibaca.status })
+  const body = (dibaca.nilai ?? {}) as Record<string, unknown>
 
   const clientId = typeof body.clientId === 'string' ? body.clientId : ''
   const akunKasId = typeof body.akunKasId === 'string' ? body.akunKasId : ''
