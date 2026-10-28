@@ -376,6 +376,24 @@ export function bacaSaldoSel(teks: string): BacaUang {
   return { status: 'ok', minor: p.negatif ? -h.minor : h.minor }
 }
 
+/**
+ * Nilai kanonik ("1500000.25", "-500.00") → teks sel format Indonesia
+ * ("1.500.000,25", "-500"). Sen nol tidak ditulis. Kebalikan `bacaUangSel` /
+ * `bacaSaldoSel`: teks yang dihasilkan selalu terbaca kembali ke nilai yang sama.
+ */
+export function nominalKeSel(kanonik: string | null): string {
+  if (kanonik === null || kanonik === '') return ''
+  const negatif = kanonik.startsWith('-')
+  const [utuh, pecahan = '00'] = (negatif ? kanonik.slice(1) : kanonik).split('.')
+  let ribuan = ''
+  for (let i = 0; i < utuh.length; i++) {
+    if (i > 0 && (utuh.length - i) % 3 === 0) ribuan += '.'
+    ribuan += utuh[i]
+  }
+  const sen = pecahan.padEnd(2, '0').slice(0, 2)
+  return `${negatif ? '-' : ''}${ribuan}${sen === '00' ? '' : `,${sen}`}`
+}
+
 // ── Tanggal ──────────────────────────────────────────────────
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
