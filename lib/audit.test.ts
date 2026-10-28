@@ -40,10 +40,13 @@ describe('AUDIT_ENTITY_TYPES', () => {
 describe('riwayat yang bertahan setelah barisnya dihapus', () => {
   // Aturan umumnya: event dihapus bersama entitasnya (pengganti FK cascade).
   // purchase_invoice adalah pengecualian yang diminta tersurat oleh brief —
-  // penghapusan invoice harus tercatat lengkap dengan isinya.
-  it('hanya purchase_invoice', () => {
+  // penghapusan invoice harus tercatat lengkap dengan isinya. supplier
+  // pengecualian kedua (audit supplier 2026-10-28): event `deleted` yang ikut
+  // dipurge tidak mencatat apa pun. Mutasi kas SENGAJA tetap dipurge.
+  it('hanya purchase_invoice dan supplier', () => {
     expect(riwayatBertahanSetelahDihapus('purchase_invoice')).toBe(true)
-    for (const t of ['journal', 'master_coa', 'period_lock', 'supplier', 'cash_mutation'] as const) {
+    expect(riwayatBertahanSetelahDihapus('supplier')).toBe(true)
+    for (const t of ['journal', 'master_coa', 'period_lock', 'cash_mutation'] as const) {
       expect(riwayatBertahanSetelahDihapus(t), t).toBe(false)
     }
   })

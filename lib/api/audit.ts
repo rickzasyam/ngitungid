@@ -5,6 +5,7 @@ import { auditEvents } from '@/lib/db/schema'
 import type { AuditEntityType } from '@/lib/audit'
 import type { JournalEvent } from '@/lib/journal'
 import type { CoaEvent, TipeKas } from '@/lib/coa/type-history'
+import type { SupplierEvent, SupplierValue } from '@/lib/supplier'
 
 // Penyusun STATEMENT untuk audit_events — bukan penulis.
 //
@@ -68,6 +69,44 @@ export function recordJournalEvent(v: {
     nilaiSebelum: v.nilaiSebelum,
     nilaiSesudah: v.nilaiSesudah,
   })
+}
+
+export type SupplierEventInput = {
+  clientId: string
+  supplierId: string
+  event: SupplierEvent
+  userId: string | null
+  catatan?: string | null
+  nilaiSebelum?: SupplierValue | null
+  nilaiSesudah?: SupplierValue | null
+}
+
+const barisSupplier = (v: SupplierEventInput) => ({
+  clientId: v.clientId,
+  entityType: 'supplier' as const,
+  entityId: v.supplierId,
+  event: v.event,
+  userId: v.userId,
+  catatan: v.catatan ?? null,
+  nilaiSebelum: v.nilaiSebelum ?? null,
+  nilaiSesudah: v.nilaiSesudah ?? null,
+})
+
+/**
+ * Riwayat satu supplier. `event` bertipe SupplierEvent (lib/supplier.ts), jadi
+ * nama di luar daftar resmi ditolak compiler — pola recordJournalEvent.
+ */
+export function recordSupplierEvent(v: SupplierEventInput): BatchItem<'pg'> {
+  return db.insert(auditEvents).values(barisSupplier(v))
+}
+
+/**
+ * Riwayat banyak supplier dalam SATU INSERT — untuk impor berkas, yang bisa
+ * menyentuh ratusan supplier sekaligus (pola recordCoaTypeEvents). Kosong → null.
+ */
+export function recordSupplierEvents(v: readonly SupplierEventInput[]): BatchItem<'pg'> | null {
+  if (v.length === 0) return null
+  return db.insert(auditEvents).values(v.map(barisSupplier))
 }
 
 /**

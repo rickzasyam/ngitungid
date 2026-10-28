@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { journalLines, masterSupplier, purchaseInvoices } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { dbWriteErrorResponse, isFkViolation, isUniqueViolation } from '@/lib/api/db-errors'
-import { validateSupplierInput } from '@/lib/supplier'
-import { assertAkunHutangMilikKlien } from '@/lib/api/supplier-queries'
+import { snapshotSupplier, supplierBerubah, validateSupplierInput } from '@/lib/supplier'
+import { assertAkunHutangMilikKlien, KOLOM_SNAPSHOT_SUPPLIER } from '@/lib/api/supplier-queries'
+import { recordSupplierEvent } from '@/lib/api/audit'
+import { resolveUserId } from '@/lib/api/journal-queries'
 
 export const runtime = 'nodejs'
 
@@ -30,8 +33,9 @@ async function guard(params: Promise<{ id: string; supplierId: string }>) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
 
+  // Seluruh kolom data ikut dibaca: ini `nilai_sebelum` riwayat ubah & hapus.
   const [row] = await db
-    .select({ id: masterSupplier.id, nama: masterSupplier.nama })
+    .select({ id: masterSupplier.id, ...KOLOM_SNAPSHOT_SUPPLIER })
     .from(masterSupplier)
     .where(and(eq(masterSupplier.id, supplierId), eq(masterSupplier.clientId, id)))
     .limit(1)
@@ -40,13 +44,16 @@ async function guard(params: Promise<{ id: string; supplierId: string }>) {
       error: NextResponse.json({ error: 'Supplier tidak ditemukan untuk klien ini.' }, { status: 404 }),
     }
   }
-  return { clientId: id, supplierId, row }
+  return { clientId: id, supplierId, row, email: g.user.email }
 }
 
 // PATCH /api/clients/[id]/suppliers/[supplierId] — ubah satu supplier.
 //
 // UPDATE di tempat: `id` tidak berubah, jadi apa pun yang kelak menunjuk
 // supplier ini (baris jurnal ber-supplier_id, Fase 2) tetap tersambung.
+//
+// Riwayat `updated` (sebelum → sesudah) ikut di db.batch yang sama; simpan
+// tanpa perubahan apa pun tidak dicatat (`supplierBerubah`).
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string; supplierId: string }> }) {
   const g = await guard(params)
   if ('error' in g) return g.error
@@ -60,13 +67,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const akunGuard = await assertAkunHutangMilikKlien(check.value.akunHutangDefaultId, g.clientId)
   if (akunGuard) return akunGuard
 
+  const sebelum = snapshotSupplier(g.row)
+  const sesudah = snapshotSupplier(check.value)
+  const statements: BatchItem<'pg'>[] = [
+    db.update(masterSupplier).set({ ...check.value, updatedAt: new Date() }).where(eq(masterSupplier.id, g.supplierId)),
+  ]
+  if (supplierBerubah(sebelum, sesudah)) {
+    statements.push(
+      recordSupplierEvent({
+        clientId: g.clientId,
+        supplierId: g.supplierId,
+        event: 'updated',
+        userId: await resolveUserId(g.email),
+        nilaiSebelum: sebelum,
+        nilaiSesudah: sesudah,
+      })
+    )
+  }
+
   try {
-    const [row] = await db
-      .update(masterSupplier)
-      .set({ ...check.value, updatedAt: new Date() })
-      .where(eq(masterSupplier.id, g.supplierId))
-      .returning({ id: masterSupplier.id, nama: masterSupplier.nama })
-    return NextResponse.json({ supplier: row })
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+    return NextResponse.json({ supplier: { id: g.supplierId, nama: check.value.nama } })
   } catch (e) {
     if (isUniqueViolation(e)) {
       return NextResponse.json(
@@ -129,8 +150,25 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     )
   }
 
+  // ══ RIWAYAT PENGHAPUSAN HIDUP LEBIH LAMA DARI SUPPLIERNYA ═════════════
+  // Seperti invoice pembelian: event `deleted` beserta isi supplier sebelum
+  // dihapus DIPERTAHANKAN (riwayatBertahanSetelahDihapus('supplier') — alasannya
+  // di lib/audit.ts), jadi riwayat supplier TIDAK dipurge. Event ditulis DI
+  // DALAM batch yang sama: bila penghapusannya gagal (mis. FK), eventnya ikut
+  // batal dan riwayat tidak mencatat peristiwa yang tidak pernah terjadi.
+  const statements: BatchItem<'pg'>[] = [
+    recordSupplierEvent({
+      clientId: g.clientId,
+      supplierId: g.supplierId,
+      event: 'deleted',
+      userId: await resolveUserId(g.email),
+      nilaiSebelum: snapshotSupplier(g.row),
+    }),
+    db.delete(masterSupplier).where(eq(masterSupplier.id, g.supplierId)),
+  ]
+
   try {
-    await db.delete(masterSupplier).where(eq(masterSupplier.id, g.supplierId))
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
   } catch (e) {
     // Jaring terakhir: ada perujuk baru yang belum diperiksa di atas.
     if (isFkViolation(e)) {
