@@ -7,20 +7,25 @@ import { join } from 'node:path'
 vi.mock('@/lib/gemini/client', async orig => ({
   ...(await orig<typeof import('@/lib/gemini/client')>()),
   generateContentWithRetry: vi.fn(),
+  getGeminiClient: vi.fn(),
 }))
 
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
-import { GEMINI_MODEL, generateContentWithRetry } from '@/lib/gemini/client'
+import { GEMINI_MODEL, generateContentWithRetry, getGeminiClient } from '@/lib/gemini/client'
 import { ANTHROPIC_MODEL_BAWAAN, penyediaAnthropic, type KlienAnthropic } from './anthropic'
 import { penyediaGemini } from './gemini'
 import { penyediaOpenAi, type KlienOpenAi } from './openai'
 import { GalatAi, jenisGalatAi, skemaKetat, type PermintaanJson, type SkemaJson } from './penyedia'
-import { penyediaDariEnv } from './pilih-penyedia'
+import { MODEL_EKSTRAKSI_GEMINI, penyediaDariEnv, penyediaEkstraksi } from './pilih-penyedia'
 
 const gen = vi.mocked(generateContentWithRetry)
+// Jalur lapisan baru memanggil klien langsung (lewat `ulangGemini`).
+const genBaru = vi.fn()
+vi.mocked(getGeminiClient).mockReturnValue({ models: { generateContent: genBaru } } as never)
 afterEach(() => {
   gen.mockReset()
+  genBaru.mockReset()
   vi.unstubAllEnvs()
 })
 
@@ -72,6 +77,9 @@ describe('adaptor Gemini', () => {
       config: expect.objectContaining({ systemInstruction: 'Susun tabel.', temperature: 0, httpOptions: { timeout: 30_000 }, responseMimeType: 'application/json' }),
     })
     expect(j).toEqual({ teks: '[]', model: GEMINI_MODEL, pemakaian: { tokenMasuk: 100, tokenKeluar: 27 } })
+    // Tanpa opsi = perilaku fitur lama: retry bersama, thinking bawaan model.
+    expect(gen.mock.calls[0][0].config).not.toHaveProperty('thinkingConfig')
+    expect(genBaru).not.toHaveBeenCalled()
   })
 
   it('jawaban tanpa teks → teks kosong, bukan galat', async () => {
@@ -152,23 +160,48 @@ describe('adaptor OpenAI (klien tiruan)', () => {
   })
 })
 
-describe('penyediaDariEnv — AI_PROVIDER + AI_MODEL', () => {
-  it('kosong / gemini → Gemini (model bawaan lib/gemini/client)', () => {
-    for (const env of [{}, { AI_PROVIDER: '' }, { AI_PROVIDER: 'gemini' }]) {
+describe('penyediaEkstraksi — Gemini thinking minimal + ulang lapisan baru', () => {
+  it('bawaan Flash-Lite stabil (bukan GEMINI_MODEL fitur lama, bukan alias "latest"), thinking MINIMAL, lewat ulangGemini', async () => {
+    expect(MODEL_EKSTRAKSI_GEMINI).toBe('gemini-3.5-flash-lite')
+    genBaru.mockResolvedValue({ text: '[]', usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } })
+    const p = penyediaEkstraksi('gemini')
+    expect(p.model).toBe(MODEL_EKSTRAKSI_GEMINI)
+    await p.mintaJson(MINTA)
+    expect(gen).not.toHaveBeenCalled()
+    expect(genBaru.mock.calls[0][0]).toMatchObject({ model: MODEL_EKSTRAKSI_GEMINI, config: { temperature: 0, thinkingConfig: { thinkingLevel: 'MINIMAL' } } })
+  })
+
+  it('Gemini 2.x: thinking dimatikan lewat anggaran 0', async () => {
+    genBaru.mockResolvedValue({ text: '[]' })
+    await penyediaEkstraksi('gemini', 'gemini-2.5-flash-lite').mintaJson(MINTA)
+    expect(genBaru.mock.calls[0][0].config.thinkingConfig).toEqual({ thinkingBudget: 0 })
+  })
+
+  it('kuota harian habis → GalatAi kuotaHarian setelah SATU permintaan', async () => {
+    genBaru.mockRejectedValue(Object.assign(new Error('{"error":{"status":"RESOURCE_EXHAUSTED","details":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]}}'), { status: 429 }))
+    const e = await penyediaEkstraksi('gemini').mintaJson(MINTA).catch(x => x)
+    expect(jenisGalatAi(e)).toBe('kuotaHarian')
+    expect(genBaru).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('penyediaDariEnv — AI_PROVIDER + AI_MODEL_EKSTRAKSI', () => {
+  it('kosong / gemini → Gemini Flash-Lite bawaan ekstraksi', () => {
+    for (const env of [{}, { AI_PROVIDER: '' }, { AI_PROVIDER: 'gemini' }, { AI_MODEL: 'nama-lama-tidak-dibaca' }]) {
       const p = penyediaDariEnv(env)
-      expect([p.nama, p.model]).toEqual(['gemini', GEMINI_MODEL])
+      expect([p.nama, p.model]).toEqual(['gemini', MODEL_EKSTRAKSI_GEMINI])
     }
-    expect(penyediaDariEnv({ AI_PROVIDER: 'gemini', AI_MODEL: 'gemini-uji' }).model).toBe('gemini-uji')
+    expect(penyediaDariEnv({ AI_PROVIDER: 'gemini', AI_MODEL_EKSTRAKSI: 'gemini-uji' }).model).toBe('gemini-uji')
   })
 
-  it('anthropic → Claude Haiku bawaan atau AI_MODEL', () => {
+  it('anthropic → Claude Haiku bawaan atau AI_MODEL_EKSTRAKSI', () => {
     expect(penyediaDariEnv({ AI_PROVIDER: 'anthropic' })).toMatchObject({ nama: 'anthropic', model: 'claude-haiku-5-5' })
-    expect(penyediaDariEnv({ AI_PROVIDER: 'anthropic', AI_MODEL: 'claude-x' }).model).toBe('claude-x')
+    expect(penyediaDariEnv({ AI_PROVIDER: 'anthropic', AI_MODEL_EKSTRAKSI: 'claude-x' }).model).toBe('claude-x')
   })
 
-  it('openai wajib AI_MODEL', () => {
-    expect(penyediaDariEnv({ AI_PROVIDER: 'openai', AI_MODEL: 'gpt-uji' })).toMatchObject({ nama: 'openai', model: 'gpt-uji' })
-    expect(() => penyediaDariEnv({ AI_PROVIDER: 'openai' })).toThrow('AI_MODEL')
+  it('openai wajib AI_MODEL_EKSTRAKSI', () => {
+    expect(penyediaDariEnv({ AI_PROVIDER: 'openai', AI_MODEL_EKSTRAKSI: 'gpt-uji' })).toMatchObject({ nama: 'openai', model: 'gpt-uji' })
+    expect(() => penyediaDariEnv({ AI_PROVIDER: 'openai' })).toThrow('AI_MODEL_EKSTRAKSI')
   })
 
   it('nilai tak dikenal → galat konfigurasi, tidak jatuh diam-diam ke Gemini', () => {
@@ -181,6 +214,7 @@ describe('penyediaDariEnv — AI_PROVIDER + AI_MODEL', () => {
 describe('jenisGalatAi', () => {
   it('memilah galat dari penyedia mana pun', () => {
     expect(jenisGalatAi(new GalatAi('ditolak', 'x'))).toBe('ditolak')
+    expect(jenisGalatAi(new GalatAi('kuotaHarian', 'x'))).toBe('kuotaHarian')
     expect(jenisGalatAi(Object.assign(new Error('x'), { status: 429 }))).toBe('kuota')
     expect(jenisGalatAi(new Error('GEMINI_API_KEY belum diset di .env.local'))).toBe('konfigurasi')
     expect(jenisGalatAi(new Error('{"status":"RESOURCE_EXHAUSTED"}'))).toBe('kuota')
@@ -199,6 +233,13 @@ describe('batas lapisan', () => {
     for (const f of [['lib', 'ai', 'saran-akun-jurnal.ts'], ['lib', 'gemini', 'extract.ts'], ['lib', 'gemini', 'suggest-coa.ts']]) {
       expect(read(...f), f.join('/')).not.toContain('penyediaDariEnv')
     }
+  })
+
+  // Thinking minimal & kebijakan ulang baru hanya untuk fitur baru (keputusan Ricko 2026-10-28).
+  it('fitur lama tidak memakai opsi Gemini lapisan baru', () => {
+    const src = read('lib', 'ai', 'saran-akun-jurnal.ts')
+    expect(src).toContain('penyediaGemini()')
+    for (const s of ['berpikirMinimal', 'ulangBaru', 'penyediaEkstraksi']) expect(src, s).not.toContain(s)
   })
 
   it('tanpa RegExp di lib/ai (D22)', () => {

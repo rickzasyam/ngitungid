@@ -73,6 +73,10 @@ export async function ujiDokumen(
         tokenMasuk += r.pemakaian.tokenMasuk
         tokenKeluar += r.pemakaian.tokenKeluar
       } catch (e) {
+        // Kuota harian habis: halaman berikutnya pasti gagal juga dan bukan ukuran
+        // mutu penyedia. Dokumen ini dibatalkan utuh; CLI menyimpan sisanya untuk
+        // dilanjutkan sesudah kuota direset.
+        if (jenisGalatAi(e) === 'kuotaHarian') throw e
         const jenis = e instanceof GalatSusun ? 'ditolak-penjaga' : e instanceof GalatAi ? `penyedia-${e.jenis}` : `penyedia-${jenisGalatAi(e)}`
         halamanGagal.push({ halaman: n, jenis })
       }

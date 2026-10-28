@@ -66,11 +66,12 @@ export class GalatAi extends Error {
   }
 }
 
-export type JenisGalatAi = 'konfigurasi' | 'kuota' | 'batasWaktu' | 'ditolak' | 'lain'
+/** `kuotaHarian` = kuota HARIAN penyedia habis (lapisan baru tidak mengulangnya — `ulang-gemini.ts`). */
+export type JenisGalatAi = 'konfigurasi' | 'kuota' | 'kuotaHarian' | 'batasWaktu' | 'ditolak' | 'lain'
 
 /**
  * Memilah galat penyedia mana pun untuk jawaban HTTP: konfigurasi → 400/503,
- * kuota → 429, batas waktu → 504, sisanya 502. Tanpa ekspresi reguler (D22).
+ * kuota & kuotaHarian → 429, batas waktu → 504, sisanya 502. Tanpa ekspresi reguler (D22).
  */
 export function jenisGalatAi(e: unknown): JenisGalatAi {
   if (e instanceof GalatAi) return e.jenis

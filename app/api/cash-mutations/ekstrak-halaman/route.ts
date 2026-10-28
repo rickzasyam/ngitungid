@@ -108,15 +108,17 @@ export async function POST(req: Request) {
     }
     const jenis = jenisGalatAi(e)
     const [status, pesan] =
-      jenis === 'kuota'
-        ? [429, 'Kuota penyedia AI sedang penuh — tunggu sebentar lalu ulangi halaman ini.']
-        : jenis === 'batasWaktu'
-          ? [504, 'Penyedia AI terlalu lama menjawab — ulangi halaman ini.']
-          : jenis === 'konfigurasi'
-            ? [503, 'Penyedia AI untuk ekstraksi rekening koran belum dikonfigurasi.']
-            : jenis === 'ditolak'
-              ? [422, 'Penyedia AI menolak memproses halaman ini.']
-              : [502, 'Gagal meminta penyedia AI. Ulangi halaman ini.']
+      jenis === 'kuotaHarian'
+        ? [429, 'Kuota harian penyedia AI sudah habis — ekstraksi bisa diulang sesudah kuota direset.']
+        : jenis === 'kuota'
+          ? [429, 'Kuota penyedia AI sedang penuh — tunggu sebentar lalu ulangi halaman ini.']
+          : jenis === 'batasWaktu'
+            ? [504, 'Penyedia AI terlalu lama menjawab — ulangi halaman ini.']
+            : jenis === 'konfigurasi'
+              ? [503, 'Penyedia AI untuk ekstraksi rekening koran belum dikonfigurasi.']
+              : jenis === 'ditolak'
+                ? [422, 'Penyedia AI menolak memproses halaman ini.']
+                : [502, 'Gagal meminta penyedia AI. Ulangi halaman ini.']
     return NextResponse.json({ error: pesan }, { status })
   }
 }

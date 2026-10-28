@@ -6,7 +6,7 @@ import { GalatAi, skemaKetat, type AiProvider, type BagianIsi } from './penyedia
 // sungguhan baru sesudah gerbang X0 (D54).
 //
 // Tidak ada model bawaan: id model "GPT mini" yang berlaku pada tanggal uji
-// harus dipilih sadar lewat env `AI_MODEL`, bukan ditebak di kode.
+// harus dipilih sadar lewat env `AI_MODEL_EKSTRAKSI`, bukan ditebak di kode.
 
 /** Bagian SDK yang dipakai — klien tiruan di test cukup memenuhi ini. */
 export type KlienOpenAi = { responses: Pick<OpenAI['responses'], 'create'> }
@@ -26,7 +26,7 @@ function bagianOpenAi(b: BagianIsi): OpenAI.Responses.ResponseInputContent {
 
 export function penyediaOpenAi(opsi: { model: string; klien?: KlienOpenAi }): AiProvider {
   const { model } = opsi
-  if (!model) throw new GalatAi('konfigurasi', 'AI_MODEL belum diisi — penyedia "openai" tidak punya model bawaan.')
+  if (!model) throw new GalatAi('konfigurasi', 'AI_MODEL_EKSTRAKSI belum diisi — penyedia "openai" tidak punya model bawaan.')
   return {
     nama: 'openai',
     model,

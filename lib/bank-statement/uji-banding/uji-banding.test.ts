@@ -1,13 +1,14 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { AiProvider } from '@/lib/ai/penyedia'
+import { GalatAi, type AiProvider } from '@/lib/ai/penyedia'
 import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenSebagianScan, dokumenTanpaSaldo } from '../fikstur/koleksi'
 import { penyediaSempurna } from '../fikstur/jawaban-ai'
 import type { JawabanSusun } from '../susun-tabel'
 import { laporanMarkdown, rangkumUji, ujiDokumen, type HasilDokumen } from './harness'
 import { kesinambunganSementara } from './kesinambungan-sementara'
+import { uraiStatus } from './status-uji'
 
 // X4 — harness uji banding. Yang diuji: ukurannya PEKA terhadap kesalahan yang
 // berbahaya (kolom tertukar, baris hilang, angka salah) dan tidak menghukum
@@ -89,6 +90,10 @@ describe('ujiDokumen', () => {
     // Semua halaman gagal ≠ "tanpa saldo": dokumen bersaldo tetap masuk penyebut % lolos.
     expect(r.kesinambungan).toBe('putus')
     expect(rangkumUji(kuota, [r])).toMatchObject({ dokumenBersaldo: 1, persenLolosTanpaKoreksi: 0 })
+    // Kuota HARIAN: dokumen dibatalkan utuh (bukan dicatat gagal) supaya CLI bisa melanjutkannya besok.
+    let n = 0
+    const harian: AiProvider = { nama: 'gemini', model: 'm', mintaJson: async a => (++n === 1 ? (await penyediaSempurna(d)).mintaJson(a) : Promise.reject(new GalatAi('kuotaHarian', 'x'))) }
+    await expect(ujiDokumen(harian, d, kesinambunganSementara)).rejects.toMatchObject({ jenis: 'kuotaHarian' })
     const ts = dokumenTanpaSaldo()
     expect((await ujiDokumen(kuota, ts, kesinambunganSementara)).kesinambungan).toBe('tanpa-saldo')
     const s = dokumenSebagianScan()
@@ -123,6 +128,26 @@ describe('rangkumUji & laporan', () => {
   })
 })
 
+describe('status uji (dilanjutkan sesudah kuota direset)', () => {
+  const sah: HasilDokumen = {
+    nama: 'UJI-B-acak-1001', jumlahHalaman: 2, halamanGagal: [{ halaman: 2, jenis: 'ditolak-penjaga' }], kesinambungan: 'putus',
+    lolosTanpaKoreksi: false, identik: false, barisHilang: 3, barisLebih: 0, msPerHalaman: 900, tokenMasuk: 10, tokenKeluar: 5,
+  }
+  const teks = (hasil: unknown, versi = 1) => JSON.stringify({ versi, hasil: { 'gemini:m': hasil } })
+
+  it('hasil agregat terbaca kembali utuh', () => {
+    expect(uraiStatus(teks([sah])).hasil['gemini:m']).toEqual([sah])
+  })
+
+  it('menolak isi selain agregat: kunci tambahan, nama bukan UJI-B-, tipe salah, versi lain', () => {
+    expect(() => uraiStatus(teks([{ ...sah, uraian: 'isi baris' }]))).toThrow()
+    expect(() => uraiStatus(teks([{ ...sah, halamanGagal: [{ halaman: 1, jenis: 'x', teks: 'isi' }] }]))).toThrow()
+    expect(() => uraiStatus(teks([{ ...sah, nama: 'rekening-nyata' }]))).toThrow()
+    expect(() => uraiStatus(teks([{ ...sah, tokenMasuk: '10' }]))).toThrow()
+    expect(() => uraiStatus(teks([sah], 2))).toThrow()
+  })
+})
+
 describe('batas harness', () => {
   const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
   const semua = (dir: string): string[] =>
@@ -140,5 +165,13 @@ describe('batas harness', () => {
     const src = read('lib', 'bank-statement', 'uji-banding', 'cli.ts')
     for (const s of ['readFile', 'createReadStream', '.pdf']) expect(src, s).not.toContain(s)
     expect(src).toContain('dokumenAcak(')
+  })
+
+  // Yang diukur harus sama dengan yang dijalankan route (model, thinking, ulang).
+  it('CLI membuat penyedia lewat penyediaEkstraksi, seperti route', () => {
+    const src = read('lib', 'bank-statement', 'uji-banding', 'cli.ts')
+    expect(src).toContain('penyediaEkstraksi(')
+    for (const s of ['penyediaGemini(', 'penyediaAnthropic(', 'penyediaOpenAi(']) expect(src, s).not.toContain(s)
+    expect(read('lib', 'bank-statement', 'uji-banding', 'status-uji.ts')).not.toContain('.pdf')
   })
 })

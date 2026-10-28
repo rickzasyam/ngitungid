@@ -126,6 +126,13 @@ describe('galat penyedia & penjaga → status yang bisa ditindaklanjuti, tanpa i
     })
   }
 
+  it('kuota HARIAN habis → 429 dengan pesan sendiri (bukan "tunggu sebentar")', async () => {
+    pilih.mockReturnValue(gagal(new GalatAi('kuotaHarian', 'x')))
+    const res = await kirim(sah)
+    expect(res.status).toBe(429)
+    expect((await res.json()).error).toContain('harian')
+  })
+
   it('penyedia belum dikonfigurasi (AI_PROVIDER salah) → 503', async () => {
     pilih.mockImplementation(() => {
       throw new GalatAi('konfigurasi', 'AI_PROVIDER "x" tidak dikenal')

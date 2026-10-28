@@ -6,7 +6,7 @@ import { GalatAi, skemaKetat, type AiProvider, type BagianIsi } from './penyedia
 // gerbang X0 (akun berbayar, ketentuan data dicatat — D54), dan tetap hanya
 // dengan PDF sintetis sampai Ricko memutuskan lain.
 
-/** Kandidat D54 "Claude Haiku". Ganti lewat env `AI_MODEL` tanpa mengubah kode. */
+/** Kandidat D54 "Claude Haiku". Ganti lewat env `AI_MODEL_EKSTRAKSI` tanpa mengubah kode. */
 export const ANTHROPIC_MODEL_BAWAAN = 'claude-haiku-5-5'
 
 // Satu halaman rekening koran ±40 baris JSON jauh di bawah ini; batasnya ada
