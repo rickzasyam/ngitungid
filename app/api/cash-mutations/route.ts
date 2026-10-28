@@ -17,12 +17,20 @@ import {
 } from '@/lib/api/cash-mutation-queries'
 import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 import { jawabanTunggal, rencanakanSimpanMutasi } from '@/lib/api/cash-mutation-batch'
+import { muatGridMutasi } from '@/lib/api/cash-mutation-grid'
+import { jsonGzip } from '@/lib/api/json-gzip'
 
 export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// GET /api/cash-mutations?clientId&periodStart&periodEnd[&akunKasId]
+// GET /api/cash-mutations?clientId&periodStart&periodEnd[&akunKasId][&urut=buku]
+//
+// `urut=buku` = MODE GRID (S8): wajib `akunKasId` (satu grid = satu akun kas),
+// urutan baku naik, per baris `updatedAt`/`catatan`/`urutan`/status jurnal/
+// jumlah alokasi/`kunci` (dari `kunciMutasi`, aturan yang sama dengan Simpan),
+// plus `saldoJangkar` (D61) dan `terkunciSampai`. Tanpa paginasi — satu
+// akun-bulan dikirim utuh, dikompres gzip DI FUNGSI (`jsonGzip`).
 //
 // ══ requireInternal UNTUK BACA, requireAkunting UNTUK TULIS (D45) ═════════
 // Sama dengan /api/purchase-invoices: `/mutasi-kas` masuk INTERNAL_ONLY_PREFIXES,
@@ -54,8 +62,28 @@ export async function GET(req: Request) {
   if (akunKasId !== '' && !UUID_RE.test(akunKasId)) {
     return NextResponse.json({ error: 'akunKasId tidak valid.' }, { status: 400 })
   }
+  const urut = url.searchParams.get('urut') ?? ''
+  if (urut !== '' && urut !== 'buku') {
+    return NextResponse.json({ error: 'urut tidak dikenal (hanya "buku").' }, { status: 400 })
+  }
   if (!canAccessClientData(g.user.role, g.user.clientId, clientId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (urut === 'buku') {
+    if (akunKasId === '') {
+      return NextResponse.json({ error: 'Mode grid butuh akunKasId — satu grid = satu akun kas.' }, { status: 400 })
+    }
+    if (!(await loadCashAccount(clientId, akunKasId))) {
+      return NextResponse.json(
+        { error: 'Akun kas tidak ditemukan pada klien ini, atau bukan akun kas/bank.' },
+        { status: 400 }
+      )
+    }
+    const grid = await muatGridMutasi({ clientId, akunKasId, periodStart, periodEnd })
+    // Dikompres di fungsi: 10.000 baris ±8 MB JSON melewati batas respons
+    // Vercel 4,5 MB yang berlaku SEBELUM kompresi CDN (lib/api/json-gzip.ts).
+    return jsonGzip(req, { count: grid.mutations.length, ...grid })
   }
 
   const mutations = await listCashMutations({

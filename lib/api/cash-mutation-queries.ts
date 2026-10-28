@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
@@ -206,12 +207,19 @@ export async function loadMutationDetail(mutationId: string) {
  *
  * Σ alokasi dijumlahkan di Postgres lewat `numeric(18,2)::text` supaya nilainya
  * tidak pernah melewati float JS (P1) — pola yang sama dengan daftar jurnal.
+ *
+ * `urut: 'buku'` (grid, S8) = URUTAN BAKU naik `tanggal, created_at, urutan, id`
+ * (D49) — urutan yang sama dengan rantai saldo (S3) dan jangkar
+ * (`muatSaldoJangkar`). `urutan` NULL di akhir (bawaan Postgres untuk ASC),
+ * dan jangkar memakai `coalesce(urutan, 2147483647)` yang setara.
+ * Bawaan (`terbaru`) tetap untuk daftar lama: tanggal turun.
  */
 export async function listCashMutations(opts: {
   clientId: string
   periodStart: string
   periodEnd: string
   akunKasId?: string
+  urut?: 'terbaru' | 'buku'
 }) {
   const filters = [
     eq(cashMutations.clientId, opts.clientId),
@@ -219,12 +227,19 @@ export async function listCashMutations(opts: {
     sql`${cashMutations.tanggal} <= ${opts.periodEnd}`,
   ]
   if (opts.akunKasId) filters.push(eq(cashMutations.akunKasId, opts.akunKasId))
+  const akunLawan = alias(masterCoa, 'akun_lawan')
+  const urutan =
+    opts.urut === 'buku'
+      ? [asc(cashMutations.tanggal), asc(cashMutations.createdAt), asc(cashMutations.urutan), asc(cashMutations.id)]
+      : [desc(cashMutations.tanggal), asc(cashMutations.createdAt)]
 
   const rows = await db
     .select({
       id: cashMutations.id,
       tanggal: cashMutations.tanggal,
       keterangan: cashMutations.keterangan,
+      catatan: cashMutations.catatan,
+      urutan: cashMutations.urutan,
       debit: cashMutations.debit,
       kredit: cashMutations.kredit,
       saldo: cashMutations.saldo,
@@ -232,10 +247,13 @@ export async function listCashMutations(opts: {
       akunKasKode: masterCoa.kode,
       akunKasNama: masterCoa.nama,
       akunLawanId: cashMutations.akunLawanId,
+      akunLawanKode: akunLawan.kode,
+      akunLawanNama: akunLawan.nama,
       journalId: cashMutations.journalId,
       importId: cashMutations.importId,
       fingerprint: cashMutations.fingerprint,
       createdAt: cashMutations.createdAt,
+      updatedAt: cashMutations.updatedAt,
       createdByName: users.name,
       teralokasiDb: sql<string>`coalesce(sum(${cashMutationAllocations.nominal}), 0)::numeric(18,2)::text`,
       alokasiCount: sql<number>`count(${cashMutationAllocations.id})::int`,
@@ -243,10 +261,11 @@ export async function listCashMutations(opts: {
     .from(cashMutations)
     .innerJoin(masterCoa, eq(cashMutations.akunKasId, masterCoa.id))
     .innerJoin(users, eq(cashMutations.createdBy, users.id))
+    .leftJoin(akunLawan, eq(cashMutations.akunLawanId, akunLawan.id))
     .leftJoin(cashMutationAllocations, eq(cashMutationAllocations.mutationId, cashMutations.id))
     .where(and(...filters))
-    .groupBy(cashMutations.id, masterCoa.kode, masterCoa.nama, users.name)
-    .orderBy(desc(cashMutations.tanggal), asc(cashMutations.createdAt))
+    .groupBy(cashMutations.id, masterCoa.kode, masterCoa.nama, akunLawan.kode, akunLawan.nama, users.name)
+    .orderBy(...urutan)
 
   return rows.map(r => {
     const alokasiSemu = [{ nominal: r.teralokasiDb }]
