@@ -140,10 +140,49 @@ export interface MutationRelink {
   newMasterCoaId: string
 }
 
-/** Setelan pembukuan klien yang merujuk Master COA (akun PPN Masukan). */
+/**
+ * Setelan pembukuan klien yang merujuk Master COA: akun PPN Masukan (D33) dan
+ * akun Pindah Buku (D59, 0021). Keduanya SETELAN, bukan pencatatan — jadi
+ * keduanya boleh diputus (lihat bagian setelan di buildReplacePlan).
+ */
 export interface AffectedAccountingSetting {
   clientId: string
   akunPpnMasukanId: string | null
+  /** Opsional supaya pemanggil & test sebelum 0021 tidak berubah. */
+  akunPindahBukuId?: string | null
+}
+
+/**
+ * Aturan akun lawan `cash_mutation_rules` (D57, 0021) yang merujuk Master COA.
+ *
+ * ══ KEDUA KOLOMNYA MEMBLOKIR, TERMASUK akun_kas_id YANG NULLABLE ════════
+ * Aturan §8.15: nullability bukan penentunya. `akun_lawan_id` NOT NULL — tidak
+ * ada nilai pengganti. `akun_kas_id` nullable, tapi NULL di sana BERARTI
+ * "semua akun kas": memutusnya diam-diam MEMPERLUAS aturan yang tadinya hanya
+ * untuk satu rekening ke seluruh rekening klien, dan usulannya mulai muncul di
+ * akun kas yang tidak pernah dimaksud. Itu perubahan makna, bukan kehilangan
+ * bawaan — jadi blokir, dengan pesan yang menyebut polanya.
+ */
+export interface AffectedRuleAccount {
+  ruleId: string
+  /** Pola aturan apa adanya — supaya pesan blokir bisa menyebut aturan mana. */
+  pola: string
+  kolom: 'lawan' | 'kas'
+  masterCoaId: string
+}
+
+/** Aturan mutasi yang menghalangi penggantian. */
+export interface BlockedRule {
+  ruleId: string
+  pola: string
+  kolom: 'lawan' | 'kas'
+  kode: string
+}
+
+export interface RuleRelink {
+  ruleId: string
+  kolom: 'lawan' | 'kas'
+  newMasterCoaId: string
 }
 
 /** Invoice yang menghalangi penggantian: akunnya hilang/ambigu di berkas baru. */
@@ -162,8 +201,10 @@ export interface InvoiceRelink {
 
 export interface SettingRelink {
   clientId: string
-  /** null = akun PPN Masukan diputus (kodenya hilang/ambigu). */
-  newAkunPpnMasukanId: string | null
+  /** Kolom setelan mana: akun PPN Masukan (D33) atau akun Pindah Buku (D59). */
+  kolom: 'ppn' | 'pindah-buku'
+  /** null = akunnya diputus (kodenya hilang/ambigu). */
+  newMasterCoaId: string | null
 }
 
 /** Jurnal yang menghalangi penggantian: akunnya hilang/ambigu di berkas baru. */
@@ -245,7 +286,7 @@ export interface ReplacePlan {
    * menggagalkan seluruh batch dengan galat yang tidak menyebut invoicenya.
    */
   invoiceBlocked: BlockedInvoice[]
-  /** Setelan klien yang akun PPN Masukan-nya diputus jadi null. */
+  /** Kolom setelan klien (PPN Masukan, Pindah Buku) yang diputus jadi null. */
   settingUnlinkedCount: number
   /** Kolom akun mutasi kas yang bisa disambung ke id baru (N5). */
   mutationRelinkedCount: number
@@ -254,6 +295,13 @@ export interface ReplacePlan {
    * route wajib menolak 409 sebelum menulis apa pun.
    */
   mutationBlocked: BlockedMutation[]
+  /** Kolom akun aturan mutasi yang bisa disambung ke id baru (S1, D57). */
+  ruleRelinkedCount: number
+  /**
+   * Aturan mutasi yang MENGHALANGI penggantian. Tidak kosong = route wajib
+   * menolak 409 sebelum menulis apa pun.
+   */
+  ruleBlocked: BlockedRule[]
 }
 
 /** Baris ini akan disambung ke id baru, atau diputus (null). */
@@ -293,6 +341,7 @@ export interface PlanInput {
   invoiceAccounts?: AffectedInvoiceAccount[]
   accountingSettings?: AffectedAccountingSetting[]
   mutationAccounts?: AffectedMutationAccount[]
+  ruleAccounts?: AffectedRuleAccount[]
 }
 
 /**
@@ -309,6 +358,7 @@ export function buildReplacePlan(input: PlanInput): {
   invoiceRelinks: InvoiceRelink[]
   settingRelinks: SettingRelink[]
   mutationRelinks: MutationRelink[]
+  ruleRelinks: RuleRelink[]
 } {
   const { oldAccounts, newKodeToId, ambiguousKode, lines, history, reports } = input
 
@@ -568,19 +618,56 @@ export function buildReplacePlan(input: PlanInput): {
     return a.kolom === b.kolom ? a.kode.localeCompare(b.kode) : a.kolom.localeCompare(b.kolom)
   })
 
-  // ── client_accounting_settings.akun_ppn_masukan_id: BOLEH diputus ────
-  // Berbeda dari invoice: ini pengisi awal formulir, bukan bagian dari sebuah
+  // ── cash_mutation_rules: DUA kolom, memblokir (S1, D57) ──────────────
+  // Lihat catatan di AffectedRuleAccount: akun_kas_id yang diputus jadi NULL
+  // berarti "semua akun kas" — perluasan makna, bukan kehilangan bawaan.
+  const ruleRelinks: RuleRelink[] = []
+  const ruleBlocked: BlockedRule[] = []
+  const ruleBlockedSeen = new Set<string>()
+  let ruleRelinkedCount = 0
+
+  for (const ra of input.ruleAccounts ?? []) {
+    const target = resolve(ra.masterCoaId)
+    if (target) {
+      ruleRelinkedCount++
+      if (target !== ra.masterCoaId) {
+        ruleRelinks.push({ ruleId: ra.ruleId, kolom: ra.kolom, newMasterCoaId: target })
+      }
+      continue
+    }
+    const kode = oldIdToKode.get(ra.masterCoaId) ?? '(tidak diketahui)'
+    const key = `${ra.ruleId} ${ra.kolom} ${kode}`
+    if (ruleBlockedSeen.has(key)) continue
+    ruleBlockedSeen.add(key)
+    ruleBlocked.push({ ruleId: ra.ruleId, pola: ra.pola, kolom: ra.kolom, kode })
+  }
+
+  ruleBlocked.sort((a, b) => {
+    if (a.pola !== b.pola) return a.pola.localeCompare(b.pola)
+    return a.kolom === b.kolom ? a.kode.localeCompare(b.kode) : a.kolom.localeCompare(b.kolom)
+  })
+
+  // ── client_accounting_settings: akun PPN Masukan & Pindah Buku, BOLEH diputus ──
+  // Berbeda dari invoice: keduanya setelan, bukan bagian dari sebuah
   // pencatatan. Invoice yang sudah ada tetap memegang akun PPN-nya sendiri
-  // lewat snapshot (D30), jadi memutus setelan tidak mengubah satu angka pun.
+  // lewat snapshot (D30), dan mutasi Pindah Buku memegang akunnya di
+  // `akun_lawan_id` (yang memblokir sendiri, N5) — jadi memutus setelan tidak
+  // mengubah satu angka pun. Akibatnya hanya formulir/panel yang meminta
+  // setelan diisi ulang.
   const settingRelinks: SettingRelink[] = []
   let settingUnlinkedCount = 0
 
   for (const st of input.accountingSettings ?? []) {
-    if (!st.akunPpnMasukanId) continue
-    const target = resolve(st.akunPpnMasukanId)
-    if (!target) settingUnlinkedCount++
-    if (target !== st.akunPpnMasukanId) {
-      settingRelinks.push({ clientId: st.clientId, newAkunPpnMasukanId: target })
+    for (const [kolom, akunId] of [
+      ['ppn', st.akunPpnMasukanId],
+      ['pindah-buku', st.akunPindahBukuId ?? null],
+    ] as const) {
+      if (!akunId) continue
+      const target = resolve(akunId)
+      if (!target) settingUnlinkedCount++
+      if (target !== akunId) {
+        settingRelinks.push({ clientId: st.clientId, kolom, newMasterCoaId: target })
+      }
     }
   }
 
@@ -607,6 +694,8 @@ export function buildReplacePlan(input: PlanInput): {
       settingUnlinkedCount,
       mutationRelinkedCount,
       mutationBlocked,
+      ruleRelinkedCount,
+      ruleBlocked,
     },
     relinks,
     journalRelinks,
@@ -614,6 +703,7 @@ export function buildReplacePlan(input: PlanInput): {
     invoiceRelinks,
     settingRelinks,
     mutationRelinks,
+    ruleRelinks,
   }
 }
 
