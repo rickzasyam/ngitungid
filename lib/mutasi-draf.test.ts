@@ -12,6 +12,7 @@ import {
   indeksAkun,
   kelasBaris,
   kenaliJudul,
+  nominalKeSel,
   penandaDbCr,
   periksaUrutanTanggal,
   pisahkanNominal,
@@ -403,6 +404,19 @@ describe('nominal & saldo lewat bacaNominal — satu aturan pemisah', () => {
   it('nominal tak terbaca → galat dengan pesan bacaNominal, tidak pernah diam-diam 0', () => {
     expect(bacaUangSel('12.345.67').status).toBe('galat')
     expect(bacaUangSel('-100').status).toBe('galat')
+  })
+
+  it('nominalKeSel: kanonik → teks Indonesia yang terbaca kembali ke nilai yang SAMA', () => {
+    expect(nominalKeSel('1500000.25')).toBe('1.500.000,25')
+    expect(nominalKeSel('1500000.00')).toBe('1.500.000')
+    expect(nominalKeSel('999.50')).toBe('999,50')
+    expect(nominalKeSel('-1234.00')).toBe('-1.234')
+    expect(nominalKeSel(null)).toBe('')
+    for (const k of ['0.01', '1000.00', '1234567890.99', '100.10']) {
+      const h = bacaUangSel(nominalKeSel(k))
+      expect(h.status === 'ok' && h.minor, k).toBe(Math.round(Number(k) * 100))
+    }
+    expect(bacaSaldoSel(nominalKeSel('-1234.50'))).toEqual({ status: 'ok', minor: -123450 })
   })
 
   it('saldo negatif (cerukan): minus depan, minus belakang, kurung', () => {
