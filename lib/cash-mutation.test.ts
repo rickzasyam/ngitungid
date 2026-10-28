@@ -9,6 +9,13 @@ import {
   mutationStatus,
   normalizeKeterangan,
   validateCashMutation,
+  buildDailySummaryJournalLines,
+  kunciMutasi,
+  kunciRingkasan,
+  modeJurnalMutasi,
+  pecahKunciRingkasan,
+  ALASAN_TERALOKASI,
+  ALASAN_TERPOSTING,
   CATATAN_MAX,
   KETERANGAN_MAX,
 } from './cash-mutation'
@@ -386,3 +393,102 @@ describe('buildCounterAccountJournalLines — kasus (b) COA lawan bebas', () => 
   })
 })
 
+
+
+// ══ S7: kunciMutasi — satu aturan untuk server, grid, dan form ═════════════
+describe('kunciMutasi', () => {
+  const dasarK = { jurnalStatus: null, jurnalDibalik: false, jumlahAlokasi: 0, tanggal: '2026-10-05', terkunciSampai: null } as const
+
+  it('bebas: tanpa jurnal / jurnal draf → tidak ada yang terkunci', () => {
+    expect(kunciMutasi(dasarK)).toEqual({ baris: null, kolom: {} })
+    expect(kunciMutasi({ ...dasarK, jurnalStatus: 'draft' })).toEqual({ baris: null, kolom: {} })
+  })
+
+  it('jurnal terposting & BELUM dibalik → seluruh baris terkunci (D42 tidak membukanya)', () => {
+    expect(kunciMutasi({ ...dasarK, jurnalStatus: 'posted' }).baris).toBe(ALASAN_TERPOSTING)
+  })
+
+  it('jurnal terposting yang SUDAH dibalik → terbuka (pembalikan membuka kunci)', () => {
+    expect(kunciMutasi({ ...dasarK, jurnalStatus: 'posted', jurnalDibalik: true })).toEqual({ baris: null, kolom: {} })
+  })
+
+  it('tanggal ≤ kunci periode → seluruh baris terkunci, batas inklusif', () => {
+    expect(kunciMutasi({ ...dasarK, terkunciSampai: '2026-10-05' }).baris).toContain('Periode terkunci')
+    expect(kunciMutasi({ ...dasarK, terkunciSampai: '2026-10-04' }).baris).toBeNull()
+  })
+
+  it('ada alokasi → hanya Masuk/Keluar terkunci', () => {
+    expect(kunciMutasi({ ...dasarK, jumlahAlokasi: 1 })).toEqual({ baris: null, kolom: { masuk: ALASAN_TERALOKASI, keluar: ALASAN_TERALOKASI } })
+  })
+})
+
+// ══ S7: jurnal ringkasan per (akun kas, akun lawan, tanggal) — D58 ═════════
+describe('buildDailySummaryJournalLines — bruto, ≤ 4 baris, seimbang', () => {
+  const KAS = AKUN_KAS
+  const LAWAN = AKUN_LAWAN
+
+  it('masuk & keluar di hari yang sama TIDAK dinetokan', () => {
+    const l = buildDailySummaryJournalLines({
+      akunKasId: KAS,
+      akunLawanId: LAWAN,
+      mutasi: [
+        { debit: '1000.00', kredit: '0' },
+        { debit: '250.50', kredit: '0' },
+        { debit: '0', kredit: '400.00' },
+      ],
+    })
+    expect(l.map(x => [x.masterCoaId, x.debit, x.kredit, x.lineOrder])).toEqual([
+      [KAS, '1250.50', '0.00', 0],
+      [LAWAN, '0.00', '1250.50', 1],
+      [LAWAN, '400.00', '0.00', 2],
+      [KAS, '0.00', '400.00', 3],
+    ])
+    expect(isBalanced(l)).toBe(true)
+  })
+
+  it('hanya keluar → 2 baris; tidak ada mutasi → tanpa baris', () => {
+    expect(buildDailySummaryJournalLines({ akunKasId: KAS, akunLawanId: LAWAN, mutasi: [{ debit: '0', kredit: '5' }] })).toHaveLength(2)
+    expect(buildDailySummaryJournalLines({ akunKasId: KAS, akunLawanId: LAWAN, mutasi: [] })).toEqual([])
+  })
+
+  it('Σ jurnal ringkasan per akun = Σ jurnal per baris, untuk SETIAP permutasi urutan baris', () => {
+    const mutasi = [
+      { debit: '0.10', kredit: '0' },
+      { debit: '0.20', kredit: '0' },
+      { debit: '0', kredit: '0.30' },
+      { debit: '999999999.99', kredit: '0' },
+      { debit: '0', kredit: '12345.67' },
+    ]
+    const perAkun = (lines: readonly { masterCoaId: string; debit: string; kredit: string }[]) => {
+      const m = new Map<string, number>()
+      for (const l of lines) {
+        const sen = Math.round(Number(l.debit) * 100) - Math.round(Number(l.kredit) * 100)
+        m.set(l.masterCoaId, (m.get(l.masterCoaId) ?? 0) + sen)
+      }
+      return Object.fromEntries([...m].sort())
+    }
+    const perBaris = perAkun(
+      mutasi.flatMap(x => buildCounterAccountJournalLines({ mutasi: x, akunKasId: KAS, akunLawanId: LAWAN }))
+    )
+    const permutasi = <T,>(xs: T[]): T[][] =>
+      xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutasi([...xs.slice(0, i), ...xs.slice(i + 1)]).map(p => [x, ...p]))
+    for (const urut of permutasi(mutasi)) {
+      const ringkas = buildDailySummaryJournalLines({ akunKasId: KAS, akunLawanId: LAWAN, mutasi: urut })
+      expect(perAkun(ringkas)).toEqual(perBaris)
+      expect(isBalanced(ringkas)).toBe(true)
+    }
+  })
+})
+
+describe('kunci ringkasan & mode jurnal', () => {
+  it('kunci = (akun kas, akun lawan, tanggal), bisa dipecah kembali', () => {
+    const k = kunciRingkasan({ akunKasId: 'a', akunLawanId: 'b', tanggal: '2026-10-05' })
+    expect(pecahKunciRingkasan(k)).toEqual({ akunKasId: 'a', akunLawanId: 'b', tanggal: '2026-10-05' })
+  })
+
+  it('alokasi MENANG atas akun lawan (D58: beralokasi tetap jurnal per mutasi)', () => {
+    expect(modeJurnalMutasi({ akunLawanId: 'x', jumlahAlokasi: 1 })).toBe('alokasi')
+    expect(modeJurnalMutasi({ akunLawanId: 'x', jumlahAlokasi: 0 })).toBe('ringkasan')
+    expect(modeJurnalMutasi({ akunLawanId: null, jumlahAlokasi: 0 })).toBe('tanpa')
+  })
+})

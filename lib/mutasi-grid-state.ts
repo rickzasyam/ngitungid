@@ -41,6 +41,7 @@ import {
   type SumberBlok,
 } from '@/lib/mutasi-draf'
 import { fromMinorUnits } from '@/lib/journal'
+import type { KunciBaris } from '@/lib/cash-mutation'
 import { tentukanArah, barisRantaiDariSel, type OrientasiBlok } from '@/lib/saldo-berantai'
 import { fmtTanggal } from '@/lib/ymd'
 
@@ -48,11 +49,8 @@ export const BATAS_RIWAYAT = 100
 
 export type AsalBaris = 'server' | 'ketik' | 'tempel' | 'berkas' | 'pdf'
 
-/** Kunci satu baris (S7 `kunciMutasi`): `baris` = seluruh baris + hapus; `kolom` = per kolom. */
-export type KunciBaris = {
-  baris: string | null
-  kolom: Partial<Record<KolomGrid, string>>
-}
+/** Kunci satu baris — definisinya milik `kunciMutasi` (lib/cash-mutation.ts, S7), satu aturan server & grid. */
+export type { KunciBaris }
 
 export const TANPA_KUNCI: KunciBaris = { baris: null, kolom: {} }
 

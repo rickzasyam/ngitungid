@@ -20,6 +20,7 @@
 
 import { fromMinorUnits, toMinorUnits, type JournalLineValue } from '@/lib/journal'
 import { isValidYmd } from '@/lib/contracts'
+import { fmtTanggal } from '@/lib/ymd'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -384,4 +385,116 @@ export function buildCounterAccountJournalLines({
   // arah dan terbalik di arah yang lain.
   const urut = uangMasuk ? [kas, lawan] : [lawan, kas]
   return urut.map((l, i): JournalLineValue => ({ ...l, lineOrder: i }))
+}
+
+// ── Kunci sunting mutasi (S7) — SATU aturan untuk server dan grid ──
+
+/** Kolom grid mutasi — sama dengan `KOLOM_GRID` di lib/mutasi-draf.ts. */
+export type KolomMutasi = 'tanggal' | 'uraian' | 'masuk' | 'keluar' | 'saldo' | 'akunLawan' | 'catatan'
+
+/** `baris` = seluruh baris (dan hapus) terkunci; `kolom` = alasan per kolom. */
+export type KunciBaris = {
+  baris: string | null
+  kolom: Partial<Record<KolomMutasi, string>>
+}
+
+export type InfoKunciMutasi = {
+  jurnalStatus: 'draft' | 'posted' | null
+  /** Jurnalnya terposting DAN dibalik (rantai pembalik terposting ganjil, D13). */
+  jurnalDibalik: boolean
+  jumlahAlokasi: number
+  /** Tanggal TERSIMPAN mutasi. */
+  tanggal: string
+  /** Kunci periode klien (D17), null = belum pernah dikunci. */
+  terkunciSampai: string | null
+}
+
+export const ALASAN_TERPOSTING =
+  'Jurnalnya sudah diposting — buat jurnal balik dan posting pembaliknya untuk mengubah baris ini.'
+export const ALASAN_TERALOKASI = 'Sudah dialokasikan ke invoice — hapus alokasinya dulu untuk mengubah nominal.'
+
+/**
+ * Apa yang terkunci pada satu mutasi TERSIMPAN (MP §5.G S7). Dipakai route
+ * batch (menolak), grid (meredupkan + reducer menolak), dan form satu-satu —
+ * satu aturan.
+ *
+ *   - jurnal terposting & BELUM dibalik → seluruh baris terkunci, termasuk
+ *     hapus. Setelan "posting bisa diedit" (D42) TIDAK membukanya: jurnal
+ *     mutasi bisa jadi jurnal RINGKASAN milik banyak baris, dan membangunnya
+ *     ulang di tempat akan mengubah angka terposting baris lain.
+ *   - jurnal terposting yang SUDAH dibalik → terbuka; penyuntingannya
+ *     melahirkan jurnal draf baru (`nasibJurnalModul` 'sudah-dibalik').
+ *   - tanggal ≤ kunci periode → seluruh baris terkunci.
+ *   - ada alokasi → Masuk/Keluar terkunci (alokasi tidak boleh melebihi nominal).
+ *
+ * Tanggal BARU yang jatuh di periode terkunci adalah galat sel, bukan kunci
+ * baris — diperiksa terpisah (validator grid & perencana server).
+ */
+export function kunciMutasi(i: InfoKunciMutasi): KunciBaris {
+  if (i.jurnalStatus === 'posted' && !i.jurnalDibalik) return { baris: ALASAN_TERPOSTING, kolom: {} }
+  if (i.terkunciSampai !== null && i.tanggal <= i.terkunciSampai) {
+    return { baris: `Periode terkunci s.d. ${fmtTanggal(i.terkunciSampai)}.`, kolom: {} }
+  }
+  if (i.jumlahAlokasi > 0) return { baris: null, kolom: { masuk: ALASAN_TERALOKASI, keluar: ALASAN_TERALOKASI } }
+  return { baris: null, kolom: {} }
+}
+
+// ── Jurnal ringkasan (D58) ───────────────────────────────────
+
+/**
+ * Kunci jurnal ringkasan: (akun kas, akun lawan, tanggal). Mutasi berakun-lawan
+ * TANPA alokasi berbagi satu jurnal draf per kunci; mutasi beralokasi tetap
+ * jurnal per mutasi (`buildAllocationJournalLines`).
+ */
+export function kunciRingkasan(m: { akunKasId: string; akunLawanId: string; tanggal: string }): string {
+  return `${m.akunKasId}|${m.akunLawanId}|${m.tanggal}`
+}
+
+export function pecahKunciRingkasan(k: string): { akunKasId: string; akunLawanId: string; tanggal: string } {
+  const [akunKasId, akunLawanId, tanggal] = k.split('|')
+  return { akunKasId, akunLawanId, tanggal }
+}
+
+/** Mode jurnal satu mutasi — DITURUNKAN, sama dengan `syncMutationJournal`: alokasi menang atas akun lawan. */
+export function modeJurnalMutasi(m: { akunLawanId: string | null; jumlahAlokasi: number }): 'alokasi' | 'ringkasan' | 'tanpa' {
+  if (m.jumlahAlokasi > 0) return 'alokasi'
+  return m.akunLawanId ? 'ringkasan' : 'tanpa'
+}
+
+/**
+ * Baris jurnal RINGKASAN satu kunci (D58) — BRUTO, tidak dinetokan:
+ *   uang masuk : D akun kas Σmasuk  / K akun lawan Σmasuk
+ *   uang keluar: D akun lawan Σkeluar / K akun kas Σkeluar
+ * Paling banyak 4 baris, selalu seimbang. Bruto karena buku besar akun kas
+ * harus memperlihatkan penerimaan dan pengeluaran hari itu — bukan selisihnya.
+ */
+export function buildDailySummaryJournalLines({
+  akunKasId,
+  akunLawanId,
+  mutasi,
+}: {
+  akunKasId: string
+  akunLawanId: string
+  mutasi: readonly MutasiLike[]
+}): JournalLineValue[] {
+  let masuk = 0
+  let keluar = 0
+  for (const m of mutasi) {
+    masuk += toMinorUnits(m?.debit) ?? 0
+    keluar += toMinorUnits(m?.kredit) ?? 0
+  }
+  const lines: Omit<JournalLineValue, 'lineOrder'>[] = []
+  if (masuk > 0) {
+    lines.push(
+      { masterCoaId: akunKasId, debit: fromMinorUnits(masuk), kredit: '0.00', keterangan: null },
+      { masterCoaId: akunLawanId, debit: '0.00', kredit: fromMinorUnits(masuk), keterangan: null }
+    )
+  }
+  if (keluar > 0) {
+    lines.push(
+      { masterCoaId: akunLawanId, debit: fromMinorUnits(keluar), kredit: '0.00', keterangan: null },
+      { masterCoaId: akunKasId, debit: '0.00', kredit: fromMinorUnits(keluar), keterangan: null }
+    )
+  }
+  return lines.map((l, i) => ({ ...l, lineOrder: i }))
 }
