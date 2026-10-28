@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { akunPpnMasukan, bolehEditPosting, diubahSetelahPosting } from './accounting-settings'
+import { akunPindahBuku, akunPpnMasukan, bolehEditPosting, diubahSetelahPosting } from './accounting-settings'
 
 // ══ PENJAGA BERDIRI: TIGA KEADAAN, DAN DUA DI ANTARANYA WAJIB SAMA ═══════
 // Permintaan eksplisit Ricko 2026-09-20. `client_accounting_settings` diisi
@@ -185,6 +185,35 @@ describe('route setelan pembukuan — baca internal, tulis akunting', () => {
     // UPDATE saja akan diam-diam tidak melakukan apa pun untuk klien yang
     // belum punya baris, dan UI menampilkan nilai yang dikiranya tersimpan.
     expect(potong('PATCH')).toContain('onConflictDoUpdate(')
+  })
+})
+
+describe('akun Pindah Buku (D59, 0021)', () => {
+  it('null saat belum disetel — panel meminta setelan, tidak menebak akun', () => {
+    expect(akunPindahBuku(null)).toBeNull()
+    expect(akunPindahBuku({})).toBeNull()
+    expect(akunPindahBuku({ akunPindahBukuId: 'x' })).toBe('x')
+  })
+
+  const potong = (m: string) => {
+    const mulai = SETTINGS_ROUTE.indexOf(`export async function ${m}(`)
+    const berikut = SETTINGS_ROUTE.indexOf('export async function', mulai + 1)
+    return SETTINGS_ROUTE.slice(mulai, berikut > -1 ? berikut : undefined)
+  }
+
+  it('GET mengembalikan akunPindahBukuId; PATCH menulisnya lewat upsert yang sama', () => {
+    expect(potong('GET')).toContain('akunPindahBukuId: row?.akunPindahBukuId ?? null')
+    expect(potong('PATCH')).toContain('set: { akunPpnMasukanId, akunPindahBukuId, postingBisaDiedit')
+  })
+
+  it('akun yang dikirim harus milik klien DAN bukan akun kas — diperiksa sebelum menulis', () => {
+    const patch = potong('PATCH')
+    const milik = patch.indexOf('assertAccountBelongsToClient(akunPindahBukuId, id)')
+    const bukanKas = patch.indexOf('loadCashAccount(id, akunPindahBukuId)')
+    const tulis = patch.indexOf('.insert(clientAccountingSettings)')
+    expect(milik).toBeGreaterThan(-1)
+    expect(bukanKas).toBeGreaterThan(milik)
+    expect(tulis).toBeGreaterThan(bukanKas)
   })
 })
 
