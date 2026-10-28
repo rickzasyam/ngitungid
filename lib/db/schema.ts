@@ -808,6 +808,13 @@ export const clientAccountingSettings = pgTable('client_accounting_settings', {
   akunPpnMasukanId: uuid('akun_ppn_masukan_id').references(() => masterCoa.id, {
     onDelete: 'set null',
   }),
+  // Akun Pindah Buku (D59, migrasi 0021) — perantara transfer antar akun kas
+  // klien. SET NULL dengan alasan yang sama dengan akun PPN Masukan: ia setelan,
+  // bukan pencatatan; mutasi yang sudah memakainya memegang akunnya sendiri di
+  // `akun_lawan_id`. Kosong = panel Pindah Buku meminta disetel dulu.
+  akunPindahBukuId: uuid('akun_pindah_buku_id').references(() => masterCoa.id, {
+    onDelete: 'set null',
+  }),
   // D42, bawaan FALSE — keputusan Ricko 2026-09-20: angka yang sudah diserahkan
   // ke klien tidak boleh berubah diam-diam. Dinyalakan per klien bila memang
   // dibutuhkan, dan kunci periode tetap mengalahkannya.
@@ -997,8 +1004,12 @@ export const cashMutations = pgTable(
     keterangan: text('keterangan'),
     debit: numeric('debit', { precision: 18, scale: 2 }).notNull().default('0'),
     kredit: numeric('kredit', { precision: 18, scale: 2 }).notNull().default('0'),
-    // Saldo berjalan dari rekening koran. INFORMATIF — tidak pernah dipakai
-    // menghitung apa pun; saldo yang berlaku tetap datang dari buku besar.
+    // Saldo yang DICETAK BANK di rekening koran — FAKTA DOKUMEN, setara
+    // `tanggal` dan `keterangan`, bukan saldo hasil hitungan kita (MP §5.G
+    // kotak P4). Karena itu tidak melanggar P4: tidak pernah dipakai menghitung
+    // saldo buku, tidak diperbarui saat mutasi lain berubah, dan gunanya justru
+    // PEMBANDING independen — rantai saldo grid (D50) dan, kelak, rekonsiliasi
+    // bank. Saldo yang berlaku tetap datang dari buku besar.
     saldo: numeric('saldo', { precision: 18, scale: 2 }),
     fingerprint: text('fingerprint').notNull(),
     // Baris manual = NULL. SET NULL supaya menghapus catatan impor tidak ikut
@@ -1006,6 +1017,17 @@ export const cashMutations = pgTable(
     importId: uuid('import_id').references(() => cashMutationImports.id, { onDelete: 'set null' }),
     akunLawanId: uuid('akun_lawan_id').references(() => masterCoa.id, { onDelete: 'set null' }),
     journalId: uuid('journal_id').references(() => journalEntries.id, { onDelete: 'set null' }),
+    // ── Migrasi 0021 (D49) ─────────────────────────────────────
+    // Posisi baris dalam SATU Simpan. Insert massal memberi `created_at` yang
+    // sama dan `id` acak, jadi tanpa kolom ini urutan rekening koran dalam satu
+    // hari HILANG begitu disimpan — padahal rantai saldo (D50) di mode sunting
+    // membutuhkannya. Urutan baku: tanggal, created_at, urutan, id. Baris lama
+    // = NULL (tidak di-backfill).
+    urutan: integer('urutan'),
+    // Konfirmasi/Reff di template akuntan. ≤ 500 karakter (validateCashMutation)
+    // dan TIDAK ikut fingerprint: catatan yang ditambahkan belakangan tidak
+    // boleh membuat baris yang sama tampak berbeda bagi pemeriksa duplikat.
+    catatan: text('catatan'),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
@@ -1024,6 +1046,7 @@ export const cashMutations = pgTable(
       'cash_mutations_debit_kredit_check',
       sql`${table.debit} >= 0 AND ${table.kredit} >= 0 AND ((${table.debit} = 0) <> (${table.kredit} = 0))`
     ),
+    check('cash_mutations_urutan_check', sql`${table.urutan} IS NULL OR ${table.urutan} >= 1`),
   ]
 )
 
@@ -1075,6 +1098,58 @@ export const cashMutationAllocations = pgTable(
     check(
       'cash_mutation_allocations_termin_check',
       sql`${table.terminUrutan} IS NULL OR ${table.terminUrutan} >= 1`
+    ),
+  ]
+)
+
+// ── cash_mutation_rules (0021) ───────────────────────────────
+// Aturan akun lawan "uraian mengandung X → akun Y" per klien (D57) —
+// `bank_mapping_rules` yang ditunda (§3.5/§8.8) dihidupkan kembali dengan nama
+// yang mengikuti D35.
+//
+// ══ HASILNYA USULAN, BUKAN KEPUTUSAN ═════════════════════════════════════
+// Aturan tidak pernah menulis `akun_lawan_id` sendiri: usulannya baru masuk
+// sel grid lewat "Terapkan usulan" (D10/D57). Karena itu tabel ini tidak
+// punya kaitan ke mutasi mana pun — mengubah atau menghapus aturan tidak
+// mengubah satu baris tersimpan.
+//
+// ══ POLA DICOCOKKAN TANPA RegExp (D22) ═══════════════════════════════════
+// `pola` disimpan apa adanya (2..100 karakter, ditegakkan route) dan
+// dicocokkan sebagai `normalizeKeterangan(uraian).includes(normalizeKeterangan(pola))`
+// — pola dari pengguna yang dijalankan sebagai RegExp adalah celah ReDoS.
+// Tanpa unique pada pola: pola sama dengan arah berbeda itu sah.
+//
+// ══ KEDUA AKUN RESTRICT ══════════════════════════════════════════════════
+// Ganti-massal Master COA menyambungnya by kode dan MEMBLOKIR 409 bila
+// kodenya hilang (buildReplacePlan, §8.15) — aturan yang kehilangan akunnya
+// diam-diam akan berhenti mengusulkan tanpa ada yang tahu kenapa.
+export const cashMutationRules = pgTable(
+  'cash_mutation_rules',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    pola: text('pola').notNull(),
+    arah: text('arah').notNull().default('keduanya'),
+    akunLawanId: uuid('akun_lawan_id')
+      .notNull()
+      .references(() => masterCoa.id, { onDelete: 'restrict' }),
+    // NULL = berlaku untuk semua akun kas klien.
+    akunKasId: uuid('akun_kas_id').references(() => masterCoa.id, { onDelete: 'restrict' }),
+    prioritas: integer('prioritas').notNull().default(0),
+    aktif: boolean('aktif').notNull().default(true),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('cash_mutation_rules_client_aktif_idx').on(table.clientId, table.aktif),
+    check(
+      'cash_mutation_rules_arah_check',
+      sql`${table.arah} IN ('masuk', 'keluar', 'keduanya')`
     ),
   ]
 )
@@ -1217,9 +1292,29 @@ export const clientAccountingSettingsRelations = relations(
     akunPpnMasukan: one(masterCoa, {
       fields: [clientAccountingSettings.akunPpnMasukanId],
       references: [masterCoa.id],
+      relationName: 'setelanAkunPpnMasukan',
+    }),
+    akunPindahBuku: one(masterCoa, {
+      fields: [clientAccountingSettings.akunPindahBukuId],
+      references: [masterCoa.id],
+      relationName: 'setelanAkunPindahBuku',
     }),
   })
 )
+
+export const cashMutationRulesRelations = relations(cashMutationRules, ({ one }) => ({
+  client: one(clients, { fields: [cashMutationRules.clientId], references: [clients.id] }),
+  akunLawan: one(masterCoa, {
+    fields: [cashMutationRules.akunLawanId],
+    references: [masterCoa.id],
+    relationName: 'aturanAkunLawan',
+  }),
+  akunKas: one(masterCoa, {
+    fields: [cashMutationRules.akunKasId],
+    references: [masterCoa.id],
+    relationName: 'aturanAkunKas',
+  }),
+}))
 
 export const cashMutationImportsRelations = relations(cashMutationImports, ({ one, many }) => ({
   client: one(clients, { fields: [cashMutationImports.clientId], references: [clients.id] }),
