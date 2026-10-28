@@ -9,6 +9,7 @@ import {
   mutationStatus,
   normalizeKeterangan,
   validateCashMutation,
+  CATATAN_MAX,
   KETERANGAN_MAX,
 } from './cash-mutation'
 import { isBalanced, computeTotals } from './journal'
@@ -104,6 +105,20 @@ describe('validateCashMutation — field lain', () => {
     const r = validateCashMutation({ ...dasar, debit: '1' })
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.value.saldo).toBeNull()
+  })
+
+  it('catatan (0021): kosong → NULL, terlalu panjang ditolak, TIDAK ikut fingerprint', () => {
+    const kosong = validateCashMutation({ ...dasar, debit: '1', catatan: '  ' })
+    expect(kosong.ok && kosong.value.catatan).toBeNull()
+    const isi = validateCashMutation({ ...dasar, debit: '1', catatan: ' Reff 123 ' })
+    expect(isi.ok && isi.value.catatan).toBe('Reff 123')
+    const panjang = validateCashMutation({ ...dasar, debit: '1', catatan: 'x'.repeat(CATATAN_MAX + 1) })
+    expect(panjang.ok).toBe(false)
+    if (!panjang.ok) expect(panjang.errors.join(' ')).toContain(String(CATATAN_MAX))
+    // Catatan yang ditambahkan belakangan tidak boleh membuat baris yang sama
+    // tampak berbeda bagi pemeriksa duplikat.
+    const m = { tanggal: '2026-09-21', debit: '1', kredit: '0', keterangan: 'TRF' }
+    expect(fingerprintMutasi({ ...m, catatan: 'A' } as typeof m)).toBe(fingerprintMutasi(m))
   })
 
   it('akunLawanId yang bukan uuid diabaikan jadi null, tidak menggagalkan barisnya', () => {

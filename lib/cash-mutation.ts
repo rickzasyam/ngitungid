@@ -24,6 +24,8 @@ import { isValidYmd } from '@/lib/contracts'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const KETERANGAN_MAX = 500
+/** Kolom catatan (Konfirmasi/Reff template akuntan, 0021). Tidak ikut fingerprint. */
+export const CATATAN_MAX = 500
 
 // ── Validasi ─────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ export type CashMutationInput = {
   keterangan?: unknown
   saldo?: unknown
   akunLawanId?: unknown
+  catatan?: unknown
 }
 
 export type CashMutationValue = {
@@ -46,6 +49,7 @@ export type CashMutationValue = {
   keterangan: string | null
   saldo: string | null
   akunLawanId: string | null
+  catatan: string | null
 }
 
 export type CashMutationCheck =
@@ -121,6 +125,12 @@ export function validateCashMutation(input: CashMutationInput): CashMutationChec
       ? input.akunLawanId.trim()
       : null
 
+  let catatan: string | null = null
+  if (typeof input.catatan === 'string' && input.catatan.trim() !== '') {
+    catatan = input.catatan.trim()
+    if (catatan.length > CATATAN_MAX) errors.push(`Catatan maksimal ${CATATAN_MAX} karakter.`)
+  }
+
   if (errors.length > 0) return { ok: false, errors }
 
   return {
@@ -133,6 +143,7 @@ export function validateCashMutation(input: CashMutationInput): CashMutationChec
       keterangan,
       saldo,
       akunLawanId,
+      catatan,
     },
   }
 }
