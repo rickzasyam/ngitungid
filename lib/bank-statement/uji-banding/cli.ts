@@ -64,7 +64,7 @@ async function main() {
       const ai = p === 'tiruan' ? await penyediaSempurna(d) : p
       hasil.push(await ujiDokumen(ai, d, kesinambunganSementara, { timeoutMs: 120_000 }))
       const h = hasil[hasil.length - 1]
-      console.error(`  ${spek} · ${d.nama}: ${h.kesinambungan === 'tanpa-saldo' ? 'tanpa kolom saldo (tidak diperiksa)' : h.lolosTanpaKoreksi ? 'lolos' : 'TIDAK lolos'}`)
+      console.error(`  ${spek} · ${d.nama}: ${h.kesinambungan === 'tanpa-saldo' ? 'tanpa kolom saldo (tidak diperiksa)' : h.lolosTanpaKoreksi ? 'lolos' : 'TIDAK lolos'}${h.halamanGagal.length ? ` · halaman gagal: ${h.halamanGagal.map(g => `${g.halaman}=${g.jenis}`).join(', ')}` : ''}`)
     }
     const info = p === 'tiruan' ? { nama: 'tiruan', model: 'jawaban-sempurna' } : p
     ringkasan.push(rangkumUji(info as AiProvider, hasil, harga.get(info.nama)))

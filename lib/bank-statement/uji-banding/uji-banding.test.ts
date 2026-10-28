@@ -86,6 +86,11 @@ describe('ujiDokumen', () => {
     const kuota: AiProvider = { nama: 'gemini', model: 'm', mintaJson: async () => { throw Object.assign(new Error('x'), { status: 429 }) } }
     const r = await ujiDokumen(kuota, d, kesinambunganSementara)
     expect(r.halamanGagal).toEqual([{ halaman: 1, jenis: 'penyedia-kuota' }, { halaman: 2, jenis: 'penyedia-kuota' }])
+    // Semua halaman gagal ≠ "tanpa saldo": dokumen bersaldo tetap masuk penyebut % lolos.
+    expect(r.kesinambungan).toBe('putus')
+    expect(rangkumUji(kuota, [r])).toMatchObject({ dokumenBersaldo: 1, persenLolosTanpaKoreksi: 0 })
+    const ts = dokumenTanpaSaldo()
+    expect((await ujiDokumen(kuota, ts, kesinambunganSementara)).kesinambungan).toBe('tanpa-saldo')
     const s = dokumenSebagianScan()
     const r2 = await ujiDokumen(await penyediaSempurna(s), s, kesinambunganSementara)
     expect(r2.halamanGagal).toEqual([{ halaman: 2, jenis: 'gambar-tidak-didukung-harness' }])

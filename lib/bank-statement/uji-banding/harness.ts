@@ -92,7 +92,12 @@ export async function ujiDokumen(
   for (const [k, n] of kebenaran) barisHilang += Math.max(0, n - (keluaran.get(k) ?? 0))
   for (const [k, n] of keluaran) barisLebih += Math.max(0, n - (kebenaran.get(k) ?? 0))
 
-  const kesinambungan = pemeriksa(dokumen)
+  // Dokumen bersaldo atau tidak ditentukan KEBENARANNYA, bukan keluaran: dokumen
+  // yang semua halamannya gagal (atau saldonya hilang) tidak boleh keluar dari
+  // penyebut % lolos sebagai "tanpa saldo" — itu menggelembungkan angkanya.
+  const keluaranSaldo = pemeriksa(dokumen)
+  const kesinambungan: HasilKesinambungan =
+    pemeriksa(d.kebenaran) === 'tanpa-saldo' ? 'tanpa-saldo' : keluaranSaldo === 'tanpa-saldo' ? 'putus' : keluaranSaldo
   return {
     nama: d.nama,
     jumlahHalaman: doc.jumlahHalaman,
