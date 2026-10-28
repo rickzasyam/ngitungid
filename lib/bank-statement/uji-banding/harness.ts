@@ -169,7 +169,11 @@ export function rangkumUji(ai: Pick<AiProvider, 'nama' | 'model'>, hasil: HasilD
 /** Laporan AGREGAT (tanpa isi baris) — bentuk yang boleh dicatat di docs. */
 export function laporanMarkdown(r: Ringkasan[], catatan: { tanggal: string; pemeriksa: string; dokumen: string }): string {
   const baris = r.map(x =>
-    [
+    // Belum ada satu dokumen pun (mis. kuota harian habis): "0%" dan "0 USD"
+    // akan terbaca sebagai hasil, padahal belum ada yang diukur.
+    x.dokumen === 0
+      ? [`${x.penyedia} · ${x.model}`, ...Array<string>(7).fill('belum diuji')].join(' | ')
+      : [
       `${x.penyedia} · ${x.model}`,
       `${x.persenLolosTanpaKoreksi}% (${x.dokumenBersaldo} dok. bersaldo)`,
       `${x.persenIdentik}%`,
@@ -178,7 +182,7 @@ export function laporanMarkdown(r: Ringkasan[], catatan: { tanggal: string; peme
       `${x.msPerHalaman} ms`,
       `${x.tokenPerDokumen.masuk} / ${x.tokenPerDokumen.keluar}`,
       x.biayaPerDokumen ? `${x.biayaPerDokumen.nilai} ${x.biayaPerDokumen.mataUang} (harga ${x.biayaPerDokumen.tanggalHarga})` : 'harga belum diisi',
-    ].join(' | ')
+        ].join(' | ')
   )
   return [
     `# Uji banding ekstraksi rekening koran — DOKUMEN SINTETIS (${catatan.tanggal})`,

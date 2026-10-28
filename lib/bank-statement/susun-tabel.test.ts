@@ -47,6 +47,32 @@ describe('jawaban benar → HalamanMentah PERSIS kebenaran', () => {
     })
   }
 
+  // Bentuk yang diminta prompt sejak uji banding 2026-10-28: AI mencatat nomor
+  // baris lanjutan, KODE yang menggabung teksnya. Hasilnya harus sama persis.
+  it('uraian = bagian baris pertama saja + barisLanjutan → hasil SAMA PERSIS kebenaran', async () => {
+    const rapat = (s: string) => s.split(' ').filter(t => t !== '').join(' ')
+    for (const d of [dokumenSatuKolom(), dokumenLanjutanLintasHalaman(), dokumenAcak(7), dokumenAcak(8, 60)]) {
+      let dipotong = 0
+      const bagianPertama = (hal: number, baris: string[]) =>
+        penyediaTiruan(() => {
+          const j = jawabanSempurna(d, hal, baris)
+          return JSON.stringify({
+            ...j,
+            baris: j.baris.map(b => {
+              if (b.barisLanjutan.length === 0) return b
+              const ekor = b.barisLanjutan.map(n => rapat(baris[n - 1])).join(' ')
+              expect(b.uraian.endsWith(` ${ekor}`), d.nama).toBe(true)
+              dipotong++
+              return { ...b, uraian: b.uraian.slice(0, b.uraian.length - ekor.length - 1) }
+            }),
+          })
+        })
+      const perHalaman = await susunDokumen(d, bagianPertama)
+      expect(dipotong, d.nama).toBeGreaterThan(0)
+      expect(perHalaman, d.nama).toEqual(d.kebenaranHalaman)
+    }
+  })
+
   it('uraian terlipat digabung: teks apa adanya, disambung satu spasi', async () => {
     const satu = await susunDokumen(dokumenSatuKolom(), sempurna(dokumenSatuKolom()))
     expect(satu[0].baris.map(b => b.uraian)).toContain('TRSF E-BANKING DB UJI-B-001 SEWA KANTOR')
@@ -148,13 +174,54 @@ describe('penjaga bentuk menolak jawaban rusak — halaman gagal terlihat', asyn
     ['lanjutan dikirim sebagai baris sendiri', j => ({ ...j, baris: j.baris.flatMap(b => b.barisLanjutan.length === 0 ? [b] : [{ ...b, uraian: 'TRSF E-BANKING DB', barisLanjutan: [] }, { nomorBaris: b.barisLanjutan[0], tanggal: '', uraian: 'UJI-B-001 SEWA KANTOR', nominalPertama: '', nominalKedua: '', penanda: '', saldo: '', lain: [], barisLanjutan: [] }]).slice(0, 4) }), 'lanjutan uraian tidak digabung'],
     ['digabung tanpa spasi', j => ({ ...j, baris: j.baris.map(b => (b.uraian === 'TRSF E-BANKING DB UJI-B-001 SEWA KANTOR' ? { ...b, uraian: 'TRSF E-BANKING DBUJI-B-001 SEWA KANTOR' } : b)) }), 'uraian gabungan tidak sama persis'],
     ['digabung tapi baris lanjutannya tidak dicatat', j => ({ ...j, baris: j.baris.map(b => ({ ...b, barisLanjutan: [] })) }), 'terlewat'],
-    ['lanjutan dicatat tapi tidak digabung ke uraian', j => ({ ...j, baris: j.baris.map(b => (b.barisLanjutan.length > 0 ? { ...b, uraian: 'TRSF E-BANKING DB' } : b)) }), 'uraian gabungan tidak sama persis'],
+    ['uraian digabung SEBAGIAN (lanjutan kedua hilang)', j => ({ ...j, baris: j.baris.map(b => (b.barisLanjutan.length > 0 ? { ...b, uraian: `${b.uraian.split(' ').slice(0, -1).join(' ')}`, barisLanjutan: b.barisLanjutan } : b)) }), 'uraian gabungan tidak sama persis'],
+    ['uraian berisi teks yang tidak tercetak', j => ({ ...j, baris: j.baris.map(b => (b.barisLanjutan.length > 0 ? { ...b, uraian: 'TRSF E-BANKING DB KARANGAN' } : b)) }), 'uraian gabungan tidak sama persis'],
     ['barisLanjutan menunjuk baris transaksi berikutnya', j => ({ ...j, baris: j.baris.map((b, i, all) => (b.barisLanjutan.length > 0 ? { ...b, barisLanjutan: [all[i + 1].nomorBaris] } : b)) }), 'tidak urut/ganda'],
     ['urutan bagian uraian gabungan dibalik', j => ({ ...j, baris: j.baris.map(b => (b.barisLanjutan.length > 0 && b.uraian.startsWith('TRSF E-BANKING DB') ? { ...b, uraian: 'UJI-B-001 SEWA KANTOR TRSF E-BANKING DB' } : b)) }), 'uraian gabungan tidak sama persis'],
   ]
   for (const [nama, rusak, pesan] of kasus) {
     it(nama, () => expect(tolak(rusak(baik()))).toContain(pesan))
   }
+
+  // Uji banding 2026-10-28 (Flash-Lite): saldo SALDO AWAL ditaruh di Kredit.
+  // Kesinambungan meloloskannya (baris pertama tidak punya pembanding), padahal
+  // di grid ia menjadi mutasi masuk karangan. Halaman berjudul: posisi menolaknya.
+  it('dua kolom: angka di kolom yang tidak sejajar dengan judulnya ditolak', () => {
+    const j = jawabanSempurna(dd, 1, bd1)
+    const saldoAwal = j.baris.findIndex(b => b.uraian === 'SALDO AWAL')
+    expect(saldoAwal).toBeGreaterThanOrEqual(0)
+    const keKredit = { ...j, baris: j.baris.map((b, i) => (i === saldoAwal ? { ...b, nominalKedua: b.saldo, saldo: '' } : b)) }
+    expect(tolak(keKredit, md)).toContain(`baris ke-${saldoAwal + 1}: sel nominal kedua tidak sejajar`)
+    // Debet ↔ Kredit tertukar di satu baris transaksi — dulu hanya tertangkap kesinambungan.
+    const t = j.baris.findIndex(b => b.nominalPertama !== '')
+    const tukar = { ...j, baris: j.baris.map((b, i) => (i === t ? { ...b, nominalPertama: b.nominalKedua, nominalKedua: b.nominalPertama } : b)) }
+    expect(tolak(tukar, md)).toContain(`baris ke-${t + 1}: sel nominal kedua tidak sejajar`)
+    // Satu kolom: saldo ditaruh di MUTASI.
+    const s1 = baik()
+    const k = s1.baris.findIndex(b => b.nominalPertama !== '' && b.saldo !== '')
+    expect(tolak({ ...s1, baris: s1.baris.map((b, i) => (i === k ? { ...b, nominalPertama: b.saldo, saldo: b.nominalPertama } : b)) })).toContain('tidak sejajar')
+  })
+
+  // Angka rata KANAN yang lebar: tepi kirinya lebih dekat ke judul Debet, tapi
+  // rentangnya menempel judul Kredit. Yang dihitung jarak RENTANG, bukan tepi kiri.
+  it('sejajar = jarak rentang terhadap judul, bukan jarak tepi kiri', () => {
+    const di = (teks: string, akhir: number, baris = '') => baris.padEnd(akhir - teks.length, ' ') + teks
+    const judul = di('Saldo', 78, di('Kredit', 60, di('Debet', 45, 'Tanggal   Keterangan')))
+    const angka = '890.000.000,00'
+    const baris = di('9.999.999,00', 78, di(angka, 60, '01/10     UJI-B BESAR'))
+    expect(judul.indexOf('Debet')).toBe(40)
+    expect(baris.indexOf(angka)).toBe(46) // |46-40| < |46-54|: tepi kiri memilih Debet
+    const g: MasukanSusun = { halaman: 1, sumber: { jenis: 'teks', baris: [judul, baris] }, kolomSebelumnya: [] }
+    const j = (pertama: string, kedua: string): JawabanSusun => ({
+      periodeTeks: '',
+      nomorBarisJudul: 1,
+      kolom: ['Tanggal', 'Keterangan', 'Debet', 'Kredit', 'Saldo'],
+      peranKolom: { tanggal: 'Tanggal', uraian: 'Keterangan', nominalPertama: 'Debet', nominalKedua: 'Kredit', saldo: 'Saldo' },
+      baris: [{ nomorBaris: 2, tanggal: '01/10', uraian: 'UJI-B BESAR', nominalPertama: pertama, nominalKedua: kedua, penanda: '', saldo: '9.999.999,00', lain: [], barisLanjutan: [] }],
+    })
+    expect(periksaJawaban(JSON.stringify(j('', angka)), g).baris[0].nominal).toMatchObject({ kedua: { judul: 'Kredit', teks: angka } })
+    expect(tolak(j(angka, ''), g)).toContain('sel nominal pertama tidak sejajar')
+  })
 
   it('dua kolom: penanda DB/CR pada tabel Debet/Kredit ditolak', () => {
     const j = jawabanSempurna(dd, 1, bd1)

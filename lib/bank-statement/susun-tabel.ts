@@ -15,9 +15,13 @@ import type { BarisMentah, HalamanMentah, NominalMentah } from '@/lib/mutasi-kas
 //    mundur/ganda, ada baris tercetak yang terlewat di tengah tabel, sel tidak
 //    tersalin persis, atau ada teks tercetak di baris itu yang tidak masuk sel
 //    mana pun (nominal/saldo yang hilang tidak pernah lolos diam-diam);
-//  - uraian yang terlipat tidak digabung ke transaksinya, atau gabungannya
-//    tidak sama persis dengan baris-baris lanjutannya;
-//  - judul yang dipakai tidak tercetak (di halaman ini atau sebelumnya).
+//  - lanjutan uraian yang terlipat dikirim sebagai entri sendiri (bukan
+//    dicatat di `barisLanjutan` transaksinya), atau `uraian` bukan bagian baris
+//    pertama saja maupun gabungan persis dengan baris-baris lanjutannya;
+//  - judul yang dipakai tidak tercetak (di halaman ini atau sebelumnya);
+//  - (halaman yang mencetak judul) angka Debet/Kredit/Saldo tidak sejajar
+//    dengan judul kolomnya — mis. saldo SALDO AWAL ditaruh di kolom Kredit,
+//    kesalahan yang lolos kesinambungan saldo (uji banding 2026-10-28).
 // Halaman dari GAMBAR tidak punya teks pembanding: hanya bentuknya yang
 // diperiksa; pemanggil (X5) menandainya "dibaca dari gambar".
 //
@@ -93,7 +97,7 @@ export type BarisAi = {
   penanda: string
   saldo: string
   lain: { judul: string; teks: string }[]
-  /** Nomor baris tercetak lanjutan uraian yang sudah digabung ke `uraian`, urut naik. */
+  /** Nomor baris tercetak lanjutan uraian transaksi ini, urut naik. Kode yang menggabungkannya ke `uraian`. */
   barisLanjutan: number[]
 }
 export type JawabanSusun = { periodeTeks: string; nomorBarisJudul: number; kolom: string[]; peranKolom: PeranKolom; baris: BarisAi[] }
@@ -102,14 +106,15 @@ export const PROMPT_SISTEM = `Kamu penyusun tabel rekening koran. Tugasmu HANYA 
 
 Aturan:
 1. Salin setiap sel PERSIS seperti tercetak, karakter demi karakter: titik, koma, tanda minus, kurung, huruf besar/kecil. Jangan mengubah format angka atau tanggal, jangan menambah tahun, jangan membuang pemisah ribuan.
-2. Satu TRANSAKSI tercetak = satu entri "baris", termasuk baris SALDO AWAL, SALDO AKHIR, dan TOTAL. Uraian yang terlipat ke baris tercetak berikutnya (baris yang SELURUH isinya lanjutan uraian) DIGABUNG ke "uraian" transaksinya: teks apa adanya, disambung dengan satu spasi, urut dari atas; nomor baris-baris lanjutan itu dicatat di "barisLanjutan" ([] bila tidak ada). Bila baris tabel PERTAMA di halaman ini adalah lanjutan uraian transaksi dari halaman sebelumnya, kirim sebagai entri sendiri yang hanya berisi "uraian". Jangan memecah satu baris tercetak, dan jangan melewatkan baris apa pun di antara baris tabel pertama dan terakhir.
+2. Satu TRANSAKSI tercetak = satu entri "baris", termasuk baris SALDO AWAL, SALDO AKHIR, dan TOTAL. Uraian yang terlipat ke baris tercetak berikutnya (baris yang SELURUH isinya lanjutan uraian) BUKAN entri sendiri: catat nomor baris-baris lanjutan itu di "barisLanjutan" transaksinya, urut dari atas ([] bila tidak ada). "uraian" cukup berisi bagian uraian yang tercetak di baris PERTAMA transaksi itu — teks baris lanjutan digabung oleh kode, jangan disalin. Bila baris tabel PERTAMA di halaman ini adalah lanjutan uraian transaksi dari halaman sebelumnya, kirim sebagai entri sendiri yang hanya berisi "uraian". Jangan memecah satu baris tercetak, dan jangan melewatkan baris apa pun di antara baris tabel pertama dan terakhir.
 3. Kop surat, nama bank, alamat, nomor rekening, keterangan periode, dan nomor halaman di luar tabel BUKAN entri "baris".
 4. "nomorBarisJudul": nomor baris judul kolom tabel di halaman ini; 0 bila halaman ini tidak mencetak judul kolom. Baris judul BUKAN entri "baris". "kolom": judul kolom persis seperti tercetak, kiri ke kanan; [] bila tidak tercetak.
 5. "peranKolom": judul kolom (persis seperti di "kolom", atau dari JUDUL HALAMAN SEBELUMNYA bila halaman ini tidak mencetak judul) untuk tanggal, uraian/keterangan, nominal pertama (kolom nominal paling KIRI), nominal kedua (kolom nominal di sebelah kanannya; "" bila hanya ada satu kolom nominal), dan saldo ("" bila tidak ada). Jangan menilai arti "Debet", "Kredit", "Masuk", atau "Keluar" — yang menentukan hanya posisinya, kiri atau kanan.
 6. Satu kolom nominal yang diikuti penanda seperti "DB"/"CR": angkanya ke "nominalPertama", penandanya ke "penanda" persis seperti tercetak ("" bila tidak ada). Dua kolom nominal: angka masuk ke kolom yang SEJAJAR TEGAK di bawah judulnya; sel yang kosong diisi "".
+   Kolom setiap angka ditentukan POSISI mendatarnya (bandingkan kolom karakternya dengan posisi judul), bukan urutan angka di baris itu: baris yang hanya mencetak SATU angka (mis. SALDO AWAL) tetap menaruh angka itu di kolom yang sejajar dengannya — angka di bawah judul saldo masuk "saldo" walau kolom nominal kosong.
 7. Kolom lain (No. Ref, Cabang, Teller, dst.) masuk "lain" sebagai {judul, teks}, judulnya persis seperti tercetak; sel kosong tidak perlu dimasukkan.
 8. "periodeTeks": teks periode persis seperti tercetak (mis. "PERIODE : OKTOBER 2026"); "" bila tidak ada di halaman ini.
-9. Setiap teks yang tercetak di sebuah baris tabel harus masuk ke salah satu sel baris itu, atau ke uraian gabungan bila baris itu lanjutan uraian.
+9. Setiap teks yang tercetak di sebuah baris tabel harus masuk ke salah satu sel baris itu, atau nomor baris itu tercatat di "barisLanjutan" bila baris itu lanjutan uraian.
 
 Kembalikan HANYA objek JSON sesuai skema.`
 
@@ -133,6 +138,34 @@ function token(s: string): string[] {
   return s.split(' ').filter(t => t !== '')
 }
 const rapat = (s: string) => token(s).join(' ')
+
+type Rentang = [number, number]
+
+/** Rentang karakter [awal, akhir) setiap kemunculan `cari` sebagai potongan utuh (dibatasi spasi/tepi) di baris tata. */
+function rentangDi(baris: string, cari: string): Rentang[] {
+  const out: Rentang[] = []
+  if (cari === '') return out
+  for (let i = baris.indexOf(cari); i >= 0; i = baris.indexOf(cari, i + 1)) {
+    const akhir = i + cari.length
+    if ((i === 0 || baris[i - 1] === ' ') && (akhir === baris.length || baris[akhir] === ' ')) out.push([i, akhir])
+  }
+  return out
+}
+
+const jarak = (a: Rentang, b: Rentang) => Math.max(0, Math.max(a[0], b[0]) - Math.min(a[1], b[1]))
+
+/** Posisi tiap judul di baris judul, dicari kiri→kanan; null bila ada yang tidak ketemu persis (pemeriksaan posisi dilewati). */
+function posisiJudul(barisJudul: string, kolom: string[]): { judul: string; rentang: Rentang }[] | null {
+  const out: { judul: string; rentang: Rentang }[] = []
+  let dari = 0
+  for (const k of kolom) {
+    const r = rentangDi(barisJudul, k).find(x => x[0] >= dari)
+    if (!r) return null
+    out.push({ judul: k, rentang: r })
+    dari = r[1]
+  }
+  return out
+}
 
 function bentukJawaban(j: unknown, masalah: string[]): JawabanSusun | null {
   if (!objek(j)) return masalah.push('jawaban bukan objek JSON'), null
@@ -196,6 +229,12 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
   }
   if (berteks && j.periodeTeks !== '' && !garis.some(g => rapat(g).includes(rapat(j.periodeTeks)))) masalah.push('periodeTeks tidak tercetak di halaman')
 
+  // Posisi judul untuk pemeriksaan "angka sejajar dengan judulnya". Hanya di
+  // halaman yang MENCETAK judul: posisi judul halaman sebelumnya tidak ikut
+  // masuk route, jadi halaman lanjutan tanpa judul tidak diperiksa di sini.
+  const gJudul = berteks && adaJudul ? garis[j.nomorBarisJudul - 1] : undefined
+  const posisi = gJudul === undefined ? null : posisiJudul(gJudul, kolom)
+
   let sebelumnya = 0
   // Uraian keluaran per baris; untuk halaman berteks yang berlanjutan, disusun
   // ulang kode dari baris tercetaknya (satu spasi antarbagian).
@@ -228,9 +267,13 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
     if (g === undefined) return void masalah.push(`${ke}: baris [${b.nomorBaris}] tidak ada`)
     if (b.nomorBaris === j.nomorBarisJudul) return void masalah.push(`${ke}: baris judul dikirim sebagai baris`)
 
-    // Uraian gabungan = bagian di baris pertama + teks utuh tiap baris
-    // lanjutan, disambung satu spasi. Bagian baris pertama yang diperiksa
-    // terhadap baris pertama; baris lanjutan harus habis masuk uraian.
+    // Uraian keluaran = bagian di baris pertama + teks utuh tiap baris
+    // lanjutan, disambung satu spasi — disusun KODE. `uraian` dari AI diterima
+    // dalam dua bentuk: bagian baris pertama SAJA (yang diminta prompt; uji
+    // banding 2026-10-28: Flash-Lite mencatat `barisLanjutan` dengan benar tapi
+    // tidak menyalin teksnya), atau sudah digabung persis. Bentuk lain ditolak.
+    // Bagian baris pertama diperiksa token demi token terhadap baris pertama di
+    // bawah, dan baris lanjutan habis masuk uraian.
     const lanjut: string[] = []
     for (const n of b.barisLanjutan) {
       const gl = garis[n - 1]
@@ -243,6 +286,7 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
       const ekor = lanjut.join(' ')
       if (u === ekor) bagianPertama = ''
       else if (u.endsWith(` ${ekor}`)) bagianPertama = u.slice(0, u.length - ekor.length - 1)
+      else if (rapat(g).includes(u)) bagianPertama = u
       else return void masalah.push(`${ke}: uraian gabungan tidak sama persis dengan baris lanjutannya`)
       uraianKeluar[i] = [bagianPertama, ...lanjut].filter(x => x !== '').join(' ')
     }
@@ -250,6 +294,27 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
 
     const ruang = rapat(g)
     if (!selPertama.every(s => s === '' || ruang.includes(rapat(s)))) masalah.push(`${ke}: sel tidak tersalin persis dari baris [${b.nomorBaris}]`)
+
+    // Angka harus berada paling dekat dengan judul kolom yang dipilih AI. Sel
+    // yang tidak bisa ditemukan utuh di baris tata (spasi di dalam angka)
+    // dilewati — keberadaannya sudah dijamin pemeriksaan token di bawah.
+    if (posisi) {
+      const cek: [string, string, string][] = [
+        [b.nominalPertama, p.nominalPertama, 'nominal pertama'],
+        [b.nominalKedua, p.nominalKedua, 'nominal kedua'],
+        [b.saldo, p.saldo, 'saldo'],
+      ]
+      for (const [isi, judul, nama] of cek) {
+        const letak = rentangDi(g, isi.trim())
+        if (isi.trim() === '' || judul === '' || letak.length === 0) continue
+        const sejajar = letak.some(r => {
+          const d = posisi.map(h => jarak(r, h.rentang))
+          const min = Math.min(...d)
+          return posisi.some((h, k) => h.judul === judul && d[k] === min)
+        })
+        if (!sejajar) masalah.push(`${ke}: sel ${nama} tidak sejajar dengan judul kolomnya`)
+      }
+    }
     // Semua token tercetak harus masuk sel, dan sel tidak boleh berisi token lain.
     const sisa = new Map<string, number>()
     for (const t of token(g)) sisa.set(t, (sisa.get(t) ?? 0) + 1)

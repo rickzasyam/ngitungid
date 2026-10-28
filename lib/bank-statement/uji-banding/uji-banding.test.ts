@@ -119,6 +119,13 @@ describe('rangkumUji & laporan', () => {
     expect(rangkumUji({ nama: 'gemini', model: 'x' }, [h({})]).biayaPerDokumen).toBeNull()
   })
 
+  it('penyedia tanpa dokumen selesai → "belum diuji", bukan 0% / 0 USD', () => {
+    const r = rangkumUji({ nama: 'gemini', model: 'm' }, [], { masukPerJuta: 1, keluarPerJuta: 1, mataUang: 'USD', tanggal: '2026-10-28' })
+    const md = laporanMarkdown([r], { tanggal: '2026-10-28', pemeriksa: 'p', dokumen: '1' })
+    expect(md).toContain(`| gemini · m | ${Array(7).fill('belum diuji').join(' | ')} |`)
+    expect(md).not.toContain('0 USD')
+  })
+
   it('laporan hanya agregat — tanpa isi baris', async () => {
     const d = dokumenSatuKolom()
     const r = rangkumUji({ nama: 'gemini', model: 'tiruan' }, [await ujiDokumen(await penyediaSempurna(d), d, kesinambunganSementara)])
