@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
   cashMutationAllocations,
   cashMutations,
-  journalEntries,
-  journalLines,
   masterCoa,
   masterSupplier,
   purchaseInvoiceLines,
@@ -17,26 +14,19 @@ import {
 import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
 import { computeInvoiceTotals } from '@/lib/purchase'
 import { resolveIsKas } from '@/lib/coa/account-type'
-import {
-  allocationRemaining,
-  buildAllocationJournalLines,
-  buildCounterAccountJournalLines,
-  mutationStatus,
-} from '@/lib/cash-mutation'
-import { purgeAuditEvents, recordAuditEvent, recordJournalEvent } from '@/lib/api/audit'
-import { loadJournalLineValues, loadNasibJurnalModul } from '@/lib/api/journal-queries'
+import { allocationRemaining, mutationStatus } from '@/lib/cash-mutation'
+import { recordAuditEvent } from '@/lib/api/audit'
 
 // Query & penjaga mutasi kas/bank, dipakai BERSAMA route daftar, detail, impor,
 // dan alokasi. Hidup di modul terpisah karena Next menolak export non-handler di
 // berkas route — dan karena "bentuk mutasi" harus satu definisi: POST
 // mengembalikannya sebagai 201, PATCH sesudah menyimpan, GET saat dibaca.
 //
-// ══ JURNALNYA DIBANGUN ULANG, BUKAN DITAMBAL ═════════════════════════════
-// syncMutationJournal di bawah adalah SATU-SATUNYA tempat yang memutuskan
-// jurnal sebuah mutasi. Tiga route memanggilnya (ubah mutasi, tambah alokasi,
-// hapus alokasi), dan ketiganya harus menghasilkan jurnal yang sama untuk
-// keadaan yang sama. Menulis logikanya tiga kali berarti tiga jawaban yang
-// akan menyimpang diam-diam.
+// ══ JURNAL MUTASI TIDAK DIPUTUSKAN DI SINI ═══════════════════════════════
+// Sejak S7 satu-satunya yang memutuskan jurnal mutasi adalah
+// `rencanakanJurnalMutasi` (lib/api/cash-mutation-journal.ts) — dipakai route
+// batch, pembungkus form, dan route alokasi. `syncMutationJournal` yang dulu
+// hidup di sini DIPINDAH ke sana (D48), bersama jurnal ringkasan (D58).
 
 /** Akun kas milik klien — null bila bukan miliknya ATAU bukan akun kas. */
 export async function loadCashAccount(clientId: string, akunKasId: string) {
@@ -93,6 +83,7 @@ export async function loadMutationForWrite(mutationId: string) {
       debit: cashMutations.debit,
       kredit: cashMutations.kredit,
       journalId: cashMutations.journalId,
+      updatedAt: cashMutations.updatedAt,
     })
     .from(cashMutations)
     .where(eq(cashMutations.id, mutationId))
@@ -167,27 +158,6 @@ export async function loadInvoiceForAllocation(invoiceId: string, clientId: stri
     totalMinor,
     teralokasiMinor,
     sisaMinor: totalMinor - teralokasiMinor,
-  }
-}
-
-/** Snapshot mutasi + alokasinya — bahan `nilai_sebelum` di audit_events. */
-export async function snapshotMutation(mutationId: string) {
-  const header = await loadMutationForWrite(mutationId)
-  if (!header) return null
-  const alokasi = await loadMutationAllocations(mutationId)
-  return {
-    tanggal: header.tanggal,
-    keterangan: header.keterangan,
-    debit: header.debit,
-    kredit: header.kredit,
-    akunKasId: header.akunKasId,
-    akunLawanId: header.akunLawanId,
-    alokasi: alokasi.map(a => ({
-      invoiceId: a.invoiceId,
-      noInvoice: a.noInvoice,
-      nominal: a.nominal,
-      terminUrutan: a.terminUrutan,
-    })),
   }
 }
 
@@ -287,224 +257,6 @@ export async function listCashMutations(opts: {
       status: mutationStatus(r, alokasiSemu),
     }
   })
-}
-
-// ── Jurnal mutasi ────────────────────────────────────────────
-
-export type SyncJournalResult =
-  | { error: NextResponse }
-  | { statements: BatchItem<'pg'>[]; journalId: string | null }
-
-/**
- * Menyusun statement untuk MEMBANGUN ULANG jurnal sebuah mutasi.
- *
- * Dipanggil oleh setiap jalur yang mengubah keadaan mutasi, dan hasilnya
- * digabungkan ke `db.batch` milik pemanggil — tidak pernah menulis sendiri
- * (P10: jurnal dan perubahan yang melahirkannya wajib satu transaksi).
- *
- * Keadaan → jurnal:
- *   - ada alokasi  → D akun hutang per alokasi / K akun kas (kasus a)
- *   - ada akun lawan (tanpa alokasi) → arah mengikuti sisi mutasi (kasus b)
- *   - tidak keduanya → TIDAK ADA jurnal; kalau sebelumnya ada, ia DIHAPUS
- *
- * ══ JURNAL TERPOSTING TIDAK DIBANGUN ULANG ══════════════════════════════
- * Kalau jurnalnya sudah diposting, fungsi ini MENOLAK (409). Membangun ulang
- * jurnal terposting berarti mengubah angka yang sudah masuk buku besar tanpa
- * melewati jurnal balik — persis yang D42 larang, dan di sini ia akan terjadi
- * sebagai efek samping dari menambah satu alokasi.
- *
- * Dua pengecualian, keduanya diputuskan `nasibJurnalModul` (aturan yang SAMA
- * dengan invoice pembelian):
- *   - SUDAH DIBALIK: mutasinya dilepas dan dijurnal ulang sebagai draf baru;
- *     jurnal lama + pembaliknya tidak disentuh. Tanpa ini, saran "buat jurnal
- *     balik dulu" di pesan 409 adalah jalan buntu.
- *   - setelan klien "posting bisa diedit" menyala (D42): dibangun ulang di
- *     tempat, tetap terposting, riwayatnya membawa nilai_sebelum/nilai_sesudah
- *     — lencana "diubah setelah posting" lahir dari situ, sama dengan M8.
- */
-export async function syncMutationJournal(opts: {
-  mutation: {
-    id: string
-    clientId: string
-    akunKasId: string
-    akunLawanId: string | null
-    tanggal: string
-    keterangan: string | null
-    debit: string
-    kredit: string
-    journalId: string | null
-  }
-  alokasi: readonly { akunHutangId: string | null; nominal: string; noInvoice: string | null }[]
-  userId: string | null
-  /** Nilai baru yang akan ditulis di batch ini, kalau berbeda dari yang tersimpan. */
-  patch?: { tanggal?: string; keterangan?: string | null; debit?: string; kredit?: string; akunLawanId?: string | null }
-}): Promise<SyncJournalResult> {
-  const m = { ...opts.mutation, ...opts.patch }
-  const statements: BatchItem<'pg'>[] = []
-
-  // Keadaan jurnal LAMA dibaca lebih dulu: statusnya menentukan boleh-tidaknya
-  // seluruh operasi ini, jadi ia diperiksa sebelum satu statement pun disusun.
-  const { nasib, jurnal } = await loadNasibJurnalModul(m.journalId, m.clientId)
-  let jurnalLama = jurnal
-  if (nasib === 'terkunci') {
-    return {
-      error: NextResponse.json(
-        {
-          error: 'Jurnal mutasi ini sudah diposting dan tidak bisa dibangun ulang.',
-          details: [
-            'Buat jurnal balik untuk jurnal itu dan posting pembaliknya, baru ubah mutasinya.',
-            'Mengubahnya di sini akan memindahkan angka yang sudah masuk buku besar tanpa jejak pembalik.',
-          ],
-        },
-        { status: 409 }
-      ),
-    }
-  }
-  // Terposting tapi SUDAH dibalik: pasangan asli + pembalik adalah riwayat buku
-  // besar dan tidak disentuh sama sekali. Mutasinya dilepas dari jurnal itu,
-  // lalu dijurnal dari nol seperti mutasi yang belum berjurnal — draf baru, atau
-  // tanpa jurnal bila tak ada lagi yang dijurnalkan.
-  if (nasib === 'sudah-dibalik') {
-    statements.push(
-      db.update(cashMutations).set({ journalId: null, updatedAt: new Date() }).where(eq(cashMutations.id, m.id))
-    )
-    jurnalLama = null
-  }
-  const ubahTerposting = nasib === 'ubah-terposting'
-
-  const alokasiSah = opts.alokasi.filter(a => a.akunHutangId !== null)
-  if (alokasiSah.length !== opts.alokasi.length) {
-    // Invoice TUNAI tidak punya akun hutang — ia tidak pernah jadi hutang, jadi
-    // tidak ada yang bisa didebit saat dibayar.
-    return {
-      error: NextResponse.json(
-        {
-          error: 'Ada alokasi ke invoice yang tidak punya akun hutang.',
-          details: ['Invoice tunai tidak menimbulkan hutang, jadi ia tidak bisa dibayar lewat mutasi kas.'],
-        },
-        { status: 400 }
-      ),
-    }
-  }
-
-  const lines =
-    alokasiSah.length > 0
-      ? buildAllocationJournalLines({
-          alokasi: alokasiSah.map(a => ({
-            akunHutangId: a.akunHutangId as string,
-            minor: toMinorUnits(a.nominal) ?? 0,
-            keterangan: a.noInvoice ? `Pembayaran ${a.noInvoice}` : null,
-          })),
-          akunKasId: m.akunKasId,
-        })
-      : m.akunLawanId
-        ? buildCounterAccountJournalLines({
-            mutasi: { debit: m.debit, kredit: m.kredit },
-            akunKasId: m.akunKasId,
-            akunLawanId: m.akunLawanId,
-            keterangan: m.keterangan,
-          })
-        : []
-
-  // ── Tidak ada yang bisa dijurnalkan ──
-  if (lines.length === 0) {
-    // Setelan D42 membuka PERUBAHAN jurnal terposting, bukan penghapusannya.
-    if (ubahTerposting) {
-      return {
-        error: NextResponse.json(
-          {
-            error: 'Perubahan ini akan menghapus jurnal yang sudah diposting.',
-            details: [
-              'Setelan "posting bisa diedit" hanya membuka perubahan, bukan penghapusan.',
-              'Buat jurnal balik untuk jurnal itu dan posting pembaliknya lebih dulu.',
-            ],
-          },
-          { status: 409 }
-        ),
-      }
-    }
-    if (jurnalLama) {
-      // Urutannya penting: mutasi melepas journal_id LEBIH DULU (FK-nya ON
-      // DELETE set null, tapi mengandalkan itu berarti mengandalkan urutan
-      // eksekusi di dalam batch), baru jurnalnya dihapus beserta riwayatnya.
-      statements.push(
-        db.update(cashMutations).set({ journalId: null, updatedAt: new Date() }).where(eq(cashMutations.id, m.id)),
-        db.delete(journalEntries).where(eq(journalEntries.id, jurnalLama.id)),
-        purgeAuditEvents('journal', jurnalLama.id)
-      )
-    }
-    return { statements, journalId: null }
-  }
-
-  const keteranganJurnal = m.keterangan
-    ? `Mutasi kas — ${m.keterangan}`
-    : 'Mutasi kas'
-
-  if (jurnalLama) {
-    // Mitigasi (a) D42: hanya jurnal TERPOSTING yang dibuka setelan membawa
-    // nilai sebelum & sesudah — untuk draf, perubahan bagian normal menyusunnya.
-    const sebelum = ubahTerposting
-      ? { tanggal: jurnalLama.tanggal, noBukti: jurnalLama.noBukti, lines: await loadJournalLineValues(jurnalLama.id) }
-      : null
-    statements.push(
-      db
-        .update(journalEntries)
-        .set({ tanggal: m.tanggal, keterangan: keteranganJurnal, updatedAt: new Date() })
-        .where(eq(journalEntries.id, jurnalLama.id)),
-      db.delete(journalLines).where(eq(journalLines.journalId, jurnalLama.id)),
-      db.insert(journalLines).values(
-        lines.map(l => ({
-          journalId: jurnalLama.id,
-          masterCoaId: l.masterCoaId,
-          debit: l.debit,
-          kredit: l.kredit,
-          keterangan: l.keterangan,
-          lineOrder: l.lineOrder,
-        }))
-      ),
-      recordJournalEvent({
-        clientId: m.clientId,
-        journalId: jurnalLama.id,
-        event: 'updated',
-        userId: opts.userId,
-        nilaiSebelum: sebelum,
-        nilaiSesudah: ubahTerposting ? { tanggal: m.tanggal, noBukti: jurnalLama.noBukti, lines } : null,
-      })
-    )
-    return { statements, journalId: jurnalLama.id }
-  }
-
-  // ── Jurnal baru, lahir DRAF ──
-  // Draf karena mutasi yang baru masuk adalah dokumen yang masih disusun:
-  // alokasinya bisa bertambah, akun lawannya bisa diganti. Memposting otomatis
-  // berarti angka masuk buku besar sebelum ada yang memeriksanya.
-  const journalId = randomUUID()
-  statements.push(
-    db.insert(journalEntries).values({
-      id: journalId,
-      clientId: m.clientId,
-      tanggal: m.tanggal,
-      // no_bukti NULL, alasan sama dengan jurnal pembelian: kolomnya unik per
-      // klien, sementara mutasi bank tidak punya nomor yang dijamin unik.
-      noBukti: null,
-      keterangan: keteranganJurnal,
-      sumber: 'mutasi_kas',
-      createdBy: opts.userId as string,
-    }),
-    db.insert(journalLines).values(
-      lines.map(l => ({
-        journalId,
-        masterCoaId: l.masterCoaId,
-        debit: l.debit,
-        kredit: l.kredit,
-        keterangan: l.keterangan,
-        lineOrder: l.lineOrder,
-      }))
-    ),
-    db.update(cashMutations).set({ journalId, updatedAt: new Date() }).where(eq(cashMutations.id, m.id)),
-    recordJournalEvent({ clientId: m.clientId, journalId, event: 'created', userId: opts.userId })
-  )
-  return { statements, journalId }
 }
 
 /** Riwayat satu mutasi — pembungkus tipis supaya entity_type-nya tidak salah ketik. */

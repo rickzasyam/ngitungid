@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
-import { cashMutations, clients } from '@/lib/db/schema'
+import { clients } from '@/lib/db/schema'
 import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { isValidYmd } from '@/lib/contracts'
-import { fingerprintMutasi, validateCashMutation } from '@/lib/cash-mutation'
+import { validateCashMutation } from '@/lib/cash-mutation'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { resolveUserId } from '@/lib/api/journal-queries'
 import {
@@ -15,10 +14,9 @@ import {
   listCashMutations,
   loadCashAccount,
   loadMutationDetail,
-  recordMutationEvent,
-  syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
 import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
+import { jawabanTunggal, rencanakanSimpanMutasi } from '@/lib/api/cash-mutation-batch'
 
 export const runtime = 'nodejs'
 
@@ -69,13 +67,14 @@ export async function GET(req: Request) {
   return NextResponse.json({ count: mutations.length, mutations })
 }
 
-// POST /api/cash-mutations — mutasi MANUAL (impor CSV lewat route sendiri).
+// POST /api/cash-mutations — SATU mutasi dari form (HP, D48).
 //
-// ══ JURNALNYA LAHIR HANYA BILA SUDAH ADA LAWANNYA ════════════════════════
-// Mutasi tanpa akun lawan dan tanpa alokasi berstatus "belum dijurnal" — itu
-// keadaan yang SAH dan memang harus terlihat di layar (permintaan eksplisit
-// Ricko). Membuat jurnal timpang untuk mutasi semacam itu akan menaruh angka
-// separuh di buku besar.
+// ══ PEMBUNGKUS TIPIS ATAS PERENCANA BATCH ════════════════════════════════
+// Pemeriksaan di bawah hanya menjaga BENTUK jawaban lama yang dibaca form
+// (400 `{ error, details }`, 409 `{ lockedUntil }`). Yang memutuskan dan
+// menyusun tulisan — validasi, kunci, duplikat, jurnal ringkasan (D58) —
+// adalah `rencanakanSimpanMutasi`, sama persis dengan grid. Tidak ada jalur
+// simpan kedua.
 export async function POST(req: Request) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
@@ -107,6 +106,7 @@ export async function POST(req: Request) {
     keterangan: raw.keterangan,
     saldo: raw.saldo,
     akunLawanId: raw.akunLawanId,
+    catatan: raw.catatan,
   })
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
@@ -135,53 +135,46 @@ export async function POST(req: Request) {
   const createdBy = await resolveUserId(g.user.email)
   if (!createdBy) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const mutationId = randomUUID()
-  const fingerprint = fingerprintMutasi(check.value)
-
-  const jurnal = await syncMutationJournal({
-    mutation: {
-      id: mutationId,
+  const rencana = await rencanakanSimpanMutasi(
+    {
       clientId,
       akunKasId: check.value.akunKasId,
-      akunLawanId: check.value.akunLawanId,
-      tanggal: check.value.tanggal,
-      keterangan: check.value.keterangan,
-      debit: check.value.debit,
-      kredit: check.value.kredit,
-      journalId: null,
+      periode: null,
+      baru: [
+        {
+          kunci: 'form',
+          tanggal: check.value.tanggal,
+          debit: check.value.debit,
+          kredit: check.value.kredit,
+          saldo: check.value.saldo,
+          keterangan: check.value.keterangan,
+          catatan: check.value.catatan,
+          akunLawanId: check.value.akunLawanId,
+          urutan: null,
+          asal: 'ketik',
+          blok: null,
+          saldoDikosongkan: null,
+        },
+      ],
+      ubah: [],
+      hapus: [],
+      berkas: [],
+      dryRun: false,
     },
-    alokasi: [],
-    userId: createdBy,
-  })
-  if ('error' in jurnal) return jurnal.error
-
-  const statements: BatchItem<'pg'>[] = [
-    db.insert(cashMutations).values({
-      id: mutationId,
-      clientId,
-      akunKasId: check.value.akunKasId,
-      tanggal: check.value.tanggal,
-      keterangan: check.value.keterangan,
-      debit: check.value.debit,
-      kredit: check.value.kredit,
-      saldo: check.value.saldo,
-      fingerprint,
-      akunLawanId: check.value.akunLawanId,
-      createdBy,
-    }),
-    // Statement jurnal menyusul SESUDAH mutasinya ada: ia memuat UPDATE atas
-    // baris mutasi (memasang journal_id), dan update terhadap baris yang belum
-    // lahir tidak melakukan apa pun tanpa melempar.
-    ...jurnal.statements,
-    recordMutationEvent({ clientId, mutationId, event: 'created', userId: createdBy }),
-  ]
+    createdBy
+  )
+  if (rencana.jenis === 'tolak') {
+    const j = jawabanTunggal(rencana)
+    return NextResponse.json(j.body, { status: j.status })
+  }
+  if (rencana.jenis !== 'siap') return NextResponse.json({ error: 'Rencana tidak lengkap.' }, { status: 500 })
 
   try {
-    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+    await db.batch(rencana.statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
   } catch (e) {
     return dbWriteErrorResponse(e, 'Gagal menyimpan mutasi kas. Coba lagi.')
   }
 
-  const detail = await loadMutationDetail(mutationId)
+  const detail = await loadMutationDetail(rencana.idBaru.get('form') as string)
   return NextResponse.json(detail, { status: 201 })
 }
