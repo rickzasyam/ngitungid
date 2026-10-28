@@ -5,6 +5,7 @@ import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-repl
 import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
 import { CoaTypesDialog, type CoaTypesPreview } from '@/components/settings/coa-types-dialog'
 import { SupplierTab } from '@/components/settings/supplier-manager'
+import { AturanMutasiTab } from '@/components/settings/aturan-mutasi-manager'
 import { KunciPeriodeCard } from '@/components/settings/kunci-periode-card'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import {
@@ -37,6 +38,7 @@ import {
   Package,
   Truck,
   BookLock,
+  ListChecks,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
@@ -179,6 +181,7 @@ const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe;
   coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
   supplier:      { label: 'Supplier',          desc: 'Master data rekanan klien',   Icon: Truck,             scoped: true },
   pembukuan:     { label: 'Pembukuan',         desc: 'Akun PPN, posting & kunci periode', Icon: BookLock,          scoped: true },
+  'aturan-mutasi': { label: 'Aturan Mutasi',   desc: 'Usulan akun lawan mutasi kas', Icon: ListChecks,      scoped: true },
   analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
   users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
   layanan:       { label: 'Layanan',           desc: 'Master jasa yang dijual',     Icon: Package,           scoped: false },
@@ -2315,6 +2318,10 @@ export default function SettingsPage() {
                   readOnly={!canDoAccounting}
                   bolehBuka={isOwner}
                 />
+              )}
+
+              {activeTab === 'aturan-mutasi' && activeClient && (
+                <AturanMutasiTab key={activeClient.id} clientId={activeClient.id} readOnly={!canDoAccounting} />
               )}
 
               {activeTab === 'analytics' && activeClient && (
