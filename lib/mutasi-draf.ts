@@ -586,6 +586,15 @@ export function cocokkanAkun(teks: string, indeks: IndeksAkun): CocokAkun {
   if (k === '') return { status: 'kosong' }
   const lewatKode = indeks.kode.get(k)
   if (lewatKode !== undefined) return { status: 'ok', akunId: lewatKode }
+  // Label grid "kode · nama" (S9) — sah HANYA bila namanya persis nama akun
+  // berkode itu, supaya sel yang disalin dari grid bisa ditempel kembali tanpa
+  // membuka pintu tebakan.
+  const pisah = k.indexOf(' · ')
+  if (pisah > 0) {
+    const id = indeks.kode.get(k.slice(0, pisah).trim())
+    const a = id === undefined ? undefined : indeks.byId.get(id)
+    if (a && kunciAkun(a.nama) === k.slice(pisah + 3).trim()) return { status: 'ok', akunId: a.id }
+  }
   const lewatNama = indeks.nama.get(k) ?? []
   if (lewatNama.length === 1) return { status: 'ok', akunId: lewatNama[0] }
   if (lewatNama.length > 1) {

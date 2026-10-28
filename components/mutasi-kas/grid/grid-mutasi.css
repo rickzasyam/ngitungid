@@ -1,0 +1,134 @@
+/* Grid mutasi kas (MP §5.G S9). TANPA @layer: gaya react-data-grid hidup di
+   @layer rdg.*, yang dideklarasikan sesudah lapisan Tailwind — utilitas
+   Tailwind kalah di dalam sel, aturan tak berlapis di sini menang (temuan S0).
+   Warna hanya dari token globals.css (gotcha #6). */
+
+.grid-mutasi {
+  color-scheme: light;
+  block-size: 100%;
+  --rdg-font-size: 12.5px;
+  --rdg-color: var(--color-text-primary);
+  --rdg-background-color: white;
+  --rdg-header-background-color: var(--color-muted-bg);
+  --rdg-row-hover-background-color: color-mix(in srgb, var(--color-muted-bg) 55%, white);
+  --rdg-selection-color: var(--color-accent-secondary-text);
+  border-radius: 1rem;
+  border: 1px solid var(--color-muted-bg);
+}
+
+.grid-mutasi .gm-uang {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-mutasi .gm-nomor {
+  color: var(--color-text-muted);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--color-muted-bg) 60%, white);
+}
+
+.grid-mutasi .gm-galat {
+  box-shadow: inset 0 0 0 2px var(--color-accent-critical);
+  background-color: color-mix(in srgb, var(--color-accent-critical) 10%, white);
+}
+
+.grid-mutasi .gm-terkunci {
+  color: var(--color-text-muted);
+  background-color: color-mix(in srgb, var(--color-muted-bg) 70%, white);
+}
+
+.grid-mutasi .gm-gembok {
+  display: inline-block;
+  margin-inline-end: 4px;
+  opacity: 0.7;
+  vertical-align: -1px;
+}
+
+.grid-mutasi .gm-usulan {
+  color: var(--color-accent-secondary-text);
+  background-color: color-mix(in srgb, var(--color-accent-secondary) 18%, white);
+  font-style: italic;
+}
+
+.grid-mutasi .gm-dicoret {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+  margin-inline-end: 6px;
+}
+
+.grid-mutasi .gm-penanda {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 9999px;
+  margin-inline-start: 6px;
+  background: color-mix(in srgb, var(--color-accent-critical) 16%, white);
+  color: color-mix(in srgb, var(--color-accent-critical) 55%, black);
+}
+
+.grid-mutasi .gm-penanda-lilac {
+  background: color-mix(in srgb, var(--color-accent-secondary) 32%, white);
+  color: var(--color-text-primary);
+}
+
+.grid-mutasi .gm-baris-baru > .gm-nomor {
+  box-shadow: inset 3px 0 0 var(--color-accent-primary);
+}
+
+.grid-mutasi .gm-status {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.grid-mutasi .gm-status-kritis {
+  background: color-mix(in srgb, var(--color-accent-critical) 16%, white);
+  color: color-mix(in srgb, var(--color-accent-critical) 55%, black);
+}
+
+.grid-mutasi .gm-status-sebagian {
+  background: color-mix(in srgb, var(--color-accent-secondary) 32%, white);
+  color: var(--color-text-primary);
+}
+
+.grid-mutasi .gm-status-selesai {
+  background: color-mix(in srgb, var(--color-accent-primary) 45%, white);
+  color: var(--color-text-primary);
+}
+
+.grid-mutasi .gm-status-netral {
+  background: var(--color-muted-bg);
+  color: var(--color-text-muted);
+}
+
+.gm-editor {
+  inline-size: 100%;
+  block-size: 100%;
+  padding-inline: 8px;
+  border: none;
+  outline: none;
+  font: inherit;
+  background: white;
+  color: var(--color-text-primary);
+}
+
+.gm-editor-uang {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.gm-kosong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 160px;
+  padding: 24px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-align: center;
+}

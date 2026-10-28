@@ -17,9 +17,9 @@ vi.mock('@/lib/api/cash-mutation-journal', () => ({
   muatInfoJurnal: vi.fn(async () => infoJurnal),
 }))
 
-import { gunzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { muatGridMutasi, muatSaldoJangkar } from './api/cash-mutation-grid'
-import { jsonGzip, terimaGzip } from './api/json-gzip'
+import { bacaJsonBody, jsonGzip, terimaGzip } from './api/json-gzip'
 import { listCashMutations } from './api/cash-mutation-queries'
 import { ALASAN_TERALOKASI, ALASAN_TERPOSTING } from './cash-mutation'
 
@@ -150,6 +150,29 @@ describe('jsonGzip — kompres di fungsi (batas respons Vercel 4,5 MB)', () => {
   })
 })
 
+describe('bacaJsonBody — body Simpan grid terkompres (batas permintaan Vercel 4,5 MB)', () => {
+  const minta = (body: BodyInit, enc?: string) =>
+    new Request('http://x', { method: 'POST', body, headers: enc ? { 'content-encoding': enc } : {} })
+
+  it('body gzip diurai jadi JSON yang sama persis', async () => {
+    const isi = { baru: [{ kunci: 'a', keterangan: 'TRF ✓ é' }], hapus: [] }
+    expect(await bacaJsonBody(minta(new Uint8Array(gzipSync(JSON.stringify(isi))), 'gzip'))).toEqual({ ok: true, nilai: isi })
+  })
+  it('JSON biasa tetap diterima (form, skrip)', async () => {
+    expect(await bacaJsonBody(minta('{"a":1}'))).toEqual({ ok: true, nilai: { a: 1 } })
+  })
+  it('encoding asing → 415; gzip rusak → 400; bukan JSON → 400', async () => {
+    expect(await bacaJsonBody(minta('{}', 'br'))).toMatchObject({ ok: false, status: 415 })
+    expect(await bacaJsonBody(minta('bukan gzip', 'gzip'))).toMatchObject({ ok: false, status: 400 })
+    expect(await bacaJsonBody(minta('{a:1}'))).toMatchObject({ ok: false, status: 400 })
+  })
+  it('zip bomb: body kecil yang mengembang melewati batas terurai → 413', async () => {
+    const bom = new Uint8Array(gzipSync(Buffer.alloc(2 * 1024 * 1024, 32)))
+    expect(bom.byteLength).toBeLessThan(10_000)
+    expect(await bacaJsonBody(minta(bom, 'gzip'), 1024 * 1024)).toMatchObject({ ok: false, status: 413 })
+  })
+})
+
 // ── Baca-sumber (P15) ──
 const baca = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 
@@ -172,6 +195,12 @@ describe('struktural — urutan baku & jangkar', () => {
     expect(grid).toContain('tanggal < ${sebelum} and saldo is not null')
     expect(grid).toContain('::numeric(18,2)::text as "saldo"')
     expect(grid).not.toMatch(/parseFloat|Number\(r\.saldo/)
+  })
+
+  it('route batch membaca body lewat bacaJsonBody (gzip), bukan req.json()', () => {
+    const batch = baca('app/api/cash-mutations/batch/route.ts')
+    expect(batch).toContain('await bacaJsonBody(req)')
+    expect(batch).not.toContain('req.json()')
   })
 
   it('grid tidak punya aturan kunci sendiri — hanya kunciMutasi', () => {

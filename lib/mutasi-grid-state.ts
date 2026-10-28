@@ -144,6 +144,25 @@ export type AksiGrid =
   | { jenis: 'undo' }
   | { jenis: 'redo' }
   | { jenis: 'buangSemua' }
+  | { jenis: 'pulihkan'; cadangan: CadanganGrid }
+
+/**
+ * Salinan draf untuk cadangan IndexedDB (D51). Snapshot SERVER ikut disimpan:
+ * draf yang dipulihkan harus dibandingkan dengan `updatedAt` saat draf itu
+ * dibuat, supaya perubahan orang lain sejak itu tetap berujung 409 — bukan
+ * tertimpa diam-diam oleh draf lama. Riwayat undo tidak ikut.
+ */
+export type CadanganGrid = {
+  baris: readonly BarisGrid[]
+  blok: Readonly<Record<string, BlokGrid>>
+  server: readonly BarisServer[]
+  urutanServer: readonly string[]
+  berikut: number
+}
+
+export function potretCadangan(s: KeadaanGrid): CadanganGrid {
+  return { baris: s.baris, blok: s.blok, server: [...s.server.values()], urutanServer: s.urutanServer, berikut: s.berikut }
+}
 
 // ── Pembangun ────────────────────────────────────────────────
 
@@ -491,6 +510,18 @@ export function reducerGrid(s: KeadaanGrid, a: AksiGrid): KeadaanGrid {
         nanti: s.nanti.slice(0, -1),
         lalu: [...s.lalu, { baris: s.baris, blok: s.blok }],
         laporan: null,
+      }
+    }
+
+    case 'pulihkan': {
+      const c = a.cadangan
+      return {
+        ...keadaanAwal(),
+        baris: c.baris,
+        blok: c.blok,
+        server: new Map(c.server.map(b => [b.id, b])),
+        urutanServer: c.urutanServer,
+        berikut: c.berikut,
       }
     }
 

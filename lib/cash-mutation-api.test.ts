@@ -363,7 +363,8 @@ describe('bentuk respons daftar', () => {
 describe('halaman /mutasi-kas', () => {
   const PAGE = read('app', 'mutasi-kas', 'page.tsx')
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
+  const GRID = read('components', 'mutasi-kas', 'grid', 'grid-mutasi.tsx')
   const JURNAL = read('app', 'jurnal', 'page.tsx')
 
   it('daftar akun kas datang dari ?kas=1, bukan disaring di browser', () => {
@@ -405,21 +406,19 @@ describe('halaman /mutasi-kas', () => {
     expect(PANEL).toContain('Dipaku manual')
   })
 
-  it('wizard impor: pratinjau dulu, commit terkunci sampai ada pratinjau', () => {
-    expect(WIZARD).toContain("fd.append('dryRun', '1')")
-    expect(WIZARD).toContain('disabled={!file || busy || !pratinjau}')
+  // Wizard impor CSV diganti grid (D47, S9). Janji-janjinya pindah ke sana.
+  it('grid: dugaan duplikat ditanyakan lewat dryRun SEBELUM menulis, ditandai, dan bisa tetap disimpan (D38)', () => {
+    expect(LEMBAR).toContain('kirimSimpan({ ...body, dryRun: true })')
+    expect(LEMBAR).toContain('Tetap simpan')
+    expect(GRID).toContain('duplikat?')
   })
 
-  it('pratinjau memperingatkan agar arah beberapa baris pertama diperiksa', () => {
+  it('grid: arah blok dari rantai saldo; yang tak bisa ditentukan WAJIB dipilih dan menahan Simpan', () => {
     // Arah yang terbalik tidak pernah menimbulkan galat — satu-satunya saat ia
-    // murah diperbaiki adalah di layar ini, sebelum barisnya tersimpan.
-    expect(WIZARD).toContain('Periksa arah beberapa baris pertama')
-    expect(WIZARD).toContain('tidak menimbulkan galat')
-  })
-
-  it('wizard impor menandai duplikat DAN mengatakan ia tetap tersimpan (D38)', () => {
-    expect(WIZARD).toContain('duplikatDiDatabase')
-    expect(WIZARD).toContain('tetap akan tersimpan')
+    // murah diperbaiki adalah sebelum barisnya tersimpan.
+    expect(LEMBAR).toContain("const wajib = blok.status === 'wajib'")
+    expect(LEMBAR).toContain('Simpan tertahan sampai dipilih')
+    expect(LEMBAR).toContain('const gerbang = gerbangSimpan(s, diff, rantai, menyimpan)')
   })
 
   it('tautan "Koreksi di …" memakai satu sumber, bukan path yang di-hardcode', () => {
@@ -440,7 +439,7 @@ describe('halaman /mutasi-kas', () => {
 describe('pelabelan nominal & kolom', () => {
   const PAGE = read('app', 'mutasi-kas', 'page.tsx')
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
 
   it('kolom alokasi di tabel memakai judul yang SAMA dengan panelnya', () => {
     // "Sisa" mengundang dibaca sebagai "belum beres" oleh mutasi yang sudah
@@ -469,12 +468,12 @@ describe('pelabelan nominal & kolom', () => {
     expect(PANEL).not.toContain('sisa ${i.sisa}')
   })
 
-  it('pratinjau impor diformat rupiah PERSIS — dicocokkan dengan rekening koran (CP-8)', () => {
+  it('ringkasan grid diformat rupiah PERSIS — dicocokkan dengan rekening koran (CP-8)', () => {
     // 12.345,67 lewat rupiah() tampil "Rp 12.346": tidak cocok dengan baris
     // mana pun di rekening koran yang sedang diperiksa.
-    expect(WIZARD).toContain("r.debit === '0.00' ? '—' : rupiahPersis(r.debit)")
-    expect(WIZARD).toContain("r.kredit === '0.00' ? '—' : rupiahPersis(r.kredit)")
-    expect(WIZARD).toContain('const { rupiahPersis } = useRupiah()')
+    expect(LEMBAR).toContain('rupiahPersis(ringkas.totalMasuk)')
+    expect(LEMBAR).toContain('rupiahPersis(ringkas.totalKeluar)')
+    expect(LEMBAR).toContain('const { rupiahPersis } = useRupiah()')
   })
 })
 
@@ -484,13 +483,13 @@ describe('pelabelan nominal & kolom', () => {
 // kertas. Tidak satu pun pemanggilan rupiah(...) boleh tersisa di sini.
 describe('rupiahPersis di layar pencocokan dokumen', () => {
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
   const INVOICE_FORM = read('components', 'pembelian', 'purchase-form-modal.tsx')
   const PAGE = read('app', 'mutasi-kas', 'page.tsx')
 
   it.each([
     ['panel alokasi', PANEL],
-    ['pratinjau impor', WIZARD],
+    ['grid mutasi', LEMBAR],
     ['form invoice', INVOICE_FORM],
     ['tabel utama /mutasi-kas', PAGE],
   ])('%s: tidak ada rupiah(...) yang membulatkan', (_nama, src) => {

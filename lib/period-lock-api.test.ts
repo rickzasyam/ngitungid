@@ -182,7 +182,7 @@ describe('UI kunci periode (K4)', () => {
   const SETTINGS = read('app', 'settings', 'page.tsx')
   const FORM = read('components', 'jurnal', 'journal-form-modal.tsx')
   const JURNAL = read('app', 'jurnal', 'page.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
 
   it('tab Pembukuan memuat kartu Kunci Periode; membuka = owner saja (D17)', () => {
     expect(SETTINGS).toContain('<KunciPeriodeCard clientId={clientId} bolehKunci={!readOnly} bolehBuka={bolehBuka} />')
@@ -216,9 +216,11 @@ describe('UI kunci periode (K4)', () => {
     expect(JURNAL).toContain('disabled={postingBusy || postingTerkunci}')
   })
 
-  it('wizard impor memperingatkan bahwa berkas akan ditolak seluruhnya', () => {
-    expect(WIZARD).toContain('fetch(`/api/period-locks?clientId=${clientId}`)')
-    expect(WIZARD).toContain('ditolak seluruhnya')
+  // Wizard impor CSV diganti grid (D47, S9): kunci periode datang dari S8 dan
+  // dipakai validator grid — tanggal di periode terkunci merah SEBELUM Simpan.
+  it('grid mutasi: kunci periode dari server, dipakai validator, dan disebut di layar', () => {
+    expect(LEMBAR).toContain('terkunciSampai: meta.terkunciSampai')
+    expect(LEMBAR).toContain('Periode terkunci s.d. {fmtTanggal(meta.terkunciSampai)}')
   })
 })
 
