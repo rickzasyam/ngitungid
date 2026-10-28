@@ -41,7 +41,7 @@ export type NominalMentah =
       penanda: string
     }
 
-/** Satu baris tercetak. Sel kosong = '' (bukan null), supaya pembaca tidak bercabang. */
+/** Satu baris transaksi tercetak; uraian yang terlipat sudah digabung (satu spasi). Sel kosong = '' (bukan null), supaya pembaca tidak bercabang. */
 export type BarisMentah = {
   /** Nomor halaman PDF, mulai 1 — ditampilkan di kolom "Hal." (X5). */
   halaman: number
