@@ -1,7 +1,7 @@
 import { GalatAi, jenisGalatAi, type AiProvider } from '@/lib/ai/penyedia'
 import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import { bukaPdf } from '../baca-pdf'
-import { gabungLintasHalaman, kolomTerakhir } from '../dokumen'
+import { gabungLintasHalaman, kolomSebelumnyaBerposisi, type JudulTercetak } from '../dokumen'
 import type { DokumenSintetis } from '../fikstur/dokumen-sintetis'
 import { GalatSusun, susunHalaman } from '../susun-tabel'
 import type { HasilKesinambungan, PemeriksaKesinambungan } from './kesinambungan-sementara'
@@ -53,6 +53,9 @@ export async function ujiDokumen(
   const halamanGagal: HasilDokumen['halamanGagal'] = []
   let tokenMasuk = 0
   let tokenKeluar = 0
+  // Seperti browser (X5): judul terakhir yang tercetak ikut dikirim ke halaman
+  // berikutnya beserta posisinya di halaman itu.
+  let judulTerakhir: JudulTercetak | null = null
   const mulai = jam()
   try {
     for (let n = 1; n <= doc.jumlahHalaman; n++) {
@@ -63,13 +66,15 @@ export async function ujiDokumen(
         continue
       }
       try {
+        const baris = t.baris.map(b => b.teks)
         const r = await susunHalaman(ai, {
           halaman: n,
-          sumber: { jenis: 'teks', baris: t.baris.map(b => b.teks) },
-          kolomSebelumnya: kolomTerakhir(hasil, n),
+          sumber: { jenis: 'teks', baris },
+          kolomSebelumnya: kolomSebelumnyaBerposisi(judulTerakhir, t.grid),
           timeoutMs: opsi.timeoutMs,
         })
         hasil.push(r.halaman)
+        if (r.halaman.kolom.length > 0) judulTerakhir = { kolom: r.halaman.kolom, baris, grid: t.grid }
         tokenMasuk += r.pemakaian.tokenMasuk
         tokenKeluar += r.pemakaian.tokenKeluar
       } catch (e) {

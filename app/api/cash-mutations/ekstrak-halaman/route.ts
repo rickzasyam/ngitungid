@@ -5,7 +5,7 @@ import { loadCashAccount } from '@/lib/api/cash-mutation-queries'
 import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 import { jenisGalatAi } from '@/lib/ai/penyedia'
 import { penyediaDariEnv } from '@/lib/ai/pilih-penyedia'
-import { GalatSusun, susunHalaman, type SumberHalaman } from '@/lib/bank-statement/susun-tabel'
+import { GalatSusun, susunHalaman, type KolomBerposisi, type SumberHalaman } from '@/lib/bank-statement/susun-tabel'
 
 export const runtime = 'nodejs'
 // Satu halaman per panggilan; penyedia bisa lambat saat antre.
@@ -19,9 +19,12 @@ const BARIS_MAKS = 400
 const PANJANG_BARIS_MAKS = 2_000
 const HALAMAN_MAKS = 500
 const TIMEOUT_PENYEDIA_MS = 50_000
+/** Batas rentang kolom karakter judul berposisi — jauh di atas lebar baris mana pun. */
+const POSISI_MAKS = PANJANG_BARIS_MAKS
 
 // POST /api/cash-mutations/ekstrak-halaman (MP §5.G X4)
-//   { clientId, akunKasId, halaman, baris: string[] | gambarPng: string, kolomSebelumnya?: string[] }
+//   { clientId, akunKasId, halaman, baris: string[] | gambarPng: string,
+//     kolomSebelumnya?: string[] | { judul, awal, akhir }[] }
 //   → HalamanMentah (lib/mutasi-kas/kontrak-baris-mentah.ts), persis.
 //
 // SATU halaman per panggilan; browser memanggilnya berurutan (progres, ulangi
@@ -82,8 +85,23 @@ export async function POST(req: Request) {
     }
     sumber = { jenis: 'gambar', base64: raw.gambarPng }
   }
+  // Judul halaman sebelumnya: nama saja, ATAU nama beserta posisinya di baris
+  // halaman ini (rentang kolom karakter, `kolomSebelumnyaBerposisi`) — yang
+  // kedua menyalakan aturan "angka sejajar dengan judulnya" di halaman lanjutan
+  // tanpa judul. Tidak boleh dicampur.
   const kolomSebelumnya = raw.kolomSebelumnya ?? []
-  if (!daftarTeks(kolomSebelumnya, 50, 200)) return NextResponse.json({ error: 'kolomSebelumnya tidak valid.' }, { status: 400 })
+  const kolomBerposisi = (v: unknown): v is KolomBerposisi[] =>
+    Array.isArray(v) &&
+    v.length <= 50 &&
+    v.every(x => {
+      if (typeof x !== 'object' || x === null || Array.isArray(x)) return false
+      const { judul, awal, akhir, ...lain } = x as Record<string, unknown>
+      const posisi = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && Math.abs(n) <= POSISI_MAKS
+      return Object.keys(lain).length === 0 && typeof judul === 'string' && judul.length <= 200 && posisi(awal) && posisi(akhir) && awal < akhir
+    })
+  if (!daftarTeks(kolomSebelumnya, 50, 200) && !kolomBerposisi(kolomSebelumnya)) {
+    return NextResponse.json({ error: 'kolomSebelumnya tidak valid.' }, { status: 400 })
+  }
 
   if (!canAccessClientData(g.user.role, g.user.clientId, clientId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -96,7 +114,7 @@ export async function POST(req: Request) {
 
   try {
     const ai = penyediaDariEnv()
-    const r = await susunHalaman(ai, { halaman, sumber, kolomSebelumnya: kolomSebelumnya as string[], timeoutMs: TIMEOUT_PENYEDIA_MS })
+    const r = await susunHalaman(ai, { halaman, sumber, kolomSebelumnya: kolomSebelumnya as string[] | KolomBerposisi[], timeoutMs: TIMEOUT_PENYEDIA_MS })
     return NextResponse.json(r.halaman)
   } catch (e) {
     if (e instanceof GalatSusun) {

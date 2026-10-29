@@ -185,28 +185,28 @@ describe('penyediaEkstraksi — Gemini thinking minimal + ulang lapisan baru', (
   })
 })
 
-describe('penyediaDariEnv — AI_PROVIDER + AI_MODEL_EKSTRAKSI', () => {
+describe('penyediaDariEnv — AI_PROVIDER_EKSTRAKSI + AI_MODEL_EKSTRAKSI', () => {
   it('kosong / gemini → Gemini Flash-Lite bawaan ekstraksi', () => {
-    for (const env of [{}, { AI_PROVIDER: '' }, { AI_PROVIDER: 'gemini' }, { AI_MODEL: 'nama-lama-tidak-dibaca' }]) {
+    for (const env of [{}, { AI_PROVIDER_EKSTRAKSI: '' }, { AI_PROVIDER_EKSTRAKSI: 'gemini' }, { AI_MODEL: 'nama-lama-tidak-dibaca' }, { AI_PROVIDER: 'anthropic' }]) {
       const p = penyediaDariEnv(env)
       expect([p.nama, p.model]).toEqual(['gemini', MODEL_EKSTRAKSI_GEMINI])
     }
-    expect(penyediaDariEnv({ AI_PROVIDER: 'gemini', AI_MODEL_EKSTRAKSI: 'gemini-uji' }).model).toBe('gemini-uji')
+    expect(penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: 'gemini', AI_MODEL_EKSTRAKSI: 'gemini-uji' }).model).toBe('gemini-uji')
   })
 
   it('anthropic → Claude Haiku bawaan atau AI_MODEL_EKSTRAKSI', () => {
-    expect(penyediaDariEnv({ AI_PROVIDER: 'anthropic' })).toMatchObject({ nama: 'anthropic', model: 'claude-haiku-5-5' })
-    expect(penyediaDariEnv({ AI_PROVIDER: 'anthropic', AI_MODEL_EKSTRAKSI: 'claude-x' }).model).toBe('claude-x')
+    expect(penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: 'anthropic' })).toMatchObject({ nama: 'anthropic', model: 'claude-haiku-5-5' })
+    expect(penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: 'anthropic', AI_MODEL_EKSTRAKSI: 'claude-x' }).model).toBe('claude-x')
   })
 
   it('openai wajib AI_MODEL_EKSTRAKSI', () => {
-    expect(penyediaDariEnv({ AI_PROVIDER: 'openai', AI_MODEL_EKSTRAKSI: 'gpt-uji' })).toMatchObject({ nama: 'openai', model: 'gpt-uji' })
-    expect(() => penyediaDariEnv({ AI_PROVIDER: 'openai' })).toThrow('AI_MODEL_EKSTRAKSI')
+    expect(penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: 'openai', AI_MODEL_EKSTRAKSI: 'gpt-uji' })).toMatchObject({ nama: 'openai', model: 'gpt-uji' })
+    expect(() => penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: 'openai' })).toThrow('AI_MODEL_EKSTRAKSI')
   })
 
   it('nilai tak dikenal → galat konfigurasi, tidak jatuh diam-diam ke Gemini', () => {
     for (const v of ['Gemini', 'claude', ' gemini', 'deepseek']) {
-      expect(() => penyediaDariEnv({ AI_PROVIDER: v })).toThrow(GalatAi)
+      expect(() => penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: v })).toThrow(GalatAi)
     }
   })
 })
@@ -227,7 +227,7 @@ describe('jenisGalatAi', () => {
 describe('batas lapisan', () => {
   const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
 
-  // Fitur AI yang sudah jalan memakai Gemini LANGSUNG — mengisi AI_PROVIDER untuk
+  // Fitur AI yang sudah jalan memakai Gemini LANGSUNG — mengisi AI_PROVIDER_EKSTRAKSI untuk
   // rekening koran (X7) tidak boleh ikut memindahkan mereka ke penyedia lain.
   it('fitur lama tidak memakai pemilih penyedia dari env', () => {
     for (const f of [['lib', 'ai', 'saran-akun-jurnal.ts'], ['lib', 'gemini', 'extract.ts'], ['lib', 'gemini', 'suggest-coa.ts']]) {

@@ -32,11 +32,19 @@ export type SumberHalaman =
   | { jenis: 'teks'; baris: string[] }
   | { jenis: 'gambar'; base64: string }
 
+/**
+ * Judul kolom halaman sebelumnya beserta POSISINYA di baris halaman INI: rentang
+ * kolom karakter [awal, akhir) sesudah dipindah lewat posisi x PDF
+ * (`kolomSebelumnyaBerposisi`, dokumen.ts). Hanya untuk aturan "angka sejajar
+ * dengan judulnya" di halaman lanjutan; AI tetap hanya menerima nama judulnya.
+ */
+export type KolomBerposisi = { judul: string; awal: number; akhir: number }
+
 export type MasukanSusun = {
   halaman: number
   sumber: SumberHalaman
   /** `kolom` halaman sebelumnya — untuk halaman lanjutan yang tidak mencetak judul. */
-  kolomSebelumnya: string[]
+  kolomSebelumnya: string[] | KolomBerposisi[]
   timeoutMs?: number
 }
 
@@ -118,8 +126,10 @@ Aturan:
 
 Kembalikan HANYA objek JSON sesuai skema.`
 
+const namaJudul = (k: MasukanSusun['kolomSebelumnya']): string[] => k.map(x => (typeof x === 'string' ? x : x.judul))
+
 function isiPengguna(m: MasukanSusun): string {
-  const atas = `HALAMAN: ${m.halaman}\nJUDUL HALAMAN SEBELUMNYA: ${JSON.stringify(m.kolomSebelumnya)}\n`
+  const atas = `HALAMAN: ${m.halaman}\nJUDUL HALAMAN SEBELUMNYA: ${JSON.stringify(namaJudul(m.kolomSebelumnya))}\n`
   if (m.sumber.jenis === 'gambar') {
     return `${atas}\nMasukan berupa GAMBAR halaman hasil scan. "nomorBaris" dan "nomorBarisJudul" = urutan baris tercetak dari atas, mulai 1.`
   }
@@ -155,7 +165,7 @@ function rentangDi(baris: string, cari: string): Rentang[] {
 const jarak = (a: Rentang, b: Rentang) => Math.max(0, Math.max(a[0], b[0]) - Math.min(a[1], b[1]))
 
 /** Posisi tiap judul di baris judul, dicari kiri→kanan; null bila ada yang tidak ketemu persis (pemeriksaan posisi dilewati). */
-function posisiJudul(barisJudul: string, kolom: string[]): { judul: string; rentang: Rentang }[] | null {
+export function posisiJudul(barisJudul: string, kolom: string[]): { judul: string; rentang: Rentang }[] | null {
   const out: { judul: string; rentang: Rentang }[] = []
   let dari = 0
   for (const k of kolom) {
@@ -214,7 +224,7 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
 
   // Judul yang boleh dipakai: tercetak di halaman ini, atau — halaman lanjutan
   // tanpa judul — di halaman sebelumnya.
-  const judulSah = adaJudul ? kolom : m.kolomSebelumnya
+  const judulSah = adaJudul ? kolom : namaJudul(m.kolomSebelumnya)
   const p = j.peranKolom
   for (const [peran, judul] of Object.entries(p)) {
     if (judul !== '' && !judulSah.includes(judul)) masalah.push(`judul peran ${peran} tidak tercetak`)
@@ -229,11 +239,19 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
   }
   if (berteks && j.periodeTeks !== '' && !garis.some(g => rapat(g).includes(rapat(j.periodeTeks)))) masalah.push('periodeTeks tidak tercetak di halaman')
 
-  // Posisi judul untuk pemeriksaan "angka sejajar dengan judulnya". Hanya di
-  // halaman yang MENCETAK judul: posisi judul halaman sebelumnya tidak ikut
-  // masuk route, jadi halaman lanjutan tanpa judul tidak diperiksa di sini.
+  // Posisi judul untuk pemeriksaan "angka sejajar dengan judulnya": dari baris
+  // judul halaman ini, atau — halaman lanjutan tanpa judul (keputusan Ricko
+  // 2026-10-29) — dari posisi judul halaman sebelumnya yang dikirim pemanggil
+  // sudah dipindah ke kolom karakter halaman ini. Judul tanpa posisi (string)
+  // = tidak diperiksa, seperti sebelumnya.
   const gJudul = berteks && adaJudul ? garis[j.nomorBarisJudul - 1] : undefined
-  const posisi = gJudul === undefined ? null : posisiJudul(gJudul, kolom)
+  const berposisi = m.kolomSebelumnya.filter((k): k is KolomBerposisi => typeof k !== 'string')
+  const posisi =
+    gJudul !== undefined
+      ? posisiJudul(gJudul, kolom)
+      : berteks && !adaJudul && berposisi.length > 0 && berposisi.length === m.kolomSebelumnya.length
+        ? berposisi.map(k => ({ judul: k.judul, rentang: [k.awal, k.akhir] as Rentang }))
+        : null
 
   let sebelumnya = 0
   // Uraian keluaran per baris; untuk halaman berteks yang berlanjutan, disusun

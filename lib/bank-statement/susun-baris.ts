@@ -34,6 +34,13 @@ export type BarisTata = {
   teks: string
 }
 
+/**
+ * Skala satu halaman: kolom karakter = round((x − xMin) / satuan). Dihitung PER
+ * HALAMAN, jadi kolom karakter dua halaman tidak bisa dibandingkan langsung —
+ * `pindahGrid` memindahkannya lewat posisi x PDF.
+ */
+export type GridHalaman = { xMin: number; satuan: number }
+
 function median(xs: number[]): number {
   if (xs.length === 0) return 0
   const s = [...xs].sort((a, b) => a - b)
@@ -43,6 +50,25 @@ function median(xs: number[]): number {
 
 function bersih(s: string): boolean {
   return s.trim() !== ''
+}
+
+/** Skala halaman yang dipakai `susunBaris` untuk item-item ini. */
+export function gridHalaman(itemMentah: ItemTeks[]): GridHalaman {
+  const items = itemMentah.filter(i => bersih(i.teks))
+  if (items.length === 0) return { xMin: 0, satuan: 4 }
+  // Lebar satu kolom karakter = median lebar per huruf di halaman ini.
+  const satuan = median(items.filter(i => i.lebar > 0).map(i => i.lebar / i.teks.length)) || 4
+  return { xMin: Math.min(...items.map(i => i.x)), satuan }
+}
+
+/**
+ * Rentang kolom karakter [awal, akhir) dari grid `dari` ke grid `ke`, lewat
+ * posisi x PDF — mis. posisi judul kolom halaman 1 di baris halaman 2 yang
+ * tidak mencetak judul. Pembulatannya sama dengan `susunBaris`.
+ */
+export function pindahGrid(r: [number, number], dari: GridHalaman, ke: GridHalaman): [number, number] {
+  const kolom = (c: number) => Math.round((dari.xMin + c * dari.satuan - ke.xMin) / ke.satuan)
+  return [kolom(r[0]), kolom(r[1])]
 }
 
 export function susunBaris(itemMentah: ItemTeks[]): BarisTata[] {
@@ -61,9 +87,7 @@ export function susunBaris(itemMentah: ItemTeks[]): BarisTata[] {
     else kelompok.push({ y: it.y, item: [it] })
   }
 
-  // Lebar satu kolom karakter = median lebar per huruf di halaman ini.
-  const satuan = median(items.filter(i => i.lebar > 0).map(i => i.lebar / i.teks.length)) || 4
-  const xMin = Math.min(...items.map(i => i.x))
+  const { xMin, satuan } = gridHalaman(items)
 
   return kelompok.map((k, idx) => {
     const item = k.item.sort((a, b) => a.x - b.x)

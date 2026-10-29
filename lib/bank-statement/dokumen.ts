@@ -1,4 +1,6 @@
 import type { BarisMentah, HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
+import { pindahGrid, type GridHalaman } from './susun-baris'
+import { posisiJudul, type KolomBerposisi } from './susun-tabel'
 
 // Satu PDF = satu dokumen = satu blok draf di grid. Halaman disusun satu per
 // satu (X4 dipanggil per halaman), lalu dirangkum di sini sebelum diserahkan
@@ -13,6 +15,34 @@ export function kolomTerakhir(halaman: HalamanMentah[], sebelum: number): string
     if (halaman[i].halaman < sebelum && halaman[i].kolom.length > 0) return halaman[i].kolom
   }
   return []
+}
+
+/**
+ * Halaman terakhir yang MENCETAK judul kolom: nama judulnya (`HalamanMentah.kolom`),
+ * baris tata yang dikirim untuk halaman itu, dan skalanya. Disimpan pemanggil
+ * (browser X5, harness) sesudah halaman itu tersusun.
+ */
+export type JudulTercetak = { kolom: string[]; baris: string[]; grid: GridHalaman }
+
+/**
+ * `kolomSebelumnya` untuk halaman berikutnya: judul halaman asal BESERTA
+ * posisinya di kolom karakter halaman INI (dipindah lewat posisi x PDF, karena
+ * skala kolom karakter dihitung per halaman). Baris judul dicari di baris tata
+ * halaman asal — baris pertama yang memuat semua judul berurutan. Tidak ketemu
+ * → nama judul saja, dan aturan "angka sejajar dengan judulnya" tidak dijalankan
+ * untuk halaman itu (keputusan Ricko 2026-10-29: posisi lewat route).
+ */
+export function kolomSebelumnyaBerposisi(asal: JudulTercetak | null, gridIni: GridHalaman): string[] | KolomBerposisi[] {
+  if (!asal || asal.kolom.length === 0) return []
+  for (const g of asal.baris) {
+    const p = posisiJudul(g, asal.kolom)
+    if (!p) continue
+    return p.map(x => {
+      const [awal, akhir] = pindahGrid(x.rentang, asal.grid, gridIni)
+      return { judul: x.judul, awal, akhir }
+    })
+  }
+  return asal.kolom
 }
 
 /** Baris yang hanya berisi uraian — lanjutan uraian yang terlipat. */

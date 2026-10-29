@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { AMBANG_KARAKTER_TEKS, bukaPdf, type HalamanTeks } from './baca-pdf'
-import { susunBaris, teksBernomor, type ItemTeks } from './susun-baris'
+import { gridHalaman, pindahGrid, susunBaris, teksBernomor, type ItemTeks } from './susun-baris'
 import { dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenSebagianScan, dokumenTanpaSaldo } from './fikstur/koleksi'
 import type { BarisCetak, BarisData, DokumenSintetis } from './fikstur/dokumen-sintetis'
 
@@ -136,5 +136,37 @@ describe('batas modul lib/bank-statement', () => {
   it('pembaca PDF tidak menyimpan atau mengirim apa pun', () => {
     const src = readFileSync(join(process.cwd(), 'lib/bank-statement/baca-pdf.ts'), 'utf8')
     for (const s of ['localStorage', 'sessionStorage', 'indexedDB', 'fetch(', 'writeFile']) expect(src, s).not.toContain(s)
+  })
+})
+
+// Skala kolom karakter dihitung PER HALAMAN. Posisi judul halaman 1 harus
+// dipindah lewat x PDF supaya bisa dipakai di halaman lanjutan (keputusan Ricko
+// 2026-10-29: aturan "angka sejajar dengan judulnya" di halaman tanpa judul).
+describe('grid halaman & pindahGrid', () => {
+  const it2 = (teks: string, x: number): ItemTeks => ({ teks, x, y: 700, lebar: teks.length * 5, tinggi: 8 })
+
+  it('gridHalaman = skala yang dipakai susunBaris', () => {
+    const items = [it2('A', 40), it2('BBBB', 90)]
+    const g = gridHalaman(items)
+    expect(g).toEqual({ xMin: 40, satuan: 5 })
+    expect(susunBaris(items)[0].teks.indexOf('BBBB')).toBe(Math.round((90 - g.xMin) / g.satuan))
+  })
+
+  it('pindahGrid: identitas pada grid sama; beda xMin & satuan dipindah lewat x', () => {
+    const a = { xMin: 40, satuan: 5 }
+    expect(pindahGrid([10, 15], a, a)).toEqual([10, 15])
+    // x = 40 + 10×5 = 90 … 115 → di grid (xMin 30, satuan 4): (90−30)/4 = 15 … (115−30)/4 = 21,25 → 21
+    expect(pindahGrid([10, 15], a, { xMin: 30, satuan: 4 })).toEqual([15, 21])
+  })
+
+  it('halaman PDF membawa gridnya', async () => {
+    const doc = await bukaPdf(dokumenDuaKolom().pdf)
+    try {
+      const h = await doc.bacaHalaman(2)
+      expect(h.grid.satuan).toBeGreaterThan(0)
+      expect(Number.isFinite(h.grid.xMin)).toBe(true)
+    } finally {
+      await doc.tutup()
+    }
   })
 })

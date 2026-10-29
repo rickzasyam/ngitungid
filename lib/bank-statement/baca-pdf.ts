@@ -1,5 +1,5 @@
 import { getDocumentProxy, renderPageAsImage } from 'unpdf'
-import { jumlahKarakter, susunBaris, type BarisTata, type ItemTeks } from './susun-baris'
+import { gridHalaman, jumlahKarakter, susunBaris, type BarisTata, type GridHalaman, type ItemTeks } from './susun-baris'
 
 // Pembaca PDF rekening koran (X2). Dirancang untuk BROWSER (D56: PDF tidak
 // disimpan — teks diekstrak di perangkat pengguna, server hanya menerima teks
@@ -18,6 +18,8 @@ export const AMBANG_KARAKTER_TEKS = 20
 export type HalamanTeks = {
   halaman: number
   baris: BarisTata[]
+  /** Skala kolom karakter halaman ini — untuk memindahkan posisi judul ke halaman lanjutan. */
+  grid: GridHalaman
   /** Lapisan teks kosong/terlalu sedikit → kirim gambar halaman, bukan teks. */
   perluGambar: boolean
 }
@@ -53,8 +55,9 @@ export async function bukaPdf(data: Uint8Array): Promise<DokumenPdf> {
       const page = await doc.getPage(halaman)
       try {
         const isi = await page.getTextContent()
-        const baris = susunBaris(keItemTeks(isi.items))
-        return { halaman, baris, perluGambar: jumlahKarakter(baris) < AMBANG_KARAKTER_TEKS }
+        const item = keItemTeks(isi.items)
+        const baris = susunBaris(item)
+        return { halaman, baris, grid: gridHalaman(item), perluGambar: jumlahKarakter(baris) < AMBANG_KARAKTER_TEKS }
       } finally {
         page.cleanup()
       }

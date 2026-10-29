@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AiProvider } from '@/lib/ai/penyedia'
 import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import { bukaPdf } from './baca-pdf'
-import { gabungLintasHalaman, kolomTerakhir, rangkumDokumen } from './dokumen'
+import { gabungLintasHalaman, kolomSebelumnyaBerposisi, kolomTerakhir, rangkumDokumen, type JudulTercetak } from './dokumen'
 import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenTanpaSaldo } from './fikstur/koleksi'
 import type { DokumenSintetis } from './fikstur/dokumen-sintetis'
 import { jawabanSempurna, penyediaTiruan } from './fikstur/jawaban-ai'
@@ -253,6 +253,99 @@ describe('penjaga bentuk menolak jawaban rusak — halaman gagal terlihat', asyn
     expect(tolak({ ...j, baris: [j.baris[0], j.baris[0]] }, g)).toContain('tidak urut/ganda')
     const lepas = { nomorBaris: 2, tanggal: '', uraian: 'LANJUTAN UJI-B', nominalPertama: '', nominalKedua: '', penanda: '', saldo: '', lain: [], barisLanjutan: [] }
     expect(tolak({ ...j, baris: [j.baris[0], lepas] }, g)).toContain('lanjutan uraian tidak digabung')
+  })
+})
+
+// ══ Halaman lanjutan TANPA judul: posisi judul halaman sebelumnya ══════════
+// Keputusan Ricko 2026-10-29: posisi judul dikirim lewat route (kolomSebelumnya
+// berposisi), dipindah ke kolom karakter halaman lanjutan lewat x PDF.
+describe('halaman lanjutan tanpa judul — angka sejajar dengan judul halaman sebelumnya', async () => {
+  type Hal = { baris: string[]; grid: Parameters<typeof kolomSebelumnyaBerposisi>[1] }
+  async function halamanPdf(d: DokumenSintetis): Promise<Hal[]> {
+    const doc = await bukaPdf(d.pdf)
+    try {
+      const out: Hal[] = []
+      for (let i = 1; i <= doc.jumlahHalaman; i++) {
+        const h = await doc.bacaHalaman(i)
+        out.push({ baris: h.baris.map(b => b.teks), grid: h.grid })
+      }
+      return out
+    } finally {
+      await doc.tutup()
+    }
+  }
+  /** Seperti browser/harness: judul tercetak terakhir dibawa ke halaman berikut, berposisi. */
+  async function susunBerposisi(d: DokumenSintetis, ai: (hal: number, baris: string[]) => AiProvider) {
+    const semua = await halamanPdf(d)
+    const hasil: HalamanMentah[] = []
+    let judul: JudulTercetak | null = null
+    const masukan: MasukanSusun[] = []
+    for (const [i, h] of semua.entries()) {
+      const m: MasukanSusun = { halaman: i + 1, sumber: { jenis: 'teks', baris: h.baris }, kolomSebelumnya: kolomSebelumnyaBerposisi(judul, h.grid) }
+      masukan.push(m)
+      const r = await susunHalaman(ai(i + 1, h.baris), m)
+      hasil.push(r.halaman)
+      if (r.halaman.kolom.length > 0) judul = { kolom: r.halaman.kolom, baris: h.baris, grid: h.grid }
+    }
+    return { hasil, masukan }
+  }
+  const tolak = (j: unknown, m: MasukanSusun) => {
+    try {
+      periksaJawaban(JSON.stringify(j), m)
+    } catch (e) {
+      expect(e).toBeInstanceOf(GalatSusun)
+      return (e as GalatSusun).masalah.join(' | ')
+    }
+    throw new Error('tidak ditolak')
+  }
+
+  it('jawaban benar di semua fikstur berteks → SAMA PERSIS kebenaran (tanpa tolakan palsu), halaman lanjutan memang berposisi', async () => {
+    let berposisi = 0
+    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenTanpaSaldo(), dokumenLanjutanLintasHalaman(), dokumenAcak(7), dokumenAcak(8, 60), dokumenAcak(1005, 30)]) {
+      const { hasil, masukan } = await susunBerposisi(d, sempurna(d))
+      expect(hasil, d.nama).toEqual(d.kebenaranHalaman)
+      berposisi += masukan.filter(m => m.kolomSebelumnya.length > 0 && typeof m.kolomSebelumnya[0] !== 'string').length
+    }
+    expect(berposisi).toBeGreaterThan(5)
+  })
+
+  it('dua kolom hal. 2 (tanpa judul): saldo ditaruh di Kredit / Debet↔Kredit tertukar → ditolak; nama judul saja → tidak diperiksa (perilaku lama)', async () => {
+    const d = dokumenDuaKolom()
+    const { masukan } = await susunBerposisi(d, sempurna(d))
+    const m2 = masukan[1]
+    const baris2 = (m2.sumber as { baris: string[] }).baris
+    const j = jawabanSempurna(d, 2, baris2)
+    expect(j.nomorBarisJudul).toBe(0)
+    const k = j.baris.findIndex(b => b.saldo !== '' && b.nominalKedua === '')
+    const saldoKeKredit = { ...j, baris: j.baris.map((b, i) => (i === k ? { ...b, nominalKedua: b.saldo, saldo: '' } : b)) }
+    expect(tolak(saldoKeKredit, m2)).toContain(`baris ke-${k + 1}: sel nominal kedua tidak sejajar`)
+    const t = j.baris.findIndex(b => b.nominalPertama !== '' || b.nominalKedua !== '')
+    const tukar = { ...j, baris: j.baris.map((b, i) => (i === t ? { ...b, nominalPertama: b.nominalKedua, nominalKedua: b.nominalPertama } : b)) }
+    expect(tolak(tukar, m2)).toContain('tidak sejajar')
+    // Nama saja (route lama / posisi tidak diketahui) → aturan posisi tidak dijalankan.
+    const namaSaja: MasukanSusun = { ...m2, kolomSebelumnya: d.kebenaran[0].kolom }
+    expect(() => periksaJawaban(JSON.stringify(tukar), namaSaja)).not.toThrow()
+  })
+
+  it('prompt tetap hanya NAMA judul — posisi tidak dikirim ke AI', async () => {
+    const d = dokumenDuaKolom()
+    const { masukan } = await susunBerposisi(d, sempurna(d))
+    const mintaJson = vi.fn(async () => ({ teks: JSON.stringify(jawabanSempurna(d, 2, (masukan[1].sumber as { baris: string[] }).baris)), model: 'm', pemakaian: { tokenMasuk: 0, tokenKeluar: 0 } }))
+    await susunHalaman({ nama: 'gemini', model: 'm', mintaJson }, masukan[1])
+    const teks = ((mintaJson.mock.calls[0] as unknown as [Parameters<AiProvider['mintaJson']>[0]])[0].isi[0] as { teks: string }).teks
+    expect(teks).toContain('JUDUL HALAMAN SEBELUMNYA: ["Tanggal","Keterangan","Debet","Kredit","Saldo","Reff"]')
+    expect(teks).not.toContain('"awal":')
+    expect(teks).not.toContain('"akhir":')
+  })
+
+  it('kolomSebelumnyaBerposisi: tanpa asal → []; baris judul tidak ketemu → nama saja; posisi dipindah lewat x', () => {
+    const g = { xMin: 40, satuan: 5 }
+    expect(kolomSebelumnyaBerposisi(null, g)).toEqual([])
+    expect(kolomSebelumnyaBerposisi({ kolom: ['Debet', 'Kredit'], baris: ['tidak ada judul di sini'], grid: g }, g)).toEqual(['Debet', 'Kredit'])
+    const asal: JudulTercetak = { kolom: ['Debet', 'Kredit'], baris: ['kop', '     Debet     Kredit'], grid: g }
+    expect(kolomSebelumnyaBerposisi(asal, g)).toEqual([{ judul: 'Debet', awal: 5, akhir: 10 }, { judul: 'Kredit', awal: 15, akhir: 21 }])
+    // Halaman berikut ber-xMin 30 (lebih kiri): x judul Debet 65…90 → kolom 7…12.
+    expect(kolomSebelumnyaBerposisi(asal, { xMin: 30, satuan: 5 })[0]).toEqual({ judul: 'Debet', awal: 7, akhir: 12 })
   })
 })
 

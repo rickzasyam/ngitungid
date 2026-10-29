@@ -65,12 +65,16 @@ describe('ujiDokumen', () => {
     }
   })
 
-  it('kolom tertukar di satu baris: lolos penjaga, TERTANGKAP kesinambungan', async () => {
+  // Halaman 2 dokumen dua kolom TIDAK mencetak judul. Sejak keputusan Ricko
+  // 2026-10-29 harness (seperti browser) mengirim posisi judul halaman 1, jadi
+  // kolom tertukar di halaman lanjutan pun ditolak penjaga — dulu hanya
+  // tertangkap kesinambungan (yang tetap diuji langsung di atas).
+  it('kolom tertukar di halaman lanjutan tanpa judul: DITOLAK penjaga lewat posisi judul halaman sebelumnya', async () => {
     const d = dokumenDuaKolom()
     const tukar = (j: JawabanSusun, h: number) =>
       h !== 2 ? j : { ...j, baris: j.baris.map((b, i) => (i === 0 ? { ...b, nominalPertama: b.nominalKedua, nominalKedua: b.nominalPertama } : b)) }
     const r = await ujiDokumen(await penyediaSempurna(d, tukar), d, kesinambunganSementara)
-    expect(r).toMatchObject({ halamanGagal: [], kesinambungan: 'putus', lolosTanpaKoreksi: false, identik: false, barisHilang: 1, barisLebih: 1 })
+    expect(r).toMatchObject({ halamanGagal: [{ halaman: 2, jenis: 'ditolak-penjaga' }], lolosTanpaKoreksi: false, identik: false })
   })
 
   it('baris terlewat → halaman ditolak penjaga, baris halaman itu dihitung hilang', async () => {

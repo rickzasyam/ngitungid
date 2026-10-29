@@ -15,6 +15,7 @@ import { penyediaDariEnv } from '@/lib/ai/pilih-penyedia'
 import { GalatAi, type AiProvider } from '@/lib/ai/penyedia'
 import { POST } from '@/app/api/cash-mutations/ekstrak-halaman/route'
 import { bukaPdf } from './baca-pdf'
+import { kolomSebelumnyaBerposisi } from './dokumen'
 import { penyediaSempurna, penyediaTiruan } from './fikstur/jawaban-ai'
 import { dokumenDuaKolom, dokumenSatuKolom } from './fikstur/koleksi'
 
@@ -62,6 +63,25 @@ describe('jawaban = HalamanMentah persis kontrak', () => {
     expect(await res2.json()).toEqual(dd.kebenaranHalaman[1])
     expect(akun).toHaveBeenCalledWith(CLIENT, AKUN)
   })
+
+  // Keputusan Ricko 2026-10-29: posisi judul halaman sebelumnya lewat route.
+  it('halaman lanjutan dengan judul BERPOSISI: jawaban benar diterima, kolom tertukar ditolak 422', async () => {
+    const dd = dokumenDuaKolom()
+    const doc = await bukaPdf(dd.pdf)
+    const [h1, h2] = [await doc.bacaHalaman(1), await doc.bacaHalaman(2)]
+    await doc.tutup()
+    const kolomSebelumnya = kolomSebelumnyaBerposisi({ kolom: dd.kebenaran[0].kolom, baris: h1.baris.map(b => b.teks), grid: h1.grid }, h2.grid)
+    expect(kolomSebelumnya.every(k => typeof k !== 'string')).toBe(true)
+    const body = { clientId: CLIENT, akunKasId: AKUN, halaman: 2, baris: h2.baris.map(b => b.teks), kolomSebelumnya }
+    pilih.mockReturnValue(await penyediaSempurna(dd))
+    const ok = await kirim(body)
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toEqual(dd.kebenaranHalaman[1])
+    pilih.mockReturnValue(await penyediaSempurna(dd, (j, h) => (h !== 2 ? j : { ...j, baris: j.baris.map((b, i) => (i === 0 ? { ...b, nominalPertama: b.nominalKedua, nominalKedua: b.nominalPertama } : b)) })))
+    const tolak = await kirim(body)
+    expect(tolak.status).toBe(422)
+    expect(JSON.stringify(await tolak.json())).toContain('tidak sejajar')
+  })
 })
 
 describe('validasi sebelum penyedia dipanggil', () => {
@@ -80,6 +100,11 @@ describe('validasi sebelum penyedia dipanggil', () => {
     ['baris terlalu panjang', { ...sah, baris: ['x'.repeat(2001)] }, 400],
     ['gambar bukan PNG', { clientId: CLIENT, akunKasId: AKUN, halaman: 1, gambarPng: '/9j/4AAQ' }, 400],
     ['kolomSebelumnya bukan teks', { ...sah, kolomSebelumnya: 'Debet' }, 400],
+    ['kolomSebelumnya campuran nama & berposisi', { ...sah, kolomSebelumnya: ['Debet', { judul: 'Kredit', awal: 10, akhir: 16 }] }, 400],
+    ['kolomSebelumnya berposisi: kunci tambahan', { ...sah, kolomSebelumnya: [{ judul: 'Debet', awal: 1, akhir: 6, x: 1 }] }, 400],
+    ['kolomSebelumnya berposisi: awal ≥ akhir', { ...sah, kolomSebelumnya: [{ judul: 'Debet', awal: 6, akhir: 6 }] }, 400],
+    ['kolomSebelumnya berposisi: posisi pecahan', { ...sah, kolomSebelumnya: [{ judul: 'Debet', awal: 1.5, akhir: 6 }] }, 400],
+    ['kolomSebelumnya berposisi: posisi di luar batas', { ...sah, kolomSebelumnya: [{ judul: 'Debet', awal: 1, akhir: 99_999 }] }, 400],
   ]
   for (const [nama, body, status] of kasus) {
     it(`${nama} → ${status}`, async () => {
@@ -133,9 +158,9 @@ describe('galat penyedia & penjaga → status yang bisa ditindaklanjuti, tanpa i
     expect((await res.json()).error).toContain('harian')
   })
 
-  it('penyedia belum dikonfigurasi (AI_PROVIDER salah) → 503', async () => {
+  it('penyedia belum dikonfigurasi (AI_PROVIDER_EKSTRAKSI salah) → 503', async () => {
     pilih.mockImplementation(() => {
-      throw new GalatAi('konfigurasi', 'AI_PROVIDER "x" tidak dikenal')
+      throw new GalatAi('konfigurasi', 'AI_PROVIDER_EKSTRAKSI "x" tidak dikenal')
     })
     expect((await kirim(sah)).status).toBe(503)
   })
