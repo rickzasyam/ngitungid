@@ -113,6 +113,38 @@ describe('draf (D51)', () => {
     expect(LEMBAR).toContain('Pulihkan draf')
     expect(LEMBAR).toContain('Buang')
   })
+  // CP-20 (Ricko 2026-10-29): draf yang diganti versi server tidak boleh hilang.
+  describe('"Muat ulang dari server" (konflik 409)', () => {
+    const alur = LEMBAR.slice(LEMBAR.indexOf('async function cadangkanLaluMuatUlang('), LEMBAR.indexOf('const aktifBaris ='))
+
+    it('menulis draf ke slot `tertimpa` LEBIH DULU, dan membatalkan muat ulang bila gagal', () => {
+      const tulis = alur.indexOf("'tertimpa'\n      )")
+      const gagal = alur.indexOf("setMuatUlang('gagal')\n        return")
+      const muat = alur.indexOf('setVersi(v => v + 1)')
+      expect(tulis).toBeGreaterThan(-1)
+      expect(gagal).toBeGreaterThan(tulis)
+      expect(muat).toBeGreaterThan(gagal)
+    })
+    it('peringatan eksplisit (alertdialog), bukan window.confirm; tanpa cadangan hanya lewat pilihan kedua', () => {
+      expect(LEMBAR).toContain('role="alertdialog"')
+      expect(LEMBAR).toContain('Muat ulang MENGGANTI draf di layar dengan versi terbaru dari server.')
+      expect(LEMBAR).not.toContain("window.confirm('Muat ulang")
+      expect(LEMBAR).toContain("onClick={() => setMuatUlang('tanya')}")
+      expect(LEMBAR).toContain('Tetap muat ulang — draf hilang')
+    })
+    it('autosave tidak menulis ulang slot draf selama penggantian', () => {
+      expect(LEMBAR).toContain('if (sedangMuatUlang.current) return')
+    })
+    it('kedua slot ditawarkan saat dibuka; draf tertimpa bisa dipulihkan dan dibuang', () => {
+      expect(LEMBAR).toContain("bacaCadangan(clientId, akunKas.id, 'tertimpa')")
+      expect(LEMBAR).toContain('Pulihkan draf tertimpa')
+      expect(LEMBAR).toContain('void hapusCadangan(clientId, akunKas.id, c.slot)')
+    })
+    it('slot tertimpa berkunci sendiri; kunci slot draf tidak berubah (cadangan lama tetap terbaca)', () => {
+      expect(CADANGAN).toContain("slot === 'draf' ? `${clientId}:${akunKasId}` : `${clientId}:${akunKasId}:${slot}`")
+    })
+  })
+
   it('setiap akses IndexedDB dibungkus try/catch', () => {
     expect(CADANGAN.match(/try \{/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
     expect(CADANGAN).toContain("typeof indexedDB === 'undefined'")

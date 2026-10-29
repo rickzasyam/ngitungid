@@ -158,6 +158,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
   const idBantuan = useId()
   const idDaftarAkun = useId()
   const idAlasan = useId()
+  const idMuatUlang = useId()
   const gridRef = useRef<DataGridHandle | null>(null)
   const berkasRef = useRef<HTMLInputElement>(null)
 
@@ -176,11 +177,15 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
   const [filter, setFilter] = useState(false)
   const [aktif, setAktif] = useState<PosisiAktif>({ kunci: null, kolom: null })
   const [pesanLokal, setPesanLokal] = useState('')
-  const [tawaranCadangan, setTawaranCadangan] = useState<RekamanCadangan | null>(null)
+  const [tawaran, setTawaran] = useState<RekamanCadangan[]>([])
+  const [muatUlang, setMuatUlang] = useState<'tanya' | 'menulis' | 'gagal' | null>(null)
   const [cadanganGagal, setCadanganGagal] = useState(false)
   const [isiAkun, setIsiAkun] = useState<string | null>(null)
   const pulihkanTertunda = useRef<RekamanCadangan | null>(null)
   const cadanganKami = useRef(false)
+  // Selama draf sedang diganti versi server, autosave tidak boleh menulis
+  // ulang slot `draf` yang baru saja dipindah ke slot `tertimpa`.
+  const sedangMuatUlang = useRef(false)
 
   // ── Muat: S8 mode grid ──
   useEffect(() => {
@@ -216,16 +221,22 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
         setDuplikat(new Set())
         setMuat({ status: 'siap' })
 
+        sedangMuatUlang.current = false
+
         const tertunda = pulihkanTertunda.current
         if (tertunda && tertunda.periode.mulai === periode.mulai) {
           pulihkanTertunda.current = null
           dispatch({ jenis: 'pulihkan', cadangan: tertunda.cadangan })
           cadanganKami.current = true
-          setTawaranCadangan(null)
+          if (tertunda.slot === 'tertimpa') await hapusCadangan(clientId, akunKas.id, 'tertimpa')
+          if (!batal) setTawaran([])
           return
         }
-        const c = await bacaCadangan(clientId, akunKas.id)
-        if (!batal) setTawaranCadangan(c)
+        const [draf, tertimpa] = await Promise.all([
+          bacaCadangan(clientId, akunKas.id, 'draf'),
+          bacaCadangan(clientId, akunKas.id, 'tertimpa'),
+        ])
+        if (!batal) setTawaran([draf, tertimpa].filter((x): x is RekamanCadangan => x !== null))
       } catch {
         if (!batal) setMuat({ status: 'galat', pesan: 'Gagal menghubungi server.' })
       }
@@ -363,6 +374,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
       return
     }
     const t = window.setTimeout(() => {
+      if (sedangMuatUlang.current) return
       void (async () => {
         const ok = await tulisCadangan({
           clientId,
@@ -478,6 +490,40 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
     } finally {
       setMenyimpan(false)
     }
+  }
+
+  // "Muat ulang dari server" (konflik 409) MENGGANTI draf dengan versi server.
+  // CP-20 (Ricko): peringatan jelas lebih dulu, dan draf yang tertimpa disimpan
+  // ke slot IndexedDB `tertimpa` yang bisa dipulihkan. Cadangan gagal ditulis →
+  // muat ulang DIBATALKAN; mengganti draf tanpa cadangan hanya lewat pilihan
+  // kedua yang eksplisit.
+  async function cadangkanLaluMuatUlang(tanpaCadangan: boolean) {
+    if (!tanpaCadangan) {
+      setMuatUlang('menulis')
+      const ok = await tulisCadangan(
+        {
+          clientId,
+          akunKasId: akunKas.id,
+          periode,
+          disimpanPada: new Date().toISOString(),
+          jumlahPerubahan: diff.baru.length + diff.ubah.length + diff.hapus.length,
+          cadangan: potretCadangan(s),
+        },
+        'tertimpa'
+      )
+      if (!ok) {
+        setMuatUlang('gagal')
+        return
+      }
+    }
+    sedangMuatUlang.current = true
+    cadanganKami.current = false
+    // Isinya sudah ada di slot `tertimpa`; slot `draf` dikosongkan supaya
+    // draf yang sama tidak ditawarkan dua kali.
+    await hapusCadangan(clientId, akunKas.id, 'draf')
+    setMuatUlang(null)
+    setBanner(null)
+    setVersi(v => v + 1)
   }
 
   const aktifBaris = aktif.kunci ? petaBaris.get(aktif.kunci)?.b : undefined
@@ -650,29 +696,45 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
       </p>
 
       {/* ── Banner ── */}
-      {tawaranCadangan && (
-        <div role="alert" className="rounded-2xl px-3.5 py-2.5 flex items-center gap-2 flex-wrap text-xs" style={{ background: 'color-mix(in srgb, var(--color-accent-secondary) 22%, white)' }}>
+      {tawaran.map(c => (
+        <div
+          key={c.slot}
+          role="alert"
+          className="rounded-2xl px-3.5 py-2.5 flex items-center gap-2 flex-wrap text-xs"
+          style={{ background: 'color-mix(in srgb, var(--color-accent-secondary) 22%, white)' }}
+        >
           <span>
-            Ada draf yang belum disimpan untuk {akunKas.nama} {namaBulan(tawaranCadangan.periode)} ({tawaranCadangan.jumlahPerubahan.toLocaleString('id-ID')} perubahan,
-            dicadangkan {new Date(tawaranCadangan.disimpanPada).toLocaleString('id-ID')}).
+            {c.slot === 'tertimpa' ? (
+              <>
+                <strong>Draf yang tertimpa saat muat ulang dari server</strong> — {akunKas.nama} {namaBulan(c.periode)} (
+                {c.jumlahPerubahan.toLocaleString('id-ID')} perubahan, dicadangkan {new Date(c.disimpanPada).toLocaleString('id-ID')}). Memulihkannya
+                membawa kembali baris yang bentrok dengan versi server — sesuaikan baris itu sebelum Simpan.
+              </>
+            ) : (
+              <>
+                Ada draf yang belum disimpan untuk {akunKas.nama} {namaBulan(c.periode)} ({c.jumlahPerubahan.toLocaleString('id-ID')} perubahan,
+                dicadangkan {new Date(c.disimpanPada).toLocaleString('id-ID')}).
+              </>
+            )}
           </span>
           <button
             type="button"
             className={tombol}
             style={gayaTombol}
             onClick={() => {
-              const c = tawaranCadangan
-              setTawaranCadangan(null)
+              if (kotor && !window.confirm('Draf di layar akan diganti cadangan ini. Lanjutkan?')) return
+              setTawaran([])
               if (c.periode.mulai === periode.mulai) {
                 dispatch({ jenis: 'pulihkan', cadangan: c.cadangan })
                 cadanganKami.current = true
+                if (c.slot === 'tertimpa') void hapusCadangan(clientId, akunKas.id, 'tertimpa')
               } else {
                 pulihkanTertunda.current = c
                 onPeriode(c.periode)
               }
             }}
           >
-            Pulihkan draf
+            {c.slot === 'tertimpa' ? 'Pulihkan draf tertimpa' : 'Pulihkan draf'}
           </button>
           <button
             type="button"
@@ -680,14 +742,14 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
             style={gayaTombol}
             onClick={() => {
               if (!window.confirm('Buang draf cadangan ini? Tidak bisa dikembalikan.')) return
-              setTawaranCadangan(null)
-              void hapusCadangan(clientId, akunKas.id)
+              setTawaran(t => t.filter(x => x.slot !== c.slot))
+              void hapusCadangan(clientId, akunKas.id, c.slot)
             }}
           >
             Buang
           </button>
         </div>
-      )}
+      ))}
       {cadanganGagal && (
         <p role="note" className="text-xs" style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)' }}>
           Cadangan draf tidak tersedia di browser ini (IndexedDB ditolak) — jangan tutup tab sebelum Simpan.
@@ -710,21 +772,60 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
               ))}
             </ul>
           )}
-          {banner.jenis === 'konflik' && (
-            <button
-              type="button"
-              className={`${tombol} mt-2`}
-              style={gayaTombol}
-              onClick={() => {
-                if (window.confirm('Muat ulang dari server? Draf di layar diganti versi terbaru; cadangannya tetap ada sampai Anda membuangnya.')) {
-                  cadanganKami.current = false
-                  setBanner(null)
-                  setVersi(v => v + 1)
-                }
-              }}
-            >
-              Muat ulang dari server
+          {banner.jenis === 'konflik' && muatUlang === null && (
+            <button type="button" className={`${tombol} mt-2`} style={gayaTombol} onClick={() => setMuatUlang('tanya')}>
+              Muat ulang dari server…
             </button>
+          )}
+          {banner.jenis === 'konflik' && muatUlang !== null && (
+            <div
+              role="alertdialog"
+              aria-labelledby={idMuatUlang}
+              className="mt-2 rounded-2xl px-3.5 py-2.5"
+              style={{ background: 'white', border: '1px solid color-mix(in srgb, var(--color-accent-critical) 45%, white)' }}
+            >
+              <p id={idMuatUlang} className="font-semibold">
+                <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
+                Muat ulang MENGGANTI draf di layar dengan versi terbaru dari server.
+              </p>
+              <p className="mt-1">
+                {(diff.baru.length + diff.ubah.length + diff.hapus.length).toLocaleString('id-ID')}{' '}
+                perubahan Anda yang belum tersimpan akan disimpan
+                lebih dulu sebagai cadangan &quot;draf tertimpa&quot; di browser ini dan bisa dipulihkan dari tawaran di atas grid. Cadangan itu hanya
+                ada di browser dan perangkat ini.
+              </p>
+              {muatUlang === 'gagal' && (
+                <p role="alert" className="mt-1 font-semibold" style={{ color: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)' }}>
+                  Cadangan gagal ditulis (IndexedDB ditolak browser) — draf BELUM diganti. Muat ulang tanpa cadangan akan menghilangkan perubahan
+                  Anda.
+                </p>
+              )}
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                {muatUlang !== 'gagal' ? (
+                  <button
+                    type="button"
+                    className={`${tombol} font-semibold`}
+                    style={{ ...gayaTombol, border: 'none', background: 'var(--color-accent-primary)' }}
+                    disabled={muatUlang === 'menulis'}
+                    onClick={() => void cadangkanLaluMuatUlang(false)}
+                  >
+                    {muatUlang === 'menulis' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Cadangkan draf lalu muat ulang
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={`${tombol} font-semibold`}
+                    style={{ ...gayaTombol, border: 'none', background: 'var(--color-accent-critical)', color: 'white' }}
+                    onClick={() => void cadangkanLaluMuatUlang(true)}
+                  >
+                    Tetap muat ulang — draf hilang
+                  </button>
+                )}
+                <button type="button" className={tombol} style={gayaTombol} disabled={muatUlang === 'menulis'} onClick={() => setMuatUlang(null)}>
+                  Batal
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -732,7 +833,8 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
         <div role="alert" className="rounded-2xl px-3.5 py-2.5 text-xs flex items-center gap-2 flex-wrap" style={{ background: 'color-mix(in srgb, var(--color-accent-secondary) 22%, white)' }}>
           <AlertTriangle className="w-3.5 h-3.5" />
           <span>
-            {konfirmasiDuplikat.toLocaleString('id-ID')} baris mirip mutasi yang sudah ada (tanggal, nominal, dan uraian sama) — ditandai &quot;duplikat?&quot; di
+            {konfirmasiDuplikat.toLocaleString('id-ID')}{' '}
+            baris mirip mutasi yang sudah ada (tanggal, nominal, dan uraian sama) — ditandai &quot;duplikat?&quot; di
             kolom Status. Tetap simpan?
           </span>
           <button type="button" className={`${tombol} font-semibold`} style={{ ...gayaTombol, border: 'none', background: 'var(--color-accent-primary)' }} onClick={() => void simpan(true)}>
