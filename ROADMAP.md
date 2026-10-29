@@ -986,6 +986,76 @@ klien nyata sampai kuncinya naik ke paid tier. Kalau kelak perlu dibatasi lebih 
 sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache saran per
 (klien, keterangan-ternormalisasi).
 
+## Checklist rilis Grid Mutasi Kas (§5.14 Modul A, S1–S9) ke produksi (hanya Ricko)
+
+> **BELUM DIJALANKAN.** Ditulis 2026-10-29 (sesudah jawaban sebagian CP-20). Rilis dijalankan **Ricko dari laptop lewat
+> `.env.main`**, bukan dari sesi agen. Satu migrasi (**0021**, seluruhnya TAMBAH) + kode branch `feat/grid-mutasi`
+> (PR #1) yang di-merge ke `main`.
+
+**Prasyarat (sebelum langkah 1):**
+- **PR #4 `chore/fix-ci` di-merge**, lalu `feat/grid-mutasi` di-rebase ke `main` dan **CI PR #1 hijau** (simulasi lokal
+  2026-10-29: install `--frozen-lockfile`, tsc, lint, 2259 test, build — lulus).
+- **Backup terjadwal hidup lagi:** secret GitHub `DATABASE_URL_MAIN` diperbarui (gagal sejak 23 Okt: kata sandi lama, lihat
+  PR #4), lalu "Backup DB (branch main)" dijalankan manual → hijau, artifact berukuran wajar (bukan 188 byte).
+- **CP-20 selesai:** uji klik Ricko (+ NVDA) atas grid di Preview; S11 (ROADMAP + graphify) menyusul sesudahnya.
+- Tim akunting diberi tahu **perubahan perilaku**: impor CSV kini lewat grid ("Buka berkas CSV"), wizard lama hilang;
+  mutasi berjurnal terposting **tidak** bisa disunting walau "posting bisa diedit" menyala (balik jurnal dulu).
+
+**Kenapa migrasi DULU, kode SESUDAHNYA (jangan dibalik):** kode baru membaca `cash_mutations.urutan`/`catatan`,
+`client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules` — kode yang naik lebih dulu membuat
+`/mutasi-kas`, Settings, dan setiap Simpan mutasi gagal 500. Sebaliknya aman: 0021 hanya menambah (kolom nullable, tabel
+baru), kode lama tidak mengenalnya.
+
+1. **Ricko mengisi `.env.main`** — `DATABASE_URL` branch main, **host tanpa `-pooler`** (berkasnya di `.gitignore`).
+2. **`pnpm env:cek .env.main`** → harus `endpoint ep-small-mode-ao8ouvtp (main ✓)`; selain itu keluar kode 1.
+   ⚠️ Pemeriksa membuang `-pooler` sebelum membandingkan — pastikan host unpooled sendiri di langkah 1.
+3. **Backup branch Neon dari main** — `backup-main-<tanggal rilis>`.
+4. **Baca-saja: main harus di 21 migrasi** (SQL Editor Neon pada branch main):
+   ```sql
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 21, last = 1792991626845 (0020)
+   select to_regclass('public.cash_mutation_rules');                                         -- NULL
+   select (select count(*) from clients) c, (select count(*) from master_coa) coa,
+          (select count(*) from cash_mutations) cm, (select count(*) from cash_mutation_allocations) ca,
+          (select count(*) from journal_entries) je, (select count(*) from journal_lines) jl,
+          (select count(*) from client_accounting_settings) cas, (select count(*) from audit_events) ae;
+   ```
+   Bukan 21 → **berhenti** (lebih = 0021 sudah diterapkan seseorang; kurang = main tertinggal).
+5. **`pnpm db:migrate:main`** → `env:cek .env.main` lalu `drizzle-kit migrate` dengan `.env.main`. Hasil: **22 migrasi**.
+   Isi 0021 (dibaca, gotcha #8): `CREATE TABLE cash_mutation_rules`; `ALTER TABLE cash_mutations ADD COLUMN urutan integer,
+   catatan text` + `CHECK (urutan IS NULL OR urutan >= 1)`; `ALTER TABLE client_accounting_settings ADD COLUMN
+   akun_pindah_buku_id uuid` (FK master_coa **SET NULL**); FK aturan → clients CASCADE, akun lawan/akun kas/pembuat RESTRICT;
+   indeks `cash_mutation_rules_client_aktif_idx`. Tidak ada DROP, tidak ada perubahan enum, tidak ada isi ulang data.
+6. **Verifikasi baca-saja:**
+   ```sql
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 22, last = 1793153169380 (0021)
+   select column_name, data_type, is_nullable from information_schema.columns
+    where table_name = 'cash_mutations' and column_name in ('urutan', 'catatan');        -- catatan text YES · urutan integer YES
+   select data_type from information_schema.columns
+    where table_name = 'client_accounting_settings' and column_name = 'akun_pindah_buku_id';  -- uuid
+   select conname from pg_constraint
+    where conrelid = 'cash_mutation_rules'::regclass and contype in ('p', 'f', 'c') order by 1;
+     -- akun_kas_id…_fk, akun_lawan_id…_fk, arah_check, client_id…_fk, created_by…_fk, pkey
+   select conname from pg_constraint where conname = 'cash_mutations_urutan_check';      -- 1 baris
+   select indexname from pg_indexes where tablename = 'cash_mutation_rules';             -- + cash_mutation_rules_client_aktif_idx
+   select count(*) from cash_mutation_rules;                                             -- 0
+   ```
+   Ulangi kueri jumlah baris langkah 4 → **harus sama persis**.
+7. **Merge PR #1 ke `main`** (Ricko, di GitHub; PR harus hijau dan sudah keluar dari Draft). Pantau deployment Vercel
+   `ngitungid` sampai **READY** dan ter-alias ke `ngid.vercel.app`.
+8. **Smoke test produksi, baca-saja** (owner/akunting — **jangan menekan Simpan, Terapkan usulan, atau Kosongkan saldo**):
+   - `/mutasi-kas` ≥ md: tab akun kas tampil, pemilih bulan, grid memuat tanpa 500; pindah tab & bulan; "Daftar" tetap jalan.
+   - Kolom Status menautkan jurnal → `/jurnal?jurnal=<id>` membuka jurnal itu (owner/akunting).
+   - Settings › **Aturan Mutasi** dan Settings › Pembukuan (**Akun Pindah Buku**) terbuka tanpa galat.
+   - HP (< md): daftar + "Mutasi Baru" tampil, grid tidak.
+   - Nol runtime error Vercel 30 menit sesudah deploy.
+9. **Sesudah rilis:** hapus `.env.main` dari disk. Per klien (opsional, oleh tim): atur Akun Pindah Buku dan aturan akun lawan.
+
+**Data yang sudah ada di produksi:** jurnal mutasi per baris yang masih **draf** digabung ke jurnal ringkasan (D58) **saat
+kuncinya tersentuh** oleh Simpan berikutnya — bukan sekaligus saat rilis. Jurnal terposting tidak pernah diubah.
+
+**Jalan mundur:** gagal di langkah 5 → branch backup langkah 3. Deploy bermasalah di langkah 7 → promosikan deployment
+Vercel sebelumnya (0021 hanya menambah; kode lama tidak terganggu). Jangan menjalankan `db:push` ke main.
+
 ## Checklist rilis Kunci Periode (§5.9) ke produksi (hanya Ricko)
 
 > **✅ DIRILIS 2026-10-27** — dijalankan agen atas izin eksplisit Ricko untuk seluruh langkah. (1) `.env.main` diisi Ricko; (2) `env:cek` → `ep-small-mode-ao8ouvtp (main ✓)`, host tanpa `-pooler` (diperiksa terpisah, hanya boolean yang dicetak); (3) backup `backup-main-2026-10-27` (`br-bitter-truth-aoy9uprh`, tanpa compute) lewat konektor Neon; (4) main **20** migrasi, `created_at` terakhir `1790167835160`, `period_locks` belum ada — jumlah baris **22 tabel** publik dicatat; (5) `pnpm db:migrate:main` sukses; (6) main **21**, terakhir `1792991626845`; `period_locks` 5 kolom, FK clients CASCADE + users RESTRICT, indeks `period_locks_client_tanggal_idx`, 0 baris; jumlah baris 22 tabel lama **identik**; (7) push `8117275..9716b21` fast-forward tanpa force (14 commit, termasuk D55 `a8c2961`), deployment `dpl_BfenVXSgEzymgTSXXqMaXdw7dUR5` READY ±91 detik, ter-alias ke `ngid.vercel.app`; (8) smoke test baca-saja sebagai owner: Settings › Pembukuan ("Belum ada periode yang dikunci", usulan 30 Sep, batas 27 Okt, `GET /api/period-locks` 200), `/jurnal`, `/mutasi-kas`, `/pembelian`, `/hutang` (tanggal bawaan 27 Okt) tanpa galat; nol runtime error 30 menit sesudah deploy; (9) `docs/tutup-d55` dihapus dari remote (branch lokalnya masih ada, sudah ter-merge). Rollback bila perlu: deployment sebelumnya `dpl_86Lj6FGcFeocdve5QV7t8edebsXY`.
