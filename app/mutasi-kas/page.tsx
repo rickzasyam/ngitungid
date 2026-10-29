@@ -631,6 +631,7 @@ function MutasiKasContent() {
                       coa={coaGrid}
                       periode={bulan}
                       bolehTulis={bolehTulis}
+                      bolehLihatJurnal={canDoAccounting}
                       versiLuar={versiLuar}
                       onKotor={onKotor}
                       onPeriode={p => setBulan(p)}

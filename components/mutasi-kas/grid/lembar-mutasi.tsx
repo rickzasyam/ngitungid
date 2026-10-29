@@ -16,11 +16,13 @@
 // Satu Simpan = satu route batch; tidak ada jalur simpan lain dari halaman ini.
 
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownToLine,
   CalendarCheck,
+  BookOpen,
   Eraser,
   FileUp,
   Filter,
@@ -38,6 +40,7 @@ import {
 import type { DataGridHandle } from 'react-data-grid'
 import { useRupiah } from '@/lib/preferences-context'
 import { fmtTanggal } from '@/lib/ymd'
+import { hrefJurnal } from '@/lib/journal'
 import { indeksAkun, type KolomGrid, type Periode } from '@/lib/mutasi-draf'
 import { siapkanAturan, type AturanMutasi, type AturanSiap } from '@/lib/aturan-mutasi'
 import {
@@ -119,6 +122,8 @@ type Props = {
   coa: readonly AkunGrid[]
   periode: Periode
   bolehTulis: boolean
+  /** Boleh membuka /jurnal (owner + akunting) — tautan baris → jurnalnya. */
+  bolehLihatJurnal: boolean
   /** Naik dari luar (mis. alokasi berubah di panel rincian) → muat ulang. */
   versiLuar: number
   onKotor: (kotor: boolean) => void
@@ -153,7 +158,7 @@ function teksLaporan(l: LaporanAksi): string {
   return `${dasar} ${l.dilewati.length.toLocaleString('id-ID')} dilewati — ${alasan}`
 }
 
-export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, versiLuar, onKotor, onPeriode, onRincian }: Props) {
+export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bolehLihatJurnal, versiLuar, onKotor, onPeriode, onRincian }: Props) {
   const { rupiahPersis } = useRupiah()
   const idBantuan = useId()
   const idDaftarAkun = useId()
@@ -319,6 +324,13 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
   )
   const tampil = useMemo(() => (filter ? s.baris.filter(bermasalah) : s.baris), [filter, s.baris, bermasalah])
 
+  // Jurnal ringkasan (D58) dipakai bersama beberapa baris: tautannya menyebut berapa.
+  const jumlahPerJurnal = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const i of meta.info.values()) if (i.journalId) m.set(i.journalId, (m.get(i.journalId) ?? 0) + 1)
+    return m
+  }, [meta.info])
+
   const konteks: KonteksTampilan = useMemo(
     () => ({
       validasi,
@@ -332,8 +344,10 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
       indeksAkun: indeks,
       nomorBaris: (k: string) => (petaBaris.get(k)?.i ?? 0) + 1,
       bolehTulis: bolehTulis && !menyimpan,
+      bolehLihatJurnal,
+      jumlahPerJurnal,
     }),
-    [validasi, galatServer, rantai, usulan, duplikat, diubah, meta.info, indeks, petaBaris, bolehTulis, menyimpan]
+    [validasi, galatServer, rantai, usulan, duplikat, diubah, meta.info, indeks, petaBaris, bolehTulis, menyimpan, bolehLihatJurnal, jumlahPerJurnal]
   )
 
   // ── Draf kotor: induk, beforeunload, penjaga tautan, cadangan IndexedDB (D51) ──
@@ -527,6 +541,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
   }
 
   const aktifBaris = aktif.kunci ? petaBaris.get(aktif.kunci)?.b : undefined
+  const jurnalAktif = aktifBaris?.id ? (meta.info.get(aktifBaris.id)?.journalId ?? null) : null
   const tanpaTanggal = useMemo(() => s.baris.filter(b => b.id === null && b.sel.tanggal.trim() === '' && Object.values(b.sel).some(v => v.trim() !== '')), [s.baris])
   const akunKosong = useMemo(() => s.baris.filter(b => b.sel.akunLawan.trim() === '' && !b.terkunci.baris && Object.values(b.sel).some(v => v.trim() !== '')), [s.baris])
   const blokTampil = blokAktif(s)
@@ -665,6 +680,17 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, vers
         >
           <Info className="w-3.5 h-3.5" /> Rincian & alokasi
         </button>
+        {bolehLihatJurnal &&
+          (jurnalAktif ? (
+            // Link (anchor): penjaga tautan D51 ikut menanyakan bila draf kotor.
+            <Link href={hrefJurnal(jurnalAktif)} className={tombol} style={gayaTombol}>
+              <BookOpen className="w-3.5 h-3.5" /> Buka jurnal
+            </Link>
+          ) : (
+            <button type="button" className={tombol} style={gayaTombol} disabled title="Baris aktif belum punya jurnal (belum disimpan atau tanpa akun lawan).">
+              <BookOpen className="w-3.5 h-3.5" /> Buka jurnal
+            </button>
+          ))}
         <button type="button" className={tombol} style={gayaTombol} aria-pressed={filter} onClick={() => setFilter(f => !f)}>
           <Filter className="w-3.5 h-3.5" /> Baris bermasalah saja
         </button>
