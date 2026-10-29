@@ -98,7 +98,6 @@ jobs:
           STAMP="$(date -u +%Y%m%d-%H%M%SZ)"
           FILE="ngitungid-main-$STAMP.dump"
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
-          echo "FILE=$FILE" >> "$GITHUB_ENV"
           # Hanya schema milik aplikasi. `neon_auth` dikecualikan: dikelola Neon,
           # bukan data aplikasi, dan bikin dump tak portabel ke Postgres biasa.
           # --no-owner/--no-privileges supaya bisa di-restore sebagai role apa pun.
@@ -108,6 +107,12 @@ jobs:
             --schema=public --schema=drizzle \
             --file="$FILE"
           ls -lh "$FILE"
+          # FILE baru diumumkan SESUDAH pg_dump sukses (set -e berhenti lebih
+          # dulu bila gagal). pg_dump membuat berkasnya sebelum konek; kalau FILE
+          # diumumkan di awal, dump yang gagal konek (23–28 Okt 2026: kata sandi
+          # main di secret basi) tetap diunggah sebagai artifact 188 byte
+          # bernama db-backup-main-… — tampak seperti backup padahal kosong.
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
 
       - name: Row count di SUMBER (main)
         env:
@@ -156,7 +161,8 @@ jobs:
           fi
 
       # if: always() → dump tetap disimpan walau verifikasi gagal (buat diagnosa).
-      # Dilewati kalau step dump sendiri tidak sempat menghasilkan file.
+      # Dilewati kalau step dump sendiri gagal: FILE hanya terisi sesudah
+      # pg_dump sukses (lihat step "Dump branch main").
       - name: Upload artifact
         if: always() && env.FILE != ''
         uses: actions/upload-artifact@v5
