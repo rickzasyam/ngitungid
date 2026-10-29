@@ -993,10 +993,14 @@ sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache 
 > (PR #1) yang di-merge ke `main`.
 
 **Prasyarat (sebelum langkah 1):**
-- **PR #4 `chore/fix-ci` di-merge**, lalu `feat/grid-mutasi` di-rebase ke `main` dan **CI PR #1 hijau** (simulasi lokal
-  2026-10-29: install `--frozen-lockfile`, tsc, lint, 2259 test, build — lulus).
-- **Backup terjadwal hidup lagi:** secret GitHub `DATABASE_URL_MAIN` diperbarui (gagal sejak 23 Okt: kata sandi lama, lihat
-  PR #4), lalu "Backup DB (branch main)" dijalankan manual → hijau, artifact berukuran wajar (bukan 188 byte).
+- ✅ PR #4 `chore/fix-ci` di-merge Ricko (`4469498`), dan `feat/grid-mutasi` di-rebase ke atasnya 2026-10-29 tanpa konflik
+  (gerbang lokal sesudah rebase: install `--frozen-lockfile`, tsc, lint 0 error / 24 warning, 2259 test, build — lulus).
+  Yang tetap diperiksa sebelum langkah 1: **CI PR #1 hijau pada head terakhir** (bila Stream B masuk `main` lebih dulu,
+  PR #1 di-rebase lagi — konflik di assertion `RIWAYAT_ABADI` `lib/cash-mutation-api.test.ts` memakai versi Stream B).
+- ✅ **Backup terjadwal hidup lagi:** Ricko memperbarui secret GitHub `DATABASE_URL_MAIN` (gagal sejak 23 Okt: kata sandi
+  lama, lihat PR #4) lalu menjalankan "Backup DB (branch main)" manual 2026-10-29 → run #110 **hijau**, artifact
+  `db-backup-main-20261029-042916Z` **944.490 byte** (backup sukses terakhir 22 Okt: 938.597 byte; yang gagal: 188 byte).
+  Ini bukan pengganti langkah 3 (branch backup Neon tepat sebelum migrasi) — langkah itu tetap wajib.
 - **CP-20 selesai:** uji klik Ricko (+ NVDA) atas grid di Preview; S11 (ROADMAP + graphify) menyusul sesudahnya.
 - Tim akunting diberi tahu **perubahan perilaku**: impor CSV kini lewat grid ("Buka berkas CSV"), wizard lama hilang;
   mutasi berjurnal terposting **tidak** bisa disunting walau "posting bisa diedit" menyala (balik jurnal dulu).
