@@ -29,9 +29,10 @@ import {
   type RenderCellProps,
   type RenderEditCellContentProps,
 } from 'react-data-grid'
+import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import { NominalInput } from '@/components/ui/nominal-input'
-import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
+import { fromMinorUnits, hrefJurnal, toMinorUnits } from '@/lib/journal'
 import {
   KOLOM_GRID,
   LABEL_KOLOM,
@@ -67,6 +68,10 @@ export type KonteksTampilan = {
   /** Nomor baris di grid UTUH (1-based) — tetap benar saat filter menyala. */
   nomorBaris: (kunci: string) => number
   bolehTulis: boolean
+  /** Boleh membuka /jurnal (owner + akunting; finance tidak — ACCOUNTING_ONLY_PREFIXES). */
+  bolehLihatJurnal: boolean
+  /** Berapa baris grid berbagi satu jurnal — >1 = jurnal ringkasan (D58). */
+  jumlahPerJurnal: ReadonlyMap<string, number>
 }
 
 export type PosisiAktif = { kunci: string | null; kolom: KolomGrid | null }
@@ -246,6 +251,15 @@ function SelStatus({ b, kt }: { b: BarisGrid; kt: KonteksTampilan }) {
       ) : null}
       {info && info.jumlahAlokasi > 0 && <span className="gm-penanda gm-penanda-lilac">{info.jumlahAlokasi} alokasi</span>}
       {info?.jurnalStatus === 'posted' && !info.jurnalDibalik && <span className="gm-penanda gm-penanda-lilac">terposting</span>}
+      {/* Tautan ke jurnal baris ini (CP-20). tabIndex -1: sel grid bukan tempat
+          berhenti Tab; jalur keyboardnya tombol "Buka jurnal" di bilah alat. */}
+      {info?.journalId && kt.bolehLihatJurnal && (
+        <Link className="gm-tautan" href={hrefJurnal(info.journalId)} tabIndex={-1}>
+          {(kt.jumlahPerJurnal.get(info.journalId) ?? 1) > 1
+            ? `jurnal ringkasan (${kt.jumlahPerJurnal.get(info.journalId)} baris) ↗`
+            : 'jurnal ↗'}
+        </Link>
+      )}
       {tanda}
     </>
   )
