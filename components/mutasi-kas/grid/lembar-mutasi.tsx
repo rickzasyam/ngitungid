@@ -8,7 +8,7 @@
 // ══ TIDAK ADA ANGKA BUKU YANG DIHITUNG DI SINI ═══════════════════════════
 // Status, sisa alokasi, kunci, jangkar saldo, dan saldo Pindah Buku datang
 // jadi dari server. Yang dihitung di browser hanya hal yang memang milik
-// draf: galat sel, rantai saldo dokumen, dan ringkasan jumlah Masuk/Keluar.
+// draf: galat sel, rantai saldo dokumen, dan ringkasan jumlah Debet/Kredit.
 //
 // ══ SIMPAN TERIKAT (D50, D52) ═════════════════════════════════════════════
 // Tombol Simpan dan pintasan keyboard memakai SATU gerbang (`gerbangSimpan`):
@@ -28,6 +28,7 @@ import {
   Filter,
   Info,
   Loader2,
+  SlidersHorizontal,
   Plus,
   Redo2,
   RotateCcw,
@@ -41,7 +42,9 @@ import type { DataGridHandle } from 'react-data-grid'
 import { useRupiah } from '@/lib/preferences-context'
 import { fmtTanggal } from '@/lib/ymd'
 import { hrefJurnal } from '@/lib/journal'
-import { indeksAkun, type KolomGrid, type Periode } from '@/lib/mutasi-draf'
+import { LABEL_KOLOM, indeksAkun, type KolomGrid, type Periode } from '@/lib/mutasi-draf'
+import { bulanGridDari } from '@/lib/mutasi-tanggal'
+import type { AccountType } from '@/lib/coa/account-type'
 import { siapkanAturan, type AturanMutasi, type AturanSiap } from '@/lib/aturan-mutasi'
 import {
   blokAktif,
@@ -66,6 +69,7 @@ import {
   rencanaBerkas,
   rencanaTempel,
   ringkasGrid,
+  teksKetikan,
   type GalatServerBaris,
   type HasilUsulanBaris,
 } from '@/lib/mutasi-grid-turunan'
@@ -74,6 +78,7 @@ import type { InfoServerBaris, KonteksTampilan, PosisiAktif } from './grid-mutas
 import { bacaCadangan, hapusCadangan, tulisCadangan, type RekamanCadangan } from './cadangan-draf'
 import { kirimSimpan, type HasilKirim } from './kirim-simpan'
 import { PanelPindahBuku, type UsulanPindahBuku } from './panel-pindah-buku'
+import { KomboAkun, type AkunPilihan } from './kombo-akun'
 
 const GridMutasi = dynamic(() => import('./grid-mutasi'), {
   ssr: false,
@@ -84,7 +89,32 @@ const GridMutasi = dynamic(() => import('./grid-mutasi'), {
   ),
 })
 
-export type AkunGrid = { id: string; kode: string; nama: string }
+export type AkunGrid = { id: string; kode: string; nama: string; jenis?: AccountType | null }
+
+// ── Atur kolom (masukan Ricko 2026-10-30) ──
+// Hanya kolom OPSIONAL yang bisa disembunyikan; Tanggal s.d. Saldo dan Status
+// selalu tampil. Pilihan per klien di localStorage — kenyamanan per peramban,
+// bukan data; akses dibungkus try/catch (mode privat / penyimpanan diblokir).
+const KOLOM_OPSIONAL: readonly KolomGrid[] = ['catatan']
+const kunciKolom = (clientId: string) => `ngitungid:grid-mutasi:kolom-tersembunyi:${clientId}`
+
+function bacaKolomTersembunyi(clientId: string): ReadonlySet<KolomGrid> {
+  try {
+    const mentah = typeof window === 'undefined' ? null : window.localStorage.getItem(kunciKolom(clientId))
+    const isi: unknown = mentah ? JSON.parse(mentah) : []
+    return new Set(Array.isArray(isi) ? KOLOM_OPSIONAL.filter(k => isi.includes(k)) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function tulisKolomTersembunyi(clientId: string, sembunyi: ReadonlySet<KolomGrid>) {
+  try {
+    window.localStorage.setItem(kunciKolom(clientId), JSON.stringify([...sembunyi]))
+  } catch {
+    // Tidak tersimpan — pilihannya tetap berlaku sampai halaman ditutup.
+  }
+}
 
 type BarisS8 = {
   id: string
@@ -161,7 +191,6 @@ function teksLaporan(l: LaporanAksi): string {
 export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bolehLihatJurnal, versiLuar, onKotor, onPeriode, onRincian }: Props) {
   const { rupiahPersis } = useRupiah()
   const idBantuan = useId()
-  const idDaftarAkun = useId()
   const idAlasan = useId()
   const idMuatUlang = useId()
   const gridRef = useRef<DataGridHandle | null>(null)
@@ -186,6 +215,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
   const [muatUlang, setMuatUlang] = useState<'tanya' | 'menulis' | 'gagal' | null>(null)
   const [cadanganGagal, setCadanganGagal] = useState(false)
   const [isiAkun, setIsiAkun] = useState<string | null>(null)
+  const [sembunyi, setSembunyi] = useState<ReadonlySet<KolomGrid>>(() => bacaKolomTersembunyi(clientId))
   const pulihkanTertunda = useRef<RekamanCadangan | null>(null)
   const cadanganKami = useRef(false)
   // Selama draf sedang diganti versi server, autosave tidak boleh menulis
@@ -271,6 +301,12 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
   // ── Turunan draf ──
   const indeks = useMemo(() => indeksAkun(coa), [coa])
   const akunById = useMemo(() => new Map(coa.map(a => [a.id, a])), [coa])
+  // Pilihan combobox: tanpa akun kas grid ini sendiri (Nama Akun = akun lawan).
+  const daftarAkun = useMemo(
+    (): AkunPilihan[] => coa.filter(a => a.id !== akunKas.id).map(a => ({ id: a.id, kode: a.kode, nama: a.nama, jenis: a.jenis ?? null })),
+    [coa, akunKas.id]
+  )
+  const bulanGrid = useMemo(() => bulanGridDari(periode), [periode])
   const validasi = useMemo(
     () => buatValidator({ periode, akunKasId: akunKas.id, akun: indeks, terkunciSampai: meta.terkunciSampai }, s.server),
     [periode, akunKas.id, indeks, meta.terkunciSampai, s.server]
@@ -346,8 +382,10 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
       bolehTulis: bolehTulis && !menyimpan,
       bolehLihatJurnal,
       jumlahPerJurnal,
+      bulanGrid,
+      daftarAkun,
     }),
-    [validasi, galatServer, rantai, usulan, duplikat, diubah, meta.info, indeks, petaBaris, bolehTulis, menyimpan, bolehLihatJurnal, jumlahPerJurnal]
+    [validasi, galatServer, rantai, usulan, duplikat, diubah, meta.info, indeks, petaBaris, bolehTulis, menyimpan, bolehLihatJurnal, jumlahPerJurnal, bulanGrid, daftarAkun]
   )
 
   // ── Draf kotor: induk, beforeunload, penjaga tautan, cadangan IndexedDB (D51) ──
@@ -408,9 +446,13 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
   // ── Aksi ──
   const tulisAktif = bolehTulis && !menyimpan
 
-  const onUbahSel = useCallback((kunci: string, kolom: KolomGrid, nilai: string) => {
-    dispatch({ jenis: 'ubahSel', kunci, kolom, nilai })
-  }, [])
+  // Sel Tanggal dinormalisasi ke YYYY-MM-DD saat disimpan (D66).
+  const onUbahSel = useCallback(
+    (kunci: string, kolom: KolomGrid, nilai: string) => {
+      dispatch({ jenis: 'ubahSel', kunci, kolom, nilai: teksKetikan(kolom, nilai, periode) })
+    },
+    [periode]
+  )
   const onUndo = useCallback(() => dispatch({ jenis: 'undo' }), [])
   const onRedo = useCallback(() => dispatch({ jenis: 'redo' }), [])
 
@@ -563,13 +605,8 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
       <p id={idBantuan} hidden>
         Panah untuk berpindah sel. Ketik atau F2 untuk menyunting; Enter menyimpan lalu turun satu baris; Esc membatalkan;
         Delete mengosongkan sel; Ctrl+V menempel dari Excel; Ctrl+Z dan Ctrl+Y mengurungkan dan mengulang; Ctrl+Home ke sel
-        pertama.
+        pertama. Alt+panah bawah membuka kalender di kolom Tanggal dan daftar akun di kolom Nama Akun.
       </p>
-      <datalist id={idDaftarAkun}>
-        {coa.map(a => (
-          <option key={a.id} value={`${a.kode} · ${a.nama}`} />
-        ))}
-      </datalist>
 
       {/* ── Bilah alat ── */}
       <div role="toolbar" aria-label={`Alat grid ${akunKas.nama}`} className="flex items-center gap-1.5 flex-wrap">
@@ -631,7 +668,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
               <Sparkles className="w-3.5 h-3.5" /> Terapkan usulan ({usulan.usulan.size.toLocaleString('id-ID')})
             </button>
             <button type="button" className={tombol} style={gayaTombol} disabled={akunKosong.length === 0 || !tulisAktif} onClick={() => setIsiAkun('')}>
-              <Wand2 className="w-3.5 h-3.5" /> Isi akun lawan kosong
+              <Wand2 className="w-3.5 h-3.5" /> Isi Nama Akun kosong
             </button>
             {tanpaTanggal.length > 0 && (
               <button
@@ -687,13 +724,44 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
               <BookOpen className="w-3.5 h-3.5" /> Buka jurnal
             </Link>
           ) : (
-            <button type="button" className={tombol} style={gayaTombol} disabled title="Baris aktif belum punya jurnal (belum disimpan atau tanpa akun lawan).">
+            <button type="button" className={tombol} style={gayaTombol} disabled title="Baris aktif belum punya jurnal (belum disimpan atau tanpa Nama Akun).">
               <BookOpen className="w-3.5 h-3.5" /> Buka jurnal
             </button>
           ))}
         <button type="button" className={tombol} style={gayaTombol} aria-pressed={filter} onClick={() => setFilter(f => !f)}>
           <Filter className="w-3.5 h-3.5" /> Baris bermasalah saja
         </button>
+        {/* <details> asli: buka/tutup, fokus, dan Esc datang dari browser. */}
+        <details className="relative">
+          <summary className={`${tombol} cursor-pointer list-none`} style={gayaTombol}>
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Atur kolom
+          </summary>
+          <div
+            role="group"
+            aria-label="Kolom yang ditampilkan"
+            className="absolute z-20 mt-1 rounded-2xl p-3 text-xs flex flex-col gap-2"
+            style={{ background: 'white', border: '1px solid #e5e7eb', boxShadow: '0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04)', minWidth: 220 }}
+          >
+            {KOLOM_OPSIONAL.map(k => (
+              <label key={k} className="inline-flex items-center gap-2" style={{ minHeight: 32 }}>
+                <input
+                  type="checkbox"
+                  checked={!sembunyi.has(k)}
+                  onChange={e => {
+                    const baru = new Set(sembunyi)
+                    if (e.target.checked) baru.delete(k)
+                    else baru.add(k)
+                    setSembunyi(baru)
+                    tulisKolomTersembunyi(clientId, baru)
+                  }}
+                  className="w-4 h-4"
+                />
+                {LABEL_KOLOM[k]}
+              </label>
+            ))}
+            <p style={{ color: 'var(--color-text-muted)' }}>Tanggal s.d. Saldo dan Status selalu tampil.</p>
+          </div>
+        </details>
       </div>
 
       {!gerbang.boleh && kotor && (
@@ -706,8 +774,8 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
 
       {/* ── Ringkasan ── */}
       <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        {akunKas.kode} · {akunKas.nama} · {namaBulan(periode)} · {ringkas.jumlahBaris.toLocaleString('id-ID')} baris · Masuk{' '}
-        <strong style={{ color: 'var(--color-text-primary)' }}>{rupiahPersis(ringkas.totalMasuk)}</strong> · Keluar{' '}
+        {akunKas.kode} · {akunKas.nama} · {namaBulan(periode)} · {ringkas.jumlahBaris.toLocaleString('id-ID')} baris · Debet{' '}
+        <strong style={{ color: 'var(--color-text-primary)' }}>{rupiahPersis(ringkas.totalMasuk)}</strong> · Kredit{' '}
         <strong style={{ color: 'var(--color-text-primary)' }}>{rupiahPersis(ringkas.totalKeluar)}</strong>
         {kotor && (
           <>
@@ -926,19 +994,21 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
       </div>
 
       {isiAkun !== null && (
-        <div role="dialog" aria-label="Isi akun lawan kosong" className="rounded-2xl px-3.5 py-2.5 text-xs flex items-center gap-2 flex-wrap" style={{ background: 'white', border: '1px solid #e5e7eb' }}>
-          <label className="inline-flex items-center gap-1.5">
-            Akun lawan untuk {akunKosong.length.toLocaleString('id-ID')} baris yang kosong{filter ? ' (semua, bukan hanya yang tersaring)' : ''}
-            <input
+        <div role="dialog" aria-label="Isi Nama Akun kosong" className="rounded-2xl px-3.5 py-2.5 text-xs flex items-center gap-2 flex-wrap" style={{ background: 'white', border: '1px solid #e5e7eb' }}>
+          <span className="inline-flex items-center gap-1.5">
+            Nama Akun untuk {akunKosong.length.toLocaleString('id-ID')} baris yang kosong{filter ? ' (semua, bukan hanya yang tersaring)' : ''}
+            <KomboAkun
               autoFocus
-              list={idDaftarAkun}
-              value={isiAkun}
-              onChange={e => setIsiAkun(e.target.value)}
+              akun={daftarAkun}
+              label={`Nama Akun untuk ${akunKosong.length} baris yang kosong`}
+              nilai={isiAkun}
+              onNilai={setIsiAkun}
+              onPilih={a => setIsiAkun(a.kode)}
               placeholder="kode atau nama akun"
               className="rounded-full px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
               style={{ minHeight: 32, border: '1px solid #e5e7eb', fontSize: 12, width: 260 }}
             />
-          </label>
+          </span>
           <button
             type="button"
             className={`${tombol} font-semibold`}
@@ -971,7 +1041,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
             konteks={konteks}
             labelGrid={`Mutasi ${akunKas.nama} ${namaBulan(periode)}${filter ? ' — baris bermasalah saja' : ''}`}
             idBantuan={idBantuan}
-            idDaftarAkun={idDaftarAkun}
+            sembunyi={sembunyi}
             gridRef={gridRef}
             onUbahSel={onUbahSel}
             onTempel={onTempel}
@@ -1014,8 +1084,8 @@ function BannerBlok({ blok, bolehTulis, onPilih }: { blok: BlokGrid; bolehTulis:
         { label: `${judul}: DB = Uang masuk, CR = Uang keluar`, orientasi: 'tukar' },
       ]
     : [
-        { label: `Kolom "${judul}" = Uang masuk`, orientasi: blok.pertamaKe === 'masuk' ? 'normal' : 'tukar' },
-        { label: `Kolom "${judul}" = Uang keluar`, orientasi: blok.pertamaKe === 'keluar' ? 'normal' : 'tukar' },
+        { label: `Kolom "${judul}" = uang masuk (Debet)`, orientasi: blok.pertamaKe === 'masuk' ? 'normal' : 'tukar' },
+        { label: `Kolom "${judul}" = uang keluar (Kredit)`, orientasi: blok.pertamaKe === 'keluar' ? 'normal' : 'tukar' },
       ]
   const wajib = blok.status === 'wajib'
   return (

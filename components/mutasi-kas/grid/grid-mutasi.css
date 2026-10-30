@@ -140,3 +140,103 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ── Ikon ▾ (Nama Akun) & kalender (Tanggal) ─────────────────────────────
+   Muncul di baris yang AKTIF (memuat sel terpilih) atau di-hover, dan tetap
+   tampil selama panelnya terbuka. visibility (bukan display): komponennya
+   tetap terpasang, jadi panel yang terbuka tidak tertutup saat mouse pergi. */
+.grid-mutasi .gm-ber-picu {
+  padding-inline-end: 34px;
+}
+
+.grid-mutasi .gm-picu {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 4px;
+  display: inline-flex;
+  align-items: center;
+  visibility: hidden;
+}
+
+.grid-mutasi .rdg-row:hover .gm-picu,
+.grid-mutasi .rdg-row:has(> .rdg-cell[aria-selected='true']) .gm-picu,
+.grid-mutasi .gm-picu:has([aria-expanded='true']) {
+  visibility: visible;
+}
+
+.grid-mutasi .gm-panah {
+  inline-size: 26px;
+  block-size: 26px;
+  margin-block: auto;
+  justify-content: center;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-muted-bg);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.grid-mutasi .gm-panah:hover {
+  background: color-mix(in srgb, var(--color-accent-primary) 45%, white);
+}
+
+/* Kalender = components/date-range-picker.tsx APA ADANYA, dipersempit jadi
+   ikon dari luar. Gaya pemicunya inline di komponen itu, jadi penimpaannya
+   butuh !important. Label tanggalnya disembunyikan secara VISUAL saja —
+   tombol tetap punya nama yang dibacakan pembaca layar. */
+/* Komponennya meratakan panel ke TEPI KANAN wadahnya (dirancang untuk
+   pemicu di kanan halaman). Kolom Tanggal ada di kiri, jadi panel dua bulan
+   (±470px) akan keluar layar ke kiri. Wadahnya dibuat 480px ke KANAN dari
+   ikon — tak terlihat, terpotong sel, tidak menangkap klik — supaya tepi kanan
+   panel jatuh di sana dan panel terbuka ke kanan ikon. */
+.grid-mutasi .gm-kalender {
+  inline-size: 26px;
+}
+
+.grid-mutasi .gm-kalender > div {
+  position: absolute !important;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 480px;
+  min-width: 0 !important;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.grid-mutasi .gm-kalender button[aria-haspopup='dialog'] {
+  pointer-events: auto;
+  inline-size: 26px !important;
+  block-size: 26px;
+  padding: 0 !important;
+  gap: 0 !important;
+  justify-content: center;
+  border: none !important;
+  border-radius: 9999px !important;
+  background: var(--color-muted-bg) !important;
+  box-shadow: none !important;
+}
+
+.grid-mutasi .gm-kalender button[aria-haspopup='dialog']:hover {
+  background: color-mix(in srgb, var(--color-accent-primary) 45%, white) !important;
+}
+
+.grid-mutasi .gm-kalender button[aria-haspopup='dialog'] > span {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.grid-mutasi .gm-kalender button[aria-haspopup='dialog'] svg {
+  color: var(--color-text-primary) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-mutasi .gm-panah,
+  .grid-mutasi .gm-kalender button {
+    transition: none !important;
+  }
+}

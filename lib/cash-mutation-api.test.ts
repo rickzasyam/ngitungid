@@ -362,8 +362,10 @@ describe('halaman /mutasi-kas', () => {
 
   it('daftar akun kas datang dari ?kas=1, bukan disaring di browser', () => {
     // Penanda kas adalah aturan server (eksplisit ?? turunan). Menyalinnya ke
-    // browser berarti dua definisi "akun kas" yang bisa menyimpang.
-    expect(PAGE).toContain('/coa?kas=1')
+    // browser berarti dua definisi "akun kas" yang bisa menyimpang. Satu
+    // pintunya `muatAkunKas` (lib/akun-kas-klien.ts).
+    expect(PAGE).toContain('muatAkunKas(clientId)')
+    expect(read('lib', 'akun-kas-klien.ts')).toContain('/coa?kas=1')
   })
 
   it('sisa & status DIPAKAI apa adanya dari server, tidak dihitung ulang', () => {

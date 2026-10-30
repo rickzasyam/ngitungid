@@ -23,32 +23,40 @@
 // transaksi yang galat (merah), karena transaksi yang hilang diam-diam adalah
 // kegagalan termahal modul ini.
 
-import {
-  deteksiTanggalMMDD,
-  normalizeHeader,
-  parseCsv,
-  parseTanggalCell,
-  potonganTanggal,
-} from '@/lib/csv/mutasi-kas'
+import { normalizeHeader, parseCsv } from '@/lib/csv/mutasi-kas'
 import { bacaNominal, pesanGalatNominal } from '@/lib/nominal'
 import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
 import { CATATAN_MAX, KETERANGAN_MAX, validateCashMutation } from '@/lib/cash-mutation'
-import { fmtTanggal } from '@/lib/ymd'
+import { bacaTanggalGrid, bulanGridDari, normalisasiTanggal, tampakTanggal, urutanBlok } from '@/lib/mutasi-tanggal'
 import type { BarisMentah, HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 
 // ── Kolom grid ───────────────────────────────────────────────
 
-/** Urutan kolom grid — juga urutan POSISIONAL untuk tempelan tanpa judul. */
-export const KOLOM_GRID = ['tanggal', 'uraian', 'masuk', 'keluar', 'saldo', 'akunLawan', 'catatan'] as const
+/**
+ * Urutan kolom grid — urutan sheet kas template akuntan (D63, Ricko
+ * 2026-10-30) — dan juga urutan POSISIONAL untuk tempelan tanpa judul, seperti
+ * spreadsheet: yang ditempel mulai sel X mengisi kolom X lalu kolom di
+ * kanannya, termasuk kolom yang sedang disembunyikan.
+ *
+ * Kunci internal TETAP `masuk`/`keluar`/`akunLawan` (kontrak draf, cadangan
+ * IndexedDB, galat server); yang berubah hanya labelnya.
+ */
+export const KOLOM_GRID = ['tanggal', 'akunLawan', 'uraian', 'masuk', 'keluar', 'saldo', 'catatan'] as const
 export type KolomGrid = (typeof KOLOM_GRID)[number]
 
+/**
+ * Label kolom (D63): Debet = uang MASUK ke rekening ini, Kredit = uang KELUAR
+ * — konvensi sheet kas template akuntan, BUKAN konvensi rekening koran bank
+ * (di sana Debet = keluar; itulah sebabnya judul kolom berkas tidak pernah
+ * menentukan arah — lihat kepala berkas).
+ */
 export const LABEL_KOLOM: Record<KolomGrid, string> = {
   tanggal: 'Tanggal',
+  akunLawan: 'Nama Akun',
   uraian: 'Uraian',
-  masuk: 'Masuk',
-  keluar: 'Keluar',
+  masuk: 'Debet',
+  keluar: 'Kredit',
   saldo: 'Saldo',
-  akunLawan: 'Akun lawan',
   catatan: 'Catatan',
 }
 
@@ -94,10 +102,13 @@ type Alias = { peran: Peran; petunjuk?: Arah | null }
 // kotak Arah di MP §5.G. Yang berpetunjuk hanya kata yang memang sudut pandang
 // pemilik rekening ("masuk", "penerimaan", "penarikan").
 //
-// "catatan" di sini = kolom CATATAN (Konfirmasi/Reff template akuntan), BUKAN
-// uraian — berbeda dari alias impor CSV lama (N3) yang memetakannya ke
-// keterangan. Alias lama itu (beserta "Debet = keluar") pensiun bersama wizard
-// lama di S9 (D47).
+// "catatan" di sini = kolom CATATAN, BUKAN uraian — berbeda dari alias impor
+// CSV lama (N3) yang memetakannya ke keterangan. Alias lama itu (beserta
+// "Debet = keluar") pensiun bersama wizard lama di S9 (D47).
+//
+// Judul label grid lama (Masuk/Keluar/Akun lawan) tetap dikenali di samping
+// label baru (Debet/Kredit/Nama Akun, D63) — berkas yang disusun mengikuti
+// grid versi mana pun tetap terbaca.
 const JUDUL: Record<string, Alias> = {
   // tanggal
   'tanggal': { peran: 'tanggal' },
@@ -183,9 +194,10 @@ const JUDUL: Record<string, Alias> = {
   'coa': { peran: 'akunLawan' },
   'kode coa': { peran: 'akunLawan' },
   'account': { peran: 'akunLawan' },
-  // catatan (Konfirmasi/Reff template akuntan)
+  // catatan. "Ref"/"Reff" template masih ke Catatan selama kolom Ref belum
+  // punya field sendiri (D64 menunggu keputusan Ricko). "Konfirmasi" TIDAK
+  // dipakai (D65) — tanpa alias, jadi kolomnya diabaikan.
   'catatan': { peran: 'catatan' },
-  'konfirmasi': { peran: 'catatan' },
   'reff': { peran: 'catatan' },
   'ref': { peran: 'catatan' },
 }
@@ -395,155 +407,10 @@ export function nominalKeSel(kanonik: string | null): string {
 }
 
 // ── Tanggal ──────────────────────────────────────────────────
-
-const pad2 = (n: number) => String(n).padStart(2, '0')
-
-/** 'YYYY-MM-DD' → 'DD/MM/YYYY', bentuk baku sel tanggal grid. */
-export function ymdKeSel(ymd: string): string {
-  const [y, m, d] = ymd.split('-')
-  return `${d}/${m}/${y}`
-}
-
-type BagianTanggal = { hari: number; bulan: number; tahun: number | null }
-
-/**
- * Teks tanggal → bagian-bagiannya; `tahun: null` untuk tanggal TANPA TAHUN
- * ("26/10", "26 Okt"). Pembacaan bertahun memakai `parseTanggalCell` apa
- * adanya (DD/MM/YYYY, DD/Mon/YYYY, D-Mon-YYYY, YYYY-MM-DD, DD/MM/YY).
- * Tanpa tahun: dibaca dengan tahun kabisat bantu supaya 29/02 tidak ditolak
- * sebelum tahun sebenarnya diketahui.
- */
-function bagianTanggal(teks: string): BagianTanggal | null {
-  const bertahun = parseTanggalCell(teks)
-  if (bertahun !== null) {
-    const [y, m, d] = bertahun.split('-').map(Number)
-    return { hari: d, bulan: m, tahun: y }
-  }
-  if (potonganTanggal(teks).length !== 2) return null
-  const bantu = parseTanggalCell(`${teks} 2024`)
-  if (bantu === null) return null
-  const [, m, d] = bantu.split('-').map(Number)
-  return { hari: d, bulan: m, tahun: null }
-}
-
-function keYmd(hari: number, bulan: number, tahun: number): string | null {
-  const ymd = parseTanggalCell(`${tahun}-${pad2(bulan)}-${pad2(hari)}`)
-  return ymd
-}
-
-const tahunDari = (ymd: string) => Number(ymd.slice(0, 4))
-const bulanDari = (ymd: string) => Number(ymd.slice(5, 7))
-
-/** Tahun untuk tanggal tanpa tahun yang BERDIRI SENDIRI: tahun periode yang memuat bulannya. */
-function tahunMenurutPeriode(bulan: number, periode: Periode): number {
-  const yMulai = tahunDari(periode.mulai)
-  const yAkhir = tahunDari(periode.akhir)
-  if (yMulai === yAkhir) return yMulai
-  return bulan >= bulanDari(periode.mulai) ? yMulai : yAkhir
-}
-
-/**
- * Tanggal satu SEL → 'YYYY-MM-DD', atau null bila tak terbaca. Tanpa tahun →
- * tahun periode yang memuat bulannya (`tahunMenurutPeriode`).
- */
-export function bacaTanggalSel(teks: string, periode: Periode): string | null {
-  const b = bagianTanggal(teks.trim())
-  if (b === null) return null
-  if (b.tahun !== null) return keYmd(b.hari, b.bulan, b.tahun)
-  return keYmd(b.hari, b.bulan, tahunMenurutPeriode(b.bulan, periode))
-}
-
-/**
- * Tahun untuk SEDERET tanggal satu blok — deterministik.
- *
- * Tanggal bertahun dipakai apa adanya dan menjadi tahun berjalan. Tanggal
- * tanpa tahun: yang pertama memakai tahun periode yang memuat bulannya; yang
- * berikutnya mewarisi tahun berjalan, NAIK satu tahun saat bulannya melompat
- * Des→Jan dan TURUN satu tahun saat Jan→Des (rekening koran yang terurut
- * terbaru-dulu). Hanya lompatan tepat 12↔1 yang dihitung — urutan bulan lain
- * yang mundur bukan pergantian tahun.
- *
- * Kembalian sejajar dengan masukan: null = tak terbaca.
- */
-export function tetapkanTahun(tanggal: readonly string[], periode: Periode): (string | null)[] {
-  let tahun: number | null = null
-  let bulanSebelum: number | null = null
-  return tanggal.map(teks => {
-    const b = teks.trim() === '' ? null : bagianTanggal(teks.trim())
-    if (b === null) return null
-    if (b.tahun !== null) {
-      tahun = b.tahun
-      bulanSebelum = b.bulan
-      return keYmd(b.hari, b.bulan, b.tahun)
-    }
-    if (tahun === null || bulanSebelum === null) tahun = tahunMenurutPeriode(b.bulan, periode)
-    else if (bulanSebelum === 12 && b.bulan === 1) tahun++
-    else if (bulanSebelum === 1 && b.bulan === 12) tahun--
-    bulanSebelum = b.bulan
-    return keYmd(b.hari, b.bulan, tahun)
-  })
-}
+// Satu aturan untuk ketikan, tempelan, berkas, dan PDF: lib/mutasi-tanggal.ts
+// (D66). Sel tanggal disimpan dalam bentuk baku 'YYYY-MM-DD'.
 
 const dalamPeriode = (ymd: string, p: Periode) => ymd >= p.mulai && ymd <= p.akhir
-
-/**
- * Apakah blok ini ditulis BULAN-DI-DEPAN (MM/DD)? Keputusan Ricko 2026-09-21
- * tetap: berkas MM/DD DITOLAK, tidak ditebak.
- *
- * Dua bukti, keduanya di tingkat BLOK:
- *   1. `deteksiTanggalMMDD` (N3): ada sel yang potongan keduanya > 12.
- *   2. PERIODE: seluruh tanggal numeriknya ≤ 12/12, jadi bentuknya sendiri
- *      tidak bisa memutuskan — tapi bacaan MM/DD-nya yang jatuh di periode
- *      lebih banyak daripada bacaan DD/MM. Seri → DD/MM (bawaan Indonesia).
- */
-export function periksaUrutanTanggal(
-  sel: readonly { nomor: number; teks: string }[],
-  periode: Periode
-): { ditolak: false } | { ditolak: true; pesan: string } {
-  const mmdd = deteksiTanggalMMDD(sel.map(s => ({ nomor: s.nomor, nilai: s.teks })))
-  if (mmdd.terdeteksi) {
-    const contoh = mmdd.contoh.map(c => `baris ${c.nomor} "${c.nilai}"`).join(', ')
-    return {
-      ditolak: true,
-      pesan: `Tanggal blok ini ditulis bulan-di-depan (MM/DD), mis. ${contoh}. Ubah ke DD/MM/YYYY lalu tempel lagi.`,
-    }
-  }
-
-  let ddmmDalam = 0
-  let mmddDalam = 0
-  for (const s of sel) {
-    const p = potonganTanggal(s.teks)
-    if (p.length < 2) continue
-    const [a, b, c] = p
-    const angka = (x: string) => x !== undefined && x.length > 0 && [...x].every(isAngka)
-    if (!angka(a) || !angka(b) || a.length > 2 || b.length > 2) continue
-    const x = Number(a)
-    const y = Number(b)
-    if (x < 1 || x > 12 || y < 1 || y > 12 || x === y) continue
-    const tahun =
-      c === undefined
-        ? null
-        : angka(c)
-          ? c.length === 2
-            ? Number(c) + (Number(c) < 70 ? 2000 : 1900)
-            : Number(c)
-          : null
-    if (c !== undefined && tahun === null) continue
-    const ddmm = keYmd(x, y, tahun ?? tahunMenurutPeriode(y, periode))
-    const mmddYmd = keYmd(y, x, tahun ?? tahunMenurutPeriode(x, periode))
-    if (ddmm && dalamPeriode(ddmm, periode)) ddmmDalam++
-    if (mmddYmd && dalamPeriode(mmddYmd, periode)) mmddDalam++
-  }
-  if (mmddDalam > ddmmDalam) {
-    return {
-      ditolak: true,
-      pesan:
-        'Tanggal blok ini tampaknya ditulis bulan-di-depan (MM/DD): dibaca DD/MM sebagian besar jatuh di luar periode, ' +
-        'dibaca MM/DD jatuh di dalamnya. Ubah ke DD/MM/YYYY lalu tempel lagi.',
-    }
-  }
-  return { ditolak: false }
-}
 
 // ── Akun lawan: kode ATAU nama persis ────────────────────────
 
@@ -668,7 +535,7 @@ export function kelasBaris(
 ): { kelas: KelasBaris; alasan: string } {
   if (b.semua.every(s => s.trim() === '')) return { kelas: 'kosong', alasan: 'Baris kosong.' }
 
-  const adaTanggal = b.tanggal.trim() !== '' && bagianTanggal(b.tanggal.trim()) !== null
+  const adaTanggal = b.tanggal.trim() !== '' && tampakTanggal(b.tanggal)
   if (!adaTanggal) {
     if (kenaliJudul(b.semua) !== null) return { kelas: 'judul', alasan: 'Judul kolom yang tercetak ulang.' }
     let sama = 0
@@ -779,9 +646,10 @@ const lawan = (a: Arah): Arah => (a === 'masuk' ? 'keluar' : 'masuk')
  * Langkah: (1) pemetaan — eksplisit, atau baris judul di 20 baris pertama
  * (baris di atasnya = kop, dilewati), atau posisional dari `jangkarKolom`;
  * (2) kelas tiap baris; lanjutan digabung ke uraian transaksi sebelumnya
- * dengan satu spasi (aturan yang sama dengan Stream B untuk PDF); (3) urutan
- * tanggal blok (MM/DD → ditolak) dan tahunnya; (4) nominal ke Masuk/Keluar
- * dalam orientasi sementara.
+ * dengan satu spasi (aturan yang sama dengan Stream B untuk PDF); (3) tanggal
+ * dinormalisasi ke 'YYYY-MM-DD' per sel — bukti urutan hari/bulan dari blok
+ * ini lebih dulu, lalu bulan grid (D66); (4) nominal ke Masuk/Keluar dalam
+ * orientasi sementara.
  */
 export function bacaBlok(opsi: OpsiBacaBlok): HasilBacaBlok {
   const { baris, sumber, periode } = opsi
@@ -885,20 +753,15 @@ export function bacaBlok(opsi: OpsiBacaBlok): HasilBacaBlok {
     }
   }
 
-  // Urutan tanggal ditentukan per BLOK, sebelum satu baris pun jadi draf.
-  const urutan = periksaUrutanTanggal(
-    calon.map(c => ({ nomor: c.nomor, teks: c.b.tanggal })),
-    periode
-  )
-  if (urutan.ditolak) return { ok: false, pesan: urutan.pesan }
-  const ymd = tetapkanTahun(
-    calon.map(c => c.b.tanggal),
-    periode
-  )
+  // Bukti urutan hari/bulan dikumpulkan dari SELURUH blok sebelum satu baris
+  // pun dinormalisasi (D66): berkas hari/bulan berisi "04/01/2026" di grid
+  // April tetap 4 Januari (merah, di luar bulan), bukan 1 April.
+  const grid = bulanGridDari(periode)
+  const urutan = urutanBlok(calon.map(c => c.b.tanggal))
 
-  const hasil: BarisBaca[] = calon.map((c, idx) => {
+  const hasil: BarisBaca[] = calon.map(c => {
     const sel = selKosong()
-    sel.tanggal = ymd[idx] !== null ? ymdKeSel(ymd[idx] as string) : c.b.tanggal
+    sel.tanggal = normalisasiTanggal(c.b.tanggal, grid, urutan)
     sel.uraian = c.b.uraian
     sel.saldo = c.b.saldo
     sel.akunLawan = c.b.akunLawan
@@ -1024,7 +887,7 @@ export type HasilValidasi = {
 
 /**
  * Validasi satu baris draf: galat PER SEL lebih dulu (tanggal, uang lewat
- * `bacaNominal`, "Masuk ATAU Keluar", saldo, akun lawan, panjang teks), lalu
+ * `bacaNominal`, "Debet ATAU Kredit", saldo, Nama Akun, panjang teks), lalu
  * `validateCashMutation` sebagai HAKIM TERAKHIR — aturan yang sama dengan
  * server, jadi baris yang hijau di grid tidak ditolak route batch karena aturan
  * yang berbeda.
@@ -1032,17 +895,14 @@ export type HasilValidasi = {
 export function validasiBaris(sel: SelDraf, k: KonteksValidasi): HasilValidasi {
   const galat: Partial<Record<KolomGrid, string>> = {}
 
-  // Tanggal (D60): kosong = wajib diisi; di luar periode = galat.
+  // Tanggal (D60, D66): kosong = wajib diisi; tak terbaca, ambigu, atau di
+  // luar bulan grid = galat.
   let tanggal: string | null = null
-  if (sel.tanggal.trim() === '') {
-    galat.tanggal = 'Tanggal wajib diisi — atau pakai "Isi tanggal akhir periode".'
-  } else {
-    tanggal = bacaTanggalSel(sel.tanggal, k.periode)
-    if (tanggal === null) galat.tanggal = 'Tanggal tidak terbaca. Pakai DD/MM/YYYY, mis. 05/04/2026.'
-    else if (!dalamPeriode(tanggal, k.periode)) {
-      galat.tanggal = `Tanggal di luar periode ${fmtTanggal(k.periode.mulai)} – ${fmtTanggal(k.periode.akhir)}. Perlebar periodenya bila memang benar.`
-    }
-  }
+  const t = bacaTanggalGrid(sel.tanggal, bulanGridDari(k.periode))
+  if (t.status === 'kosong') galat.tanggal = 'Tanggal wajib diisi — atau pakai "Isi tanggal akhir periode".'
+  else if (t.status === 'galat') galat.tanggal = t.pesan
+  else if (!dalamPeriode(t.ymd, k.periode)) galat.tanggal = `Tanggal di luar periode ${k.periode.mulai} – ${k.periode.akhir}.`
+  else tanggal = t.ymd
 
   const masuk = bacaUangSel(sel.masuk)
   const keluar = bacaUangSel(sel.keluar)
@@ -1052,11 +912,11 @@ export function validasiBaris(sel: SelDraf, k: KonteksValidasi): HasilValidasi {
   const keluarMinor = keluar.status === 'ok' ? keluar.minor : 0
   if (masuk.status !== 'galat' && keluar.status !== 'galat') {
     if (masukMinor === 0 && keluarMinor === 0) {
-      galat.masuk = 'Isi Masuk atau Keluar.'
-      galat.keluar = 'Isi Masuk atau Keluar.'
+      galat.masuk = 'Isi Debet atau Kredit.'
+      galat.keluar = 'Isi Debet atau Kredit.'
     } else if (masukMinor > 0 && keluarMinor > 0) {
-      galat.masuk = 'Hanya satu yang boleh terisi: Masuk atau Keluar.'
-      galat.keluar = 'Hanya satu yang boleh terisi: Masuk atau Keluar.'
+      galat.masuk = 'Hanya satu yang boleh terisi: Debet atau Kredit.'
+      galat.keluar = 'Hanya satu yang boleh terisi: Debet atau Kredit.'
     }
   }
 
@@ -1067,7 +927,7 @@ export function validasiBaris(sel: SelDraf, k: KonteksValidasi): HasilValidasi {
   const akun = cocokkanAkun(sel.akunLawan, k.akun)
   if (akun.status === 'galat') galat.akunLawan = akun.pesan
   else if (akun.status === 'ok') {
-    if (akun.akunId === k.akunKasId) galat.akunLawan = 'Akun lawan tidak boleh akun kas ini sendiri.'
+    if (akun.akunId === k.akunKasId) galat.akunLawan = 'Nama Akun tidak boleh akun kas ini sendiri.'
     else akunLawanId = akun.akunId
   }
 

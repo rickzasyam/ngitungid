@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { BATAS_SIMPAN, gerbangSimpan, hitungUsulan, labelAkun, petaGalatServer, rantaiGrid, rencanaBerkas, rencanaTempel, ringkasGrid } from './mutasi-grid-turunan'
+import { BATAS_SIMPAN, gerbangSimpan, hitungUsulan, labelAkun, petaGalatServer, rantaiGrid, rencanaBerkas, rencanaTempel, ringkasGrid, teksKetikan } from './mutasi-grid-turunan'
 import { buatValidator, diffKeBatch, keadaanAwal, potretCadangan, reducerGrid, TANPA_KUNCI, type BarisGrid, type BarisServer } from './mutasi-grid-state'
 import { indeksAkun, selKosong, type SelDraf } from './mutasi-draf'
 import { siapkanAturan, type AturanMutasi } from './aturan-mutasi'
@@ -108,7 +108,7 @@ describe('ringkasGrid & gerbangSimpan', () => {
 
   it('total dalam SEN — 0,10 + 0,20 = 0,30 persis', () => {
     let s = keadaanAwal()
-    s = reducerGrid(s, { jenis: 'tempelSel', indeks: 0, kolom: 'tanggal', isi: [['05/10/2026', 'A', '0,10'], ['05/10/2026', 'B', '0,20']] })
+    s = reducerGrid(s, { jenis: 'tempelSel', indeks: 0, kolom: 'tanggal', isi: [['05/10/2026', '', 'A', '0,10'], ['05/10/2026', '', 'B', '0,20']] })
     const v = buatValidator(konteks, s.server)
     const r = ringkasGrid(s.baris, diffKeBatch(s, v))
     expect(r.totalMasuk).toBe('0.30')
@@ -153,16 +153,43 @@ describe('rencanaTempel — persegi sel atau blok transaksi', () => {
   it('judul dikenali → blok, di kolom mana pun', () => {
     expect(rencanaTempel('Tanggal\tKeterangan\tMutasi\tSaldo\n05/10/2026\tA\t100\t1.000\n', { kolom: 'catatan' }, OKT).jenis).toBe('blok')
   })
-  it('≥ 3 kolom mulai sel Tanggal → blok', () => {
-    expect(rencanaTempel('05/10/2026\tA\t100\n06/10/2026\tB\t200\n', { kolom: 'tanggal' }, OKT).jenis).toBe('blok')
+  it('mulai sel Tanggal sampai kolom Debet (urutan D63: Tanggal · Nama Akun · Uraian · Debet) → blok', () => {
+    expect(rencanaTempel('05/10/2026\t\tA\t100\n06/10/2026\t\tB\t200\n', { kolom: 'tanggal' }, OKT).jenis).toBe('blok')
+    // Belum mencapai Debet → persegi sel biasa.
+    expect(rencanaTempel('05/10/2026\t6-1001\tA\n', { kolom: 'tanggal' }, OKT).jenis).toBe('sel')
+  })
+  it('blok tanpa judul dipetakan POSISIONAL mengikuti urutan kolom grid (D63)', () => {
+    const t = rencanaTempel('05/10/2026\t6-1001\tGaji\t\t2.000\t8.000\tcatat\n', { kolom: 'tanggal' }, OKT)
+    expect(t.jenis === 'blok' && t.hasil.baris[0].sel).toMatchObject({
+      tanggal: '2026-10-05',
+      akunLawan: '6-1001',
+      uraian: 'Gaji',
+      keluar: '2.000',
+      saldo: '8.000',
+      catatan: 'catat',
+    })
+  })
+  it('persegi sel di kolom Tanggal dinormalisasi ke YYYY-MM-DD (D66), kolom lain apa adanya', () => {
+    expect(rencanaTempel('5\tA\n15 Okt 2026\tB\nkemarin\tC\n', { kolom: 'tanggal' }, OKT)).toEqual({
+      jenis: 'sel',
+      isi: [['2026-10-05', 'A'], ['2026-10-15', 'B'], ['kemarin', 'C']],
+    })
+    // Mulai di kanan Tanggal: tidak ada sel tanggal yang disentuh.
+    expect(rencanaTempel('5\tA\n', { kolom: 'uraian' }, OKT)).toEqual({ jenis: 'sel', isi: [['5', 'A']] })
+  })
+  it('ketikan: sel Tanggal dinormalisasi, sel lain apa adanya', () => {
+    expect(teksKetikan('tanggal', '15', OKT)).toBe('2026-10-15')
+    expect(teksKetikan('tanggal', '15/11/2026', OKT)).toBe('2026-11-15')
+    expect(teksKetikan('tanggal', '04/01/2026', OKT)).toBe('04/01/2026')
+    expect(teksKetikan('uraian', ' 15 ', OKT)).toBe(' 15 ')
   })
   it('satu kolom, atau mulai di luar Tanggal tanpa judul → persegi sel', () => {
     expect(rencanaTempel('6-1001\n6-1002\n', { kolom: 'akunLawan' }, OKT)).toEqual({ jenis: 'sel', isi: [['6-1001'], ['6-1002']] })
     expect(rencanaTempel('A\t100\t\n', { kolom: 'uraian' }, OKT).jenis).toBe('sel')
   })
-  it('blok bertanggal MM/DD dibuktikan periode → ditolak dengan pesan', () => {
-    const t = rencanaTempel('10/05/2026\tA\t100\n10/06/2026\tB\t200\n', { kolom: 'tanggal' }, OKT)
-    expect(t.jenis).toBe('galat')
+  it('blok bertanggal bulan/hari TIDAK ditolak lagi (D66): diputus bulan grid', () => {
+    const t = rencanaTempel('10/05/2026\t\tA\t100\n10/06/2026\t\tB\t200\n', { kolom: 'tanggal' }, OKT)
+    expect(t.jenis === 'blok' && t.hasil.baris.map(b => b.sel.tanggal)).toEqual(['2026-10-05', '2026-10-06'])
   })
   it('kosong → galat', () => {
     expect(rencanaTempel('\n\n', { kolom: 'tanggal' }, OKT).jenis).toBe('galat')

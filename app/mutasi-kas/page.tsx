@@ -57,6 +57,7 @@ import {
 } from '@/components/mutasi-kas/mutation-form-modal'
 import { AllocationPanel, type AlokasiRow } from '@/components/mutasi-kas/allocation-panel'
 import { LembarMutasi } from '@/components/mutasi-kas/grid/lembar-mutasi'
+import { muatAkunKas } from '@/lib/akun-kas-klien'
 import type { Periode } from '@/lib/mutasi-draf'
 
 interface MutasiRow {
@@ -185,23 +186,20 @@ function MutasiKasContent() {
 
   const clientId = activeClient?.id ?? null
 
-  // Master COA klien: seluruh akun (untuk akun lawan) dan yang bertanda kas.
+  // Master COA klien: seluruh akun (untuk Nama Akun) dan yang bertanda kas.
   // Dua permintaan, bukan satu yang disaring di browser: penanda kas adalah
   // aturan server (eksplisit ?? turunan), dan menyalinnya ke sini berarti dua
-  // definisi "akun kas" yang bisa menyimpang.
+  // definisi "akun kas" yang bisa menyimpang. Tab rekening datang dari SATU
+  // fungsi, `muatAkunKas` (lib/akun-kas-klien.ts).
   useEffect(() => {
     if (!clientId) return
     let batal = false
     void (async () => {
       try {
-        const [rKas, rSemua] = await Promise.all([
-          fetch(`/api/clients/${clientId}/coa?kas=1`),
-          fetch(`/api/clients/${clientId}/coa`),
-        ])
-        const kas = (await rKas.json().catch(() => null)) as { accounts?: AkunOption[] } | null
+        const [kas, rSemua] = await Promise.all([muatAkunKas(clientId), fetch(`/api/clients/${clientId}/coa`)])
         const semua = (await rSemua.json().catch(() => null)) as { accounts?: AkunOption[] } | null
         if (batal) return
-        setAkunKas(kas?.accounts ?? [])
+        setAkunKas(kas)
         setAkunSemua(semua?.accounts ?? [])
       } catch {
         if (!batal) {
@@ -383,7 +381,7 @@ function MutasiKasContent() {
   // Tab grid: diturunkan dari daftar akun kas klien aktif (sama seperti
   // `akunValid`) — ganti klien tidak menyisakan tab milik klien lama.
   const kasGrid = akunKas.find(a => a.id === kasTab) ?? akunKas[0] ?? null
-  const coaGrid = useMemo(() => akunSemua.map(a => ({ id: a.id, kode: a.kode, nama: a.nama })), [akunSemua])
+  const coaGrid = useMemo(() => akunSemua.map(a => ({ id: a.id, kode: a.kode, nama: a.nama, jenis: a.resolvedType ?? null })), [akunSemua])
   const onKotor = useCallback((k: boolean) => setGridKotor(k), [])
 
   function pindahTab(id: string) {
@@ -681,8 +679,8 @@ function MutasiKasContent() {
                       <th scope="col" style={th}>Tanggal</th>
                       <th scope="col" style={th}>Akun kas</th>
                       <th scope="col" style={th}>Keterangan</th>
-                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Masuk</th>
-                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Keluar</th>
+                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Debet</th>
+                      <th scope="col" style={{ ...th, textAlign: 'right' }}>Kredit</th>
                       {/* Judulnya sama dengan panel alokasi, bukan "Sisa":
                           angka ini soal ALOKASI, dan "Sisa" mengundang dibaca
                           sebagai "belum beres" oleh mutasi yang sudah selesai

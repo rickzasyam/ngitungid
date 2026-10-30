@@ -90,9 +90,9 @@ export function validateCashMutation(input: CashMutationInput): CashMutationChec
   // terbaca seperti penjaga, padahal tidak pernah menjaga apa pun.
   if (debitMinor !== null && kreditMinor !== null) {
     if (debitMinor === 0 && kreditMinor === 0) {
-      errors.push('Mutasi harus terisi di salah satu sisi: debit (masuk) atau kredit (keluar).')
+      errors.push('Mutasi harus terisi di salah satu sisi: Debet atau Kredit.')
     } else if (debitMinor > 0 && kreditMinor > 0) {
-      errors.push('Mutasi hanya boleh terisi di SATU sisi — debit atau kredit, bukan keduanya.')
+      errors.push('Mutasi hanya boleh terisi di SATU sisi — Debet atau Kredit, bukan keduanya.')
     }
   }
 

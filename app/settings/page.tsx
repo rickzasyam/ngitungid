@@ -50,6 +50,7 @@ import { NAMA_MIN, NAMA_MAX, DESKRIPSI_MAX, type LayananRow } from '@/lib/layana
 import { defaultMetricVisibility, type MetricId } from '@/lib/analytics/metric-visibility'
 import { usePreferences } from '@/lib/preferences-context'
 import type { Preferences, Language, CurrencyFormat } from '@/lib/api/preferences'
+import { muatAkunKas } from '@/lib/akun-kas-klien'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
@@ -1319,10 +1320,10 @@ function PembukuanTab({
     let batal = false
     void (async () => {
       try {
-        const [rSet, rCoa, rKas] = await Promise.all([
+        const [rSet, rCoa, kas] = await Promise.all([
           fetch(`/api/clients/${clientId}/accounting-settings`),
           fetch(`/api/clients/${clientId}/coa`),
-          fetch(`/api/clients/${clientId}/coa?kas=1`),
+          muatAkunKas(clientId).catch(() => []),
         ])
         const setelan = (await rSet.json().catch(() => null)) as {
           akunPpnMasukanId?: string | null
@@ -1333,11 +1334,10 @@ function PembukuanTab({
         } | null
         if (!rSet.ok) throw new Error(setelan?.error ?? 'Gagal memuat setelan pembukuan.')
         const coa = (await rCoa.json().catch(() => null)) as { accounts?: CoaAccount[] } | null
-        const kas = (await rKas.json().catch(() => null)) as { accounts?: { id: string }[] } | null
         if (batal) return
         setAkunPpn(setelan?.akunPpnMasukanId ?? '')
         setAkunPindahBuku(setelan?.akunPindahBukuId ?? '')
-        setAkunKasIds(new Set((kas?.accounts ?? []).map(a => a.id)))
+        setAkunKasIds(new Set(kas.map(a => a.id)))
         // Bentuk `=== true`, bukan `?? true`: ketiadaan baris setelan berarti
         // MATI, sama persis dengan tersimpan false (D42).
         setPosting(setelan?.postingBisaDiedit === true)
