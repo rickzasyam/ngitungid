@@ -645,6 +645,15 @@ textarea::placeholder {
   background: rgba(255, 255, 255, 0.12);
   color: white;
 }
+/* Bulan di luar min/max DatePicker (panel bersama). aria-disabled, bukan
+   disabled: tombol yang sedang difokus tetap memegang fokusnya. Sesudah aturan
+   hover supaya menang pada spesifisitas yang sama. */
+.drp-nav[aria-disabled="true"] {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .drp-batal {
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.5);
