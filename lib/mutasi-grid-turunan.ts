@@ -27,6 +27,7 @@ import {
 import { usulkanAkunLawan, type AturanSiap } from '@/lib/aturan-mutasi'
 import { blokWajibPilih, type BarisGrid, type HasilDiff, type KeadaanGrid } from '@/lib/mutasi-grid-state'
 import { fromMinorUnits } from '@/lib/journal'
+import { bulanGridDari, normalisasiTanggal, urutanBlok } from '@/lib/mutasi-tanggal'
 
 // ── Rantai saldo per baris ───────────────────────────────────
 
@@ -249,7 +250,9 @@ export type RencanaTempel =
   | { jenis: 'galat'; pesan: string }
 
 const BATAS_PINDAI_JUDUL = 20
-const KOLOM_MIN_BLOK = 3
+// Blok tanpa judul = tempelan mulai sel Tanggal yang mencapai kolom Debet —
+// baris transaksi minimal. Diturunkan dari urutan kolom, bukan angka mati.
+const KOLOM_MIN_BLOK = KOLOM_GRID.indexOf('masuk') + 1
 
 /**
  * Tempelan → jenis aksinya (S6 punya keduanya; yang memilih ada di sini).
@@ -266,10 +269,28 @@ export function rencanaTempel(teks: string, posisi: { kolom: KolomGrid }, period
   const lebar = baris.reduce((m, b) => Math.max(m, b.length), 0)
   const adaJudul = baris.slice(0, BATAS_PINDAI_JUDUL).some(b => kenaliJudul(b) !== null)
   const blok = adaJudul || (posisi.kolom === 'tanggal' && lebar >= KOLOM_MIN_BLOK)
-  if (!blok) return { jenis: 'sel', isi: baris }
+  if (!blok) return { jenis: 'sel', isi: normalisasiKolomTanggal(baris, posisi.kolom, periode) }
   const hasil = bacaBlok({ baris, nomor, sumber: 'tempel', periode, jangkarKolom: posisi.kolom })
   if (!hasil.ok) return { jenis: 'galat', pesan: hasil.pesan }
   return { jenis: 'blok', hasil }
+}
+
+/**
+ * Persegi sel: sel yang mendarat di kolom Tanggal dinormalisasi ke
+ * 'YYYY-MM-DD' (D66), dengan bukti urutan hari/bulan dari sel-sel tanggal
+ * tempelan itu sendiri — aturan yang sama dengan blok.
+ */
+function normalisasiKolomTanggal(isi: string[][], mulai: KolomGrid, periode: Periode): string[][] {
+  const c = KOLOM_GRID.indexOf('tanggal') - KOLOM_GRID.indexOf(mulai)
+  if (c < 0) return isi
+  const grid = bulanGridDari(periode)
+  const urutan = urutanBlok(isi.map(r => r[c] ?? ''))
+  return isi.map(r => (c < r.length ? r.map((v, i) => (i === c ? normalisasiTanggal(v, grid, urutan) : v)) : r))
+}
+
+/** Ketikan satu sel → teks yang disimpan: sel Tanggal dinormalisasi (D66), sel lain apa adanya. */
+export function teksKetikan(kolom: KolomGrid, nilai: string, periode: Periode): string {
+  return kolom === 'tanggal' ? normalisasiTanggal(nilai, bulanGridDari(periode)) : nilai
 }
 
 /**

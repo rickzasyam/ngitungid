@@ -211,7 +211,7 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
     }
     diPeriode(b.kunci, c.value.tanggal)
     if (c.value.akunLawanId === p.akunKasId) {
-      galat.push({ kunci: b.kunci, kolom: 'akunLawan', pesan: 'Akun lawan tidak boleh akun kas ini sendiri.', jenis: 'validasi' })
+      galat.push({ kunci: b.kunci, kolom: 'akunLawan', pesan: 'Nama Akun tidak boleh akun kas ini sendiri.', jenis: 'validasi' })
     }
     const urutan = b.urutan === null || b.urutan === undefined ? null : Number(b.urutan)
     if (urutan !== null && (!Number.isInteger(urutan) || urutan < 1)) {
@@ -238,7 +238,7 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
     }
     diPeriode(u.id, c.value.tanggal)
     if (c.value.akunLawanId === akunKasId) {
-      galat.push({ kunci: u.id, kolom: 'akunLawan', pesan: 'Akun lawan tidak boleh akun kasnya sendiri.', jenis: 'validasi' })
+      galat.push({ kunci: u.id, kolom: 'akunLawan', pesan: 'Nama Akun tidak boleh akun kasnya sendiri.', jenis: 'validasi' })
     }
     const saldoDikosongkan = kanonikSaldo(u.saldoDikosongkan)
     ubah.push({ id: u.id, updatedAt: u.updatedAt, v: c.value, saldoDikosongkan })
@@ -262,7 +262,7 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
     )
     for (const x of [...baru.map(b => ({ k: b.kunci, v: b.v })), ...ubah.map(u => ({ k: u.id, v: u.v }))]) {
       if (x.v.akunLawanId && !ada.has(x.v.akunLawanId)) {
-        galat.push({ kunci: x.k, kolom: 'akunLawan', pesan: 'Akun lawan tidak ada di Master COA klien ini.', jenis: 'validasi' })
+        galat.push({ kunci: x.k, kolom: 'akunLawan', pesan: 'Nama Akun tidak ada di Master COA klien ini.', jenis: 'validasi' })
       }
     }
   }

@@ -14,6 +14,11 @@ const PB = baca('components', 'mutasi-kas', 'grid', 'panel-pindah-buku.tsx')
 const KIRIM = baca('components', 'mutasi-kas', 'grid', 'kirim-simpan.ts')
 const CADANGAN = baca('components', 'mutasi-kas', 'grid', 'cadangan-draf.ts')
 const CSS = baca('components', 'mutasi-kas', 'grid', 'grid-mutasi.css')
+const KOMBO = baca('components', 'mutasi-kas', 'grid', 'kombo-akun.tsx')
+const KOMBO_CSS = baca('components', 'mutasi-kas', 'grid', 'kombo-akun.css')
+const KALENDER = baca('components', 'mutasi-kas', 'grid', 'kalender-sel.tsx')
+const AKUN_KAS = baca('lib', 'akun-kas-klien.ts')
+const SETTINGS = baca('app', 'settings', 'page.tsx')
 const PKG = JSON.parse(baca('package.json')) as { dependencies: Record<string, string> }
 
 describe('grid tidak menghitung angka buku sendiri (pola CP-18)', () => {
@@ -79,7 +84,8 @@ describe('tambalan S0 & Enter seperti Excel (CP-19)', () => {
   })
   it('sel terkunci: alasan di aria-description, tidak bisa disunting', () => {
     expect(GRID).toContain('aria-description={i.deskripsi ?? undefined}')
-    expect(GRID).toContain('editable: b => kt.bolehTulis && alasanTerkunci(b, k) === null')
+    expect(GRID).toContain('const bolehSunting = (b: BarisGrid, k: KolomGrid) => kt.bolehTulis && alasanTerkunci(b, k) === null')
+    expect(GRID).toContain('editable: b => bolehSunting(b, k)')
   })
   it('Enter: di editor simpan lalu turun; di sel aktif turun; Shift+Enter naik', () => {
     expect(GRID).toContain('args.onClose(true, false)')
@@ -161,7 +167,7 @@ describe('halaman /mutasi-kas (S9)', () => {
     expect(PAGE).toContain('role="tablist" aria-label="Akun kas"')
     expect(PAGE).toContain('role="tab"')
     expect(PAGE).toContain('aria-selected={terpilih}')
-    expect(PAGE).toContain('/coa?kas=1')
+    expect(PAGE).toContain('muatAkunKas(clientId)')
     expect(PAGE).toContain('type="month"')
   })
   it('wizard impor lama hilang; CSV masuk lewat grid (D47)', () => {
@@ -173,5 +179,107 @@ describe('halaman /mutasi-kas (S9)', () => {
   })
   it('tautan "Koreksi di Mutasi Kas" (?mutasi=) tetap membuka daftar dengan baris terbuka', () => {
     expect(PAGE).toContain("useState<'grid' | 'daftar'>(mutasiDariUrl ? 'daftar' : 'grid')")
+  })
+})
+
+// ── Masukan Ricko 2026-10-30 (D63–D66, combobox, Atur kolom) ──
+
+describe('kolom & label (D63)', () => {
+  it('grid memakai LABEL_KOLOM dan urutan KOLOM_GRID — tidak ada label kolom yang ditulis ulang di komponen', () => {
+    expect(GRID).toContain('name: LABEL_KOLOM[k]')
+    expect(GRID).toContain('KOLOM_GRID.filter(k => !sembunyi.has(k))')
+    expect(LEMBAR).toContain('Debet{\' \'}')
+    expect(LEMBAR).toContain('Kredit{\' \'}')
+    expect(PAGE).toContain('>Debet</th>')
+    expect(PAGE).toContain('>Kredit</th>')
+    expect(PAGE).not.toContain('>Masuk</th>')
+  })
+})
+
+describe('Atur kolom', () => {
+  it('hanya kolom opsional yang bisa disembunyikan; kolom inti tidak', () => {
+    expect(LEMBAR).toContain("const KOLOM_OPSIONAL: readonly KolomGrid[] = ['catatan']")
+    expect(LEMBAR).toContain('KOLOM_OPSIONAL.filter(k => isi.includes(k))')
+  })
+  it('pilihan per klien di localStorage, setiap akses dibungkus try/catch', () => {
+    expect(LEMBAR).toContain('`ngitungid:grid-mutasi:kolom-tersembunyi:${clientId}`')
+    const baca = LEMBAR.slice(LEMBAR.indexOf('function bacaKolomTersembunyi'), LEMBAR.indexOf('function tulisKolomTersembunyi'))
+    const tulis = LEMBAR.slice(LEMBAR.indexOf('function tulisKolomTersembunyi'), LEMBAR.indexOf('export function LembarMutasi'))
+    expect(baca.indexOf('try {')).toBeLessThan(baca.indexOf('localStorage.getItem'))
+    expect(tulis.indexOf('try {')).toBeLessThan(tulis.indexOf('localStorage.setItem'))
+  })
+})
+
+describe('combobox Nama Akun (pengganti <datalist>)', () => {
+  it('tidak ada <datalist> lagi; editor sel dan dialog "Isi Nama Akun kosong" memakai KomboAkun', () => {
+    for (const src of [GRID, LEMBAR]) {
+      expect(src).not.toContain('<datalist')
+      expect(src).not.toContain('list={')
+      expect(src).toContain('<KomboAkun')
+    }
+  })
+  it('ARIA combobox: role, aria-expanded, aria-controls, aria-activedescendant; opsi role=option + aria-selected', () => {
+    expect(KOMBO).toContain('role="combobox"')
+    expect(KOMBO).toContain('aria-controls={idDaftar}')
+    expect(KOMBO).toContain('aria-activedescendant=')
+    expect(KOMBO).toContain('role="listbox"')
+    expect(KOMBO).toContain('role="option"')
+    expect(KOMBO).toContain('aria-selected={i === aktif}')
+  })
+  it('keyboard: Alt+↓ daftar penuh, ↑↓ pilih, Enter pasang, Tab pasang yang disorot, Esc batal', () => {
+    expect(KOMBO).toContain("e.altKey && e.key === 'ArrowDown'")
+    expect(KOMBO).toContain("e.key === 'ArrowDown' || e.key === 'ArrowUp'")
+    expect(KOMBO).toContain("onPilih(opsi, 'enter')")
+    expect(KOMBO).toContain("onPilih(opsi, e.shiftKey ? 'tab-mundur' : 'tab')")
+  })
+  it('pilihan dari combobox disimpan bersama barisnya (commit=true), bukan lewat onClose yang memegang baris lama', () => {
+    expect(GRID).toContain("onRowChange({ ...row, sel: { ...row.sel, akunLawan: a.kode } }, true)")
+  })
+  it('editor dari konteks (identitas tetap) — bukan dibuat ulang per render', () => {
+    expect(GRID).toContain('const { daftarAkun, lanjut } = useContext(KonteksEditorAkun)')
+    expect(GRID).not.toContain('buatEditorAkun(')
+  })
+  it('daftar dikelompokkan per jenis akun; item aktif lime (token), tanpa hex', () => {
+    expect(KOMBO).toContain('saringAkun(akun, kueri)')
+    expect(KOMBO_CSS).toContain('background: var(--color-accent-primary);')
+    expect(KOMBO_CSS).toContain('color: var(--color-accent-primary-fg);')
+    const aturan = KOMBO_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(aturan).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(aturan).not.toContain('@layer')
+  })
+})
+
+describe('tanggal ketikan & kalender (D66)', () => {
+  it('ketikan sel dinormalisasi lewat teksKetikan sebelum masuk reducer', () => {
+    expect(LEMBAR).toContain("dispatch({ jenis: 'ubahSel', kunci, kolom, nilai: teksKetikan(kolom, nilai, periode) })")
+  })
+  it('event dari panel kalender tidak sampai ke grid, KECUALI Escape (penutup panel ada di document)', () => {
+    expect(KALENDER).toContain("if (e.key !== 'Escape') henti(e)")
+    expect(KALENDER).toContain('tanggalDariRentang(r, awal)')
+  })
+})
+
+describe('Alt+↓ & ikon di sel', () => {
+  it('Alt+↓ di Tanggal membuka kalender; di Nama Akun membuka editor (daftar penuh)', () => {
+    expect(GRID).toContain("e.altKey && e.key === 'ArrowDown' && args.column?.key === 'tanggal'")
+    expect(GRID).toContain('bukaKalenderDi(selAktif())')
+    expect(GRID).toContain("e.altKey && e.key === 'ArrowDown' && args.mode === 'ACTIVE' && args.column?.key === 'akunLawan'")
+  })
+  it('kalender = date-range-picker yang SUDAH ADA, dipakai apa adanya', () => {
+    expect(KALENDER).toContain("import { DateRangePicker } from '@/components/date-range-picker'")
+    expect(KALENDER).toContain('<DateRangePicker')
+  })
+  it('ikon hanya di baris aktif/hover (CSS), tidak jadi tempat berhenti Tab', () => {
+    expect(CSS).toContain(".rdg-row:has(> .rdg-cell[aria-selected='true']) .gm-picu")
+    expect(GRID).toContain('tabIndex={-1}')
+  })
+})
+
+describe('tab rekening kas dari SATU fungsi (D)', () => {
+  it('muatAkunKas satu-satunya pemanggil /coa?kas=1 di halaman', () => {
+    expect(AKUN_KAS).toContain('`/api/clients/${clientId}/coa?kas=1`')
+    expect(PAGE).not.toContain('coa?kas=1')
+    expect(SETTINGS).not.toContain('coa?kas=1')
+    expect(SETTINGS).toContain('muatAkunKas(clientId)')
   })
 })

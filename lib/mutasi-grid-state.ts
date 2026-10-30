@@ -29,7 +29,6 @@ import {
   nominalKeSel,
   selKosong,
   validasiBaris,
-  ymdKeSel,
   type Arah,
   type BarisDilewati,
   type HasilBacaBlok,
@@ -168,7 +167,7 @@ export function potretCadangan(s: KeadaanGrid): CadanganGrid {
 
 export function selDariServer(b: BarisServer): SelDraf {
   return {
-    tanggal: ymdKeSel(b.nilai.tanggal),
+    tanggal: b.nilai.tanggal,
     uraian: b.nilai.keterangan ?? '',
     masuk: b.nilai.debit === '0.00' ? '' : nominalKeSel(b.nilai.debit),
     keluar: b.nilai.kredit === '0.00' ? '' : nominalKeSel(b.nilai.kredit),
@@ -468,12 +467,11 @@ export function reducerGrid(s: KeadaanGrid, a: AksiGrid): KeadaanGrid {
     case 'isiTanggalAkhirPeriode': {
       // D60: aksi EKSPLISIT, hanya untuk baris yang tanggalnya KOSONG —
       // tanggal yang sudah ada tidak pernah ditimpa tanggal karangan.
-      const teks = ymdKeSel(a.tanggal)
       return massal(s, 'Isi tanggal akhir periode', a.kunci, b => {
         if (b.sel.tanggal.trim() !== '') return { lewati: 'Sudah bertanggal.' }
         const alasan = alasanTerkunci(b, 'tanggal')
         if (alasan) return { lewati: alasan }
-        return tulisSel(b, 'tanggal', teks)
+        return tulisSel(b, 'tanggal', a.tanggal)
       })
     }
 

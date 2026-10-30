@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  KOLOM_GRID,
+  LABEL_KOLOM,
   bacaBlok,
   bacaSaldoSel,
-  bacaTanggalSel,
   bacaUangSel,
   belahTempelan,
   cocokkanAkun,
@@ -14,10 +15,8 @@ import {
   kenaliJudul,
   nominalKeSel,
   penandaDbCr,
-  periksaUrutanTanggal,
   pisahkanNominal,
   selKosong,
-  tetapkanTahun,
   validasiBaris,
   type BarisTerpetakan,
   type HasilBacaBlok,
@@ -38,6 +37,19 @@ const tempel = (teks: string, periode = APRIL, sumber: 'tempel' | 'berkas' = 'te
   const { baris, nomor } = belahTempelan(teks)
   return bacaBlok({ baris, nomor, sumber, periode })
 }
+
+// ── Kolom grid (D63) ─────────────────────────────────────────
+
+describe('kolom grid: urutan sheet kas template & label Debet/Kredit (D63)', () => {
+  it('urutan: Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Catatan', () => {
+    expect(KOLOM_GRID.map(k => LABEL_KOLOM[k])).toEqual(['Tanggal', 'Nama Akun', 'Uraian', 'Debet', 'Kredit', 'Saldo', 'Catatan'])
+  })
+  it('kunci internal tidak berubah: Debet = masuk, Kredit = keluar, Nama Akun = akunLawan', () => {
+    expect(LABEL_KOLOM.masuk).toBe('Debet')
+    expect(LABEL_KOLOM.keluar).toBe('Kredit')
+    expect(LABEL_KOLOM.akunLawan).toBe('Nama Akun')
+  })
+})
 
 // ── Pembelah tempelan ────────────────────────────────────────
 
@@ -79,16 +91,34 @@ describe('judul kolom → peran, tanpa arah dari Debet/Kredit', () => {
     const h = ok(
       tempel('Tanggal\tNo. Ref\tUraian\tCabang\tDebet\tKredit\tSaldo\n05/04/2026\tR-1\tSetoran\t0998\t\t250.000\t1.250.000\n')
     )
-    expect(h.baris[0].sel).toMatchObject({ tanggal: '05/04/2026', uraian: 'Setoran', saldo: '1.250.000' })
+    expect(h.baris[0].sel).toMatchObject({ tanggal: '2026-04-05', uraian: 'Setoran', saldo: '1.250.000' })
     expect(h.baris[0].sel.keluar).toBe('250.000')
   })
 
-  it('catatan: alias Konfirmasi / Reff / Ref / Catatan → kolom catatan, bukan uraian', () => {
-    for (const judul of ['Konfirmasi', 'Reff', 'Ref', 'Catatan']) {
+  it('catatan: alias Reff / Ref / Catatan → kolom catatan, bukan uraian', () => {
+    for (const judul of ['Reff', 'Ref', 'Catatan']) {
       const h = ok(tempel(`Tanggal\tUraian\tMasuk\t${judul}\n05/04/2026\tSetoran\t100\tOK-${judul}\n`))
       expect(h.baris[0].sel.catatan, judul).toBe(`OK-${judul}`)
       expect(h.baris[0].sel.uraian, judul).toBe('Setoran')
     }
+  })
+
+  it('kolom Konfirmasi TIDAK dipakai (D65) — diabaikan, tidak masuk Catatan maupun Uraian', () => {
+    const h = ok(tempel('Tanggal\tUraian\tDebet\tKonfirmasi\n05/04/2026\tSetoran\t100\tOK\n'))
+    expect(h.baris[0].sel).toMatchObject({ uraian: 'Setoran', catatan: '' })
+    expect(h.pemetaan[3].peran).toBe('abaikan')
+  })
+
+  it('judul label grid lama DAN baru sama-sama dikenali (D63)', () => {
+    const lama = ok(tempel('Tanggal\tAkun lawan\tUraian\tMasuk\tKeluar\tCatatan\n05/04/2026\t6-2000\tAdmin\t\t5.000\tc\n'))
+    const baru = ok(tempel('Tanggal\tNama Akun\tUraian\tDebet\tKredit\tCatatan\n05/04/2026\t6-2000\tAdmin\t\t5.000\tc\n'))
+    for (const h of [lama, baru]) {
+      expect(h.baris[0].sel).toMatchObject({ tanggal: '2026-04-05', akunLawan: '6-2000', uraian: 'Admin', catatan: 'c' })
+      expect(h.judulNominal).toHaveLength(2)
+    }
+    // Masuk/Keluar membawa PETUNJUK arah; Debet/Kredit tidak (arah dari rantai saldo).
+    expect(lama.baris[0].sel.keluar).toBe('5.000')
+    expect(baru.pertamaKe).toBe('masuk')
   })
 
   it('tanpa judul → POSISIONAL dari kolom jangkar (urutan grid)', () => {
@@ -155,8 +185,8 @@ describe('template akuntan (Debet = masuk) dan rekening koran (Debet = keluar) d
     expect(h.baris.map(b => b.penanda)).toEqual(['keluar', 'masuk'])
     expect(h.baris[0].sel).toMatchObject({ keluar: '500,000.00', masuk: '' })
     expect(h.baris[1].sel).toMatchObject({ masuk: '200,000.00', keluar: '' })
-    // Tanggal tanpa tahun → tahun periode, ditulis baku DD/MM/YYYY.
-    expect(h.baris[0].sel.tanggal).toBe('02/04/2026')
+    // Tanggal tanpa tahun → tahun bulan grid, ditulis baku YYYY-MM-DD (D66).
+    expect(h.baris[0].sel.tanggal).toBe('2026-04-02')
   })
 
   it('DB/CR di URAIAN pada dua kolom nominal = petunjuk saja; nilainya tetap di kolom sementara', () => {
@@ -286,8 +316,8 @@ describe('PDF (HalamanMentah) lewat jalur yang sama dengan tempelan', () => {
   it('transaksi membawa nomor halaman, Reff → catatan, tahun dari periode', () => {
     const transaksi = h.baris.filter(b => b.sel.uraian !== 'teks nyasar')
     expect(transaksi.map(b => [b.halaman, b.sel.tanggal, b.sel.catatan])).toEqual([
-      [1, '02/10/2026', 'R-1'],
-      [2, '03/10/2026', ''],
+      [1, '2026-10-02', 'R-1'],
+      [2, '2026-10-03', ''],
     ])
   })
 
@@ -320,75 +350,53 @@ describe('PDF (HalamanMentah) lewat jalur yang sama dengan tempelan', () => {
 
 // ── Tanggal ──────────────────────────────────────────────────
 
-describe('tanggal: bentuk, tahun, periode', () => {
-  it('DD/MM/YYYY · DD/Mon/YYYY · D-Mon-YYYY · YYYY-MM-DD semuanya terbaca', () => {
-    for (const teks of ['05/04/2026', '05/Apr/2026', '5-Apr-2026', '2026-04-05', '5 April 2026']) {
-      expect(bacaTanggalSel(teks, APRIL), teks).toBe('2026-04-05')
-    }
+describe('tanggal blok: dinormalisasi ke YYYY-MM-DD, bukti blok lalu bulan grid (D66)', () => {
+  const KAS_T = '11111111-1111-4111-8111-111111111111'
+  const AKUN_T = indeksAkun([{ id: KAS_T, kode: '1-1100', nama: 'Bank BCA' }])
+  const tanggalBlok = (tanggal: string[], periode = APRIL) =>
+    ok(tempel('Tanggal\tUraian\tDebet\n' + tanggal.map(t => `${t}\tx\t1`).join('\n'), periode)).baris.map(b => b.sel.tanggal)
+
+  it('semua bentuk yang diterima menjadi YYYY-MM-DD', () => {
+    expect(tanggalBlok(['05/04/2026', '05/Apr/2026', '5-Apr-2026', '2026-04-05', '5 April 2026', '5', '05/04'])).toEqual(
+      Array(7).fill('2026-04-05')
+    )
   })
 
-  it('tanpa tahun → tahun periode yang memuat bulannya', () => {
-    expect(bacaTanggalSel('26/10', OKT)).toBe('2026-10-26')
-    expect(bacaTanggalSel('26 Okt', OKT)).toBe('2026-10-26')
-    // Periode lintas tahun: Des di tahun mulai, Jan di tahun akhir.
-    const lintas = { mulai: '2026-12-01', akhir: '2027-01-31' }
-    expect(bacaTanggalSel('15/12', lintas)).toBe('2026-12-15')
-    expect(bacaTanggalSel('15/01', lintas)).toBe('2027-01-15')
-  })
-
-  it('tahun lintas Des→Jan dinaikkan setahun secara deterministik (dan Jan→Des diturunkan)', () => {
-    const p = { mulai: '2026-12-01', akhir: '2026-12-31' }
-    expect(tetapkanTahun(['30/12', '31/12', '01/01', '02/01'], p)).toEqual([
-      '2026-12-30',
-      '2026-12-31',
-      '2027-01-01',
-      '2027-01-02',
-    ])
-    // Terurut terbaru-dulu.
-    expect(tetapkanTahun(['02/01', '01/01', '31/12'], { mulai: '2027-01-01', akhir: '2027-01-31' })).toEqual([
-      '2027-01-02',
-      '2027-01-01',
-      '2026-12-31',
+  it('sheet Rasyuka (bulan/hari, seluruhnya ≤ 12): diputus bulan grid → 1–6 April, TIDAK ditolak lagi', () => {
+    // Sebelum D66 blok ini ditolak utuh (keputusan 2026-09-21 "berkas MM/DD
+    // ditolak"); kini tiap sel dibaca dengan tafsiran yang jatuh di bulan grid.
+    expect(tanggalBlok(['04/01/2026', '04/02/2026', '04/03/2026', '04/04/2026', '04/05/2026', '04/06/2026'])).toEqual([
+      '2026-04-01',
+      '2026-04-02',
+      '2026-04-03',
+      '2026-04-04',
+      '2026-04-05',
+      '2026-04-06',
     ])
   })
 
-  it('bulan mundur selain 12↔1 BUKAN pergantian tahun', () => {
-    expect(tetapkanTahun(['05/04', '30/03'], APRIL)).toEqual(['2026-04-05', '2026-03-30'])
+  it('blok terbukti bulan/hari (potongan kedua > 12) → seluruhnya bulan/hari', () => {
+    expect(tanggalBlok(['04/15/2026', '04/01/2026'])).toEqual(['2026-04-15', '2026-04-01'])
   })
 
-  it('tanggal bertahun menjadi tahun berjalan untuk tanggal tanpa tahun sesudahnya', () => {
-    expect(tetapkanTahun(['31/12/2025', '01/01'], { mulai: '2026-01-01', akhir: '2026-01-31' })).toEqual([
-      '2025-12-31',
-      '2026-01-01',
-    ])
+  it('blok terbukti hari/bulan: "04/01/2026" tetap 4 Januari → merah "di luar April", tidak diam-diam jadi 1 April', () => {
+    const t = tanggalBlok(['25/04/2026', '04/01/2026'])
+    expect(t).toEqual(['2026-04-25', '2026-01-04'])
+    const sel = { ...selKosong(), tanggal: t[1], uraian: 'x', masuk: '1' }
+    const v = validasiBaris(sel, { periode: APRIL, akunKasId: KAS_T, akun: AKUN_T })
+    expect(v.galat.tanggal).toBe('Tanggal di luar April 2026 (terbaca 4 Jan 2026).')
   })
 
-  it('29 Februari: sah di tahun kabisat, ditolak di tahun biasa — juga tanpa tahun', () => {
-    const feb28 = { mulai: '2028-02-01', akhir: '2028-02-29' }
-    expect(bacaTanggalSel('29/02/2028', feb28)).toBe('2028-02-29')
-    expect(bacaTanggalSel('29/02', feb28)).toBe('2028-02-29')
-    expect(bacaTanggalSel('29/02/2026', APRIL)).toBeNull()
-    expect(bacaTanggalSel('29/02', { mulai: '2026-02-01', akhir: '2026-02-28' })).toBeNull()
+  it('ambigu tanpa tafsiran di bulan grid → teks apa adanya, merah', () => {
+    const t = tanggalBlok(['04/01/2026'], OKT)
+    expect(t).toEqual(['04/01/2026'])
+    const v = validasiBaris({ ...selKosong(), tanggal: t[0], uraian: 'x', masuk: '1' }, { periode: OKT, akunKasId: KAS_T, akun: AKUN_T })
+    expect(v.galat.tanggal).toBe('Tanggal di luar Oktober 2026 (terbaca 4 Jan 2026 atau 1 Apr 2026).')
+    expect(v.nilai).toBeNull()
   })
 
-  it('blok MM/DD DITOLAK: ada potongan kedua > 12', () => {
-    const r = periksaUrutanTanggal([{ nomor: 2, teks: '04/15/2026' }], APRIL)
-    expect(r.ditolak).toBe(true)
-  })
-
-  it('blok MM/DD DITOLAK lewat PERIODE: seluruh tanggal ≤ 12/12, bacaan MM/DD yang jatuh di periode', () => {
-    // April: "04/01" … "04/06" dibaca MM/DD = 1–6 April (di periode); dibaca
-    // DD/MM = 4 Jan … 4 Jun (hanya 04/04 yang di periode).
-    const sel = ['04/01/2026', '04/02/2026', '04/03/2026', '04/04/2026', '04/05/2026', '04/06/2026'].map((teks, i) => ({ nomor: i + 1, teks }))
-    expect(periksaUrutanTanggal(sel, APRIL).ditolak).toBe(true)
-    const h = tempel('Tanggal\tUraian\tMasuk\n' + sel.map(s => `${s.teks}\tx\t1`).join('\n'))
-    expect(h.ok).toBe(false)
-  })
-
-  it('bacaan DD/MM di periode (atau seri) → DITERIMA sebagai DD/MM', () => {
-    const sel = ['01/04/2026', '02/04/2026', '03/04/2026'].map((teks, i) => ({ nomor: i + 1, teks }))
-    expect(periksaUrutanTanggal(sel, APRIL).ditolak).toBe(false)
-    expect(periksaUrutanTanggal([{ nomor: 1, teks: '04/04/2026' }], APRIL).ditolak).toBe(false)
+  it('tak terbaca → teks apa adanya, barisnya tetap masuk grid (merah), tidak dilewati', () => {
+    expect(tanggalBlok(['5/4/2026', '32/4/2026'])).toEqual(['2026-04-05', '32/4/2026'])
   })
 })
 
@@ -517,16 +525,23 @@ describe('validasiBaris — galat per sel, lalu validateCashMutation sebagai hak
     })
   })
 
-  it('D60: tanggal kosong WAJIB diisi; di luar periode = galat', () => {
+  it('D60/D66: tanggal kosong WAJIB diisi; di luar bulan grid = galat "Tanggal di luar April 2026"', () => {
     expect(validasiBaris(sel({ tanggal: '' }), k).galat.tanggal).toContain('wajib')
-    expect(validasiBaris(sel({ tanggal: '01/05/2026' }), k).galat.tanggal).toContain('di luar periode')
-    expect(validasiBaris(sel({ tanggal: '31/02/2026' }), k).galat.tanggal).toContain('tidak terbaca')
+    expect(validasiBaris(sel({ tanggal: '15/05/2026' }), k).galat.tanggal).toBe('Tanggal di luar April 2026 (terbaca 15 Mei 2026).')
+    expect(validasiBaris(sel({ tanggal: '31/02/2026' }), k).galat.tanggal).toContain('tidak ada di kalender')
+    expect(validasiBaris(sel({ tanggal: 'kemarin' }), k).galat.tanggal).toContain('tidak terbaca')
   })
 
-  it('Masuk ATAU Keluar: keduanya kosong / keduanya terisi → galat di kedua sel', () => {
-    expect(validasiBaris(sel({ keluar: '' }), k).galat).toMatchObject({ masuk: 'Isi Masuk atau Keluar.', keluar: 'Isi Masuk atau Keluar.' })
-    expect(validasiBaris(sel({ masuk: '1' }), k).galat.masuk).toContain('Hanya satu')
-    expect(validasiBaris(sel({ keluar: '0' }), k).galat.keluar).toBe('Isi Masuk atau Keluar.')
+  it('D66: bentuk baku YYYY-MM-DD dan bentuk ketikan lain sama-sama lolos', () => {
+    for (const tanggal of ['2026-04-05', '5', '05/04/2026', '5 Apr 2026']) {
+      expect(validasiBaris(sel({ tanggal }), k).nilai?.tanggal, tanggal).toBe('2026-04-05')
+    }
+  })
+
+  it('Debet ATAU Kredit (D63): keduanya kosong / keduanya terisi → galat di kedua sel', () => {
+    expect(validasiBaris(sel({ keluar: '' }), k).galat).toMatchObject({ masuk: 'Isi Debet atau Kredit.', keluar: 'Isi Debet atau Kredit.' })
+    expect(validasiBaris(sel({ masuk: '1' }), k).galat.masuk).toBe('Hanya satu yang boleh terisi: Debet atau Kredit.')
+    expect(validasiBaris(sel({ keluar: '0' }), k).galat.keluar).toBe('Isi Debet atau Kredit.')
   })
 
   it('uang tak terbaca → galat di selnya dengan pesan bacaNominal', () => {

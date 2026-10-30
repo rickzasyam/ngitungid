@@ -16,12 +16,15 @@ import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
 import { NominalInput } from '@/components/ui/nominal-input'
 import { pesanGalatNominal } from '@/lib/nominal'
+import type { AccountType } from '@/lib/coa/account-type'
 
 export interface AkunOption {
   id: string
   kode: string
   nama: string
   kelompok: string
+  /** Tipe akun yang BERLAKU (GET /coa) — pengelompok combobox Nama Akun grid. */
+  resolvedType?: AccountType | null
 }
 
 export interface MutationFormValue {
@@ -129,14 +132,15 @@ export function MutationFormModal({
           </div>
         </div>
 
-        {/* Arah uang — sisi debit/kredit ditentukan DI SINI, dengan kata. */}
+        {/* Arah uang — Debet = uang masuk ke rekening ini, Kredit = uang keluar
+            (D63, konvensi sheet kas template akuntan). */}
         <div>
           <span style={label}>Arah uang</span>
           <div role="group" aria-label="Arah uang" className="flex gap-2">
             {(
               [
-                { v: 'masuk' as const, label: 'Uang masuk', Icon: ArrowDownLeft, warna: '#15803d' },
-                { v: 'keluar' as const, label: 'Uang keluar', Icon: ArrowUpRight, warna: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)' },
+                { v: 'masuk' as const, label: 'Debet', Icon: ArrowDownLeft, warna: '#15803d' },
+                { v: 'keluar' as const, label: 'Kredit', Icon: ArrowUpRight, warna: 'color-mix(in srgb, var(--color-accent-critical) 55%, black)' },
               ]
             ).map(o => {
               const aktif = form.arah === o.v
@@ -194,7 +198,7 @@ export function MutationFormModal({
 
         <div>
           <label style={label}>
-            Akun lawan <span style={opsional}>(opsional)</span>
+            Nama Akun <span style={opsional}>(opsional)</span>
           </label>
           <StyledSelect
             options={opsiLawan}
@@ -203,7 +207,7 @@ export function MutationFormModal({
             placeholder="— belum ditentukan —"
             searchable
             searchPlaceholder="Cari kode atau nama akun…"
-            ariaLabel="Akun lawan mutasi"
+            ariaLabel="Nama Akun mutasi"
           />
           <p className="text-[11px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
             Kosongkan kalau mutasi ini akan dialokasikan ke invoice hutang. Selama keduanya kosong,

@@ -60,10 +60,10 @@ function blok(teks: string, sumber: 'tempel' | 'berkas' | 'pdf' = 'tempel'): Ext
 }
 
 describe('muat & sel dari server', () => {
-  it('baris server tampil dalam format sel Indonesia', () => {
+  it('baris server: tanggal baku YYYY-MM-DD (D66), uang format Indonesia', () => {
     const s = keadaanAwal([server('m1', { akunLawanId: ADMIN })])
     expect(s.baris[0].sel).toEqual({
-      tanggal: '05/10/2026',
+      tanggal: '2026-10-05',
       uraian: 'BIAYA ADM',
       masuk: '',
       keluar: '6.500',
@@ -280,8 +280,8 @@ describe('D60 & D50', () => {
       { jenis: 'tempelSel', indeks: 1, kolom: 'uraian', isi: [['tanpa tanggal', '5']] },
       { jenis: 'isiTanggalAkhirPeriode', kunci: ['m1', 'baru-1'], tanggal: '2026-10-31' }
     )
-    expect(s.baris[0].sel.tanggal).toBe('05/10/2026')
-    expect(s.baris[1].sel.tanggal).toBe('31/10/2026')
+    expect(s.baris[0].sel.tanggal).toBe('2026-10-05')
+    expect(s.baris[1].sel.tanggal).toBe('2026-10-31')
     expect(s.laporan?.dilewati).toEqual([{ kunci: 'm1', alasan: 'Sudah bertanggal.' }])
   })
 
@@ -365,7 +365,7 @@ describe('validator: kunci periode untuk baris baru/berubah tanggal', () => {
     const s0 = keadaanAwal([server('m1')])
     const v = buatValidator(k, s0.server)
     expect(v(s0.baris[0]).galat).toEqual({})
-    const s1 = jalankan(s0, { jenis: 'tambahBaris', indeks: 1, jumlah: 1 }, { jenis: 'tempelSel', indeks: 1, kolom: 'tanggal', isi: [['09/10/2026', 'X', '100']] })
+    const s1 = jalankan(s0, { jenis: 'tambahBaris', indeks: 1, jumlah: 1 }, { jenis: 'tempelSel', indeks: 1, kolom: 'tanggal', isi: [['09/10/2026', '', 'X', '100']] })
     expect(buatValidator(k, s1.server)(s1.baris[1]).galat.tanggal).toContain('Periode terkunci')
   })
 
