@@ -633,6 +633,38 @@ textarea::placeholder {
   animation: ng-indeterminate 1.3s ease-in-out infinite;
 }
 
+/* DateRangePicker — hover lewat kelas, bukan onMouseEnter/Leave inline (gotcha #4):
+   gaya yang sama juga menyala saat fokus keyboard. Nilainya sama persis dengan
+   gaya inline lama, jadi tampilannya tidak berubah. */
+.drp-nav {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+}
+.drp-nav:hover,
+.drp-nav:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+.drp-batal {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+}
+.drp-batal:hover,
+.drp-batal:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+.drp-terapkan:not(:disabled):hover,
+.drp-terapkan:not(:disabled):focus-visible {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-accent-primary) 35%, transparent);
+}
+.drp-clear-dot {
+  background: var(--color-muted-bg);
+}
+.drp-clear:hover .drp-clear-dot,
+.drp-clear:focus-visible .drp-clear-dot {
+  background: var(--color-border-subtle);
+}
+
 /* Upload card depth-on-hover — CSS-driven (replaces removed JS onMouseEnter/Leave).
    --hover-accent is set per-card inline so each report type lifts in its own color. */
 .upload-card-hover:hover {
