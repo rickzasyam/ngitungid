@@ -12,7 +12,7 @@ import { bacaStatus, tulisStatus, type StatusUji } from './status-uji'
 // Uji banding penyedia dengan DOKUMEN SINTETIS saja (X4).
 //
 //   pnpm exec tsx --env-file=.env.local lib/bank-statement/uji-banding/cli.ts \
-//     --penyedia tiruan,gemini:gemini-3.5-flash-lite,gemini:gemini-3.5-flash,anthropic:claude-haiku-5-5 \
+//     --penyedia tiruan,gemini:gemini-3.5-flash-lite,gemini:gemini-3.5-flash-lite+gemini-3.5-flash,anthropic:claude-haiku-5-5 \
 //     --dokumen 12 --harga gemini:gemini-3.5-flash-lite=0.30/2.50@2026-10-28 \
 //     --status <status.json> --keluar <berkas.md>
 //
@@ -20,6 +20,9 @@ import { bacaStatus, tulisStatus, type StatusUji } from './status-uji'
 // - Penyedia dibuat PERSIS seperti route (`penyediaEkstraksi`): Gemini dengan
 //   thinking minimal dan tanpa mengulang kuota harian. "gemini" tanpa model =
 //   bawaan ekstraksi (Flash-Lite).
+// - "<penyedia>:<model>+<model pengulang>" = alur route dengan ulang otomatis
+//   (`susunDenganUlang`): halaman yang ditolak penjaga diulang sekali dengan
+//   model pengulang. Biaya memakai --harga kedua spek ("gemini:<model>").
 // - --status: hasil per dokumen disimpan; menjalankan ulang perintah yang sama
 //   melewati dokumen yang sudah selesai. Kuota HARIAN habis → penyedia itu
 //   berhenti, sisanya dicatat "belum diuji", lanjutkan sesudah kuota direset.
@@ -49,10 +52,11 @@ function bacaHarga(): Map<string, Harga> {
   return out
 }
 
-function penyedia(spek: string): AiProvider | 'tiruan' {
+function penyedia(spek: string): { ai: AiProvider | 'tiruan'; ulang: AiProvider | null } {
   const [nama, model] = spek.split(':')
-  if (nama === 'tiruan') return 'tiruan'
-  return penyediaEkstraksi(nama, model || undefined)
+  if (nama === 'tiruan') return { ai: 'tiruan', ulang: null }
+  const [utama, ulang] = (model ?? '').split('+')
+  return { ai: penyediaEkstraksi(nama, utama || undefined), ulang: ulang ? penyediaEkstraksi(nama, ulang) : null }
 }
 
 async function main() {
@@ -67,7 +71,7 @@ async function main() {
   const ringkasan: Ringkasan[] = []
   const belumDiuji: string[] = []
   for (const spek of (arg('penyedia') ?? 'tiruan').split(',')) {
-    const p = penyedia(spek)
+    const { ai: p, ulang } = penyedia(spek)
     const sudah = new Map((status.hasil[spek] ?? []).map(h => [h.nama, h]))
     const hasil: HasilDokumen[] = []
     for (const [i, d] of dokumen.entries()) {
@@ -79,7 +83,7 @@ async function main() {
       }
       const ai = p === 'tiruan' ? await penyediaSempurna(d) : p
       try {
-        hasil.push(await ujiDokumen(ai, d, kesinambunganSementara, { timeoutMs: 120_000 }))
+        hasil.push(await ujiDokumen(ai, d, kesinambunganSementara, { timeoutMs: 120_000, aiUlang: ulang ?? undefined }))
       } catch (e) {
         if (jenisGalatAi(e) !== 'kuotaHarian') throw e
         const sisa = dokumen.slice(i).map(x => x.nama)
@@ -92,10 +96,13 @@ async function main() {
         tulisStatus(berkasStatus, status)
       }
       const h = hasil[hasil.length - 1]
-      console.error(`  ${spek} · ${d.nama}: ${h.kesinambungan === 'tanpa-saldo' ? 'tanpa kolom saldo (tidak diperiksa)' : h.lolosTanpaKoreksi ? 'lolos' : 'TIDAK lolos'}${h.halamanGagal.length ? ` · halaman gagal: ${h.halamanGagal.map(g => `${g.halaman}=${g.jenis}`).join(', ')}` : ''}`)
+      console.error(`  ${spek} · ${d.nama}: ${h.kesinambungan === 'tanpa-saldo' ? 'tanpa kolom saldo (tidak diperiksa)' : h.lolosTanpaKoreksi ? 'lolos' : 'TIDAK lolos'}${h.halamanDiulang?.length ? ` · diulang: ${h.halamanDiulang.join(', ')}` : ''}${h.halamanGagal.length ? ` · halaman gagal: ${h.halamanGagal.map(g => `${g.halaman}=${g.jenis}`).join(', ')}` : ''}`)
     }
     const info = p === 'tiruan' ? { nama: 'tiruan', model: 'jawaban-sempurna' } : p
-    ringkasan.push(rangkumUji(info as AiProvider, hasil, harga.get(spek) ?? harga.get(info.nama)))
+    const utama = ulang ? spek.split('+')[0] : spek
+    ringkasan.push(
+      rangkumUji(info as AiProvider, hasil, harga.get(utama) ?? harga.get(info.nama), ulang ? { model: ulang.model, harga: harga.get(`${ulang.nama}:${ulang.model}`) } : undefined)
+    )
   }
 
   const md =

@@ -50,9 +50,18 @@ export type MasukanSusun = {
 
 export type HasilSusun = { halaman: HalamanMentah; model: string; pemakaian: JawabanJson['pemakaian'] }
 
+/** Satu permintaan ke penyedia yang sudah dijawab: model yang diminta dan token yang terpakai. */
+export type PercobaanSusun = { model: string; pemakaian: JawabanJson['pemakaian'] }
+
 /** Jawaban AI ditolak penjaga bentuk. `masalah` tanpa isi baris (aman untuk log). */
 export class GalatSusun extends Error {
-  constructor(readonly masalah: string[]) {
+  constructor(
+    readonly masalah: string[],
+    /** Permintaan yang sudah dijawab (dan dibayar) sebelum ditolak — kosong bila belum ada. */
+    readonly percobaan: PercobaanSusun[] = [],
+    /** Sudah diulang dengan model pengulang dan TETAP ditolak: halaman diisi manual. */
+    readonly inputManual = false
+  ) {
     super(`Susunan tabel halaman ditolak: ${masalah.slice(0, 5).join('; ')}${masalah.length > 5 ? ` (+${masalah.length - 5} lagi)` : ''}`)
     this.name = 'GalatSusun'
   }
@@ -407,6 +416,58 @@ export async function susunHalaman(ai: AiProvider, m: MasukanSusun): Promise<Has
   const isi: Parameters<AiProvider['mintaJson']>[0]['isi'] = [{ jenis: 'teks', teks: isiPengguna(m) }]
   if (m.sumber.jenis === 'gambar') isi.push({ jenis: 'gambarPng', base64: m.sumber.base64 })
   const j = await ai.mintaJson({ sistem: PROMPT_SISTEM, isi, skema: SKEMA_SUSUN, timeoutMs: m.timeoutMs })
-  if (j.teks === '') throw new GalatSusun(['AI tidak mengembalikan apa pun'])
-  return { halaman: periksaJawaban(j.teks, m), model: j.model, pemakaian: j.pemakaian }
+  const percobaan = [{ model: ai.model, pemakaian: j.pemakaian }]
+  if (j.teks === '') throw new GalatSusun(['AI tidak mengembalikan apa pun'], percobaan)
+  try {
+    return { halaman: periksaJawaban(j.teks, m), model: j.model, pemakaian: j.pemakaian }
+  } catch (e) {
+    throw e instanceof GalatSusun ? new GalatSusun(e.masalah, percobaan) : e
+  }
+}
+
+export type HasilSusunUlang = {
+  halaman: HalamanMentah
+  /** Model yang menghasilkan halaman ini (nama yang diminta, bukan versi dari jawaban). */
+  model: string
+  diulang: boolean
+  percobaan: PercobaanSusun[]
+}
+
+/** Sisa waktu paling sedikit supaya ulang masih dicoba; di bawahnya halaman dikembalikan "ulangi". */
+export const SISA_MIN_ULANG_MS = 10_000
+
+/**
+ * Susun satu halaman, dan bila PENJAGA menolaknya ulang SEKALI dengan `aiUlang`
+ * (keputusan Ricko 2026-10-30: Flash-Lite → Flash). Dipakai route DAN harness.
+ *  - Hanya `GalatSusun` yang diulang. Kuota, batas waktu, penolakan model, dan
+ *    galat lain diteruskan apa adanya — mengganti model tidak memperbaikinya.
+ *  - Paling banyak satu ulang. Ditolak lagi → `GalatSusun` dengan `inputManual`.
+ *  - Tanpa `aiUlang`, atau model yang sama dengan model utama → tidak diulang.
+ *  - `tenggat` (epoch ms): ulang hanya bila sisa waktunya ≥ SISA_MIN_ULANG_MS,
+ *    dan batas waktunya dipotong ke sisa itu — route punya maxDuration.
+ */
+export async function susunDenganUlang(
+  ai: AiProvider,
+  aiUlang: AiProvider | null,
+  m: MasukanSusun,
+  opsi: { tenggat?: number; jam?: () => number } = {}
+): Promise<HasilSusunUlang> {
+  let ditolak: GalatSusun
+  try {
+    const r = await susunHalaman(ai, m)
+    return { halaman: r.halaman, model: ai.model, diulang: false, percobaan: [{ model: ai.model, pemakaian: r.pemakaian }] }
+  } catch (e) {
+    if (!(e instanceof GalatSusun) || !aiUlang || (aiUlang.nama === ai.nama && aiUlang.model === ai.model)) throw e
+    ditolak = e
+  }
+  const sisa = opsi.tenggat === undefined ? Infinity : opsi.tenggat - (opsi.jam ?? Date.now)()
+  if (sisa < SISA_MIN_ULANG_MS) throw ditolak
+  const batas = Math.min(m.timeoutMs ?? Infinity, sisa)
+  try {
+    const r = await susunHalaman(aiUlang, { ...m, timeoutMs: Number.isFinite(batas) ? batas : undefined })
+    return { halaman: r.halaman, model: aiUlang.model, diulang: true, percobaan: [...ditolak.percobaan, { model: aiUlang.model, pemakaian: r.pemakaian }] }
+  } catch (e) {
+    if (!(e instanceof GalatSusun)) throw e
+    throw new GalatSusun(e.masalah, [...ditolak.percobaan, ...e.percobaan], true)
+  }
 }

@@ -14,7 +14,10 @@ import type { HasilDokumen } from './harness'
 export type StatusUji = { versi: 1; hasil: Record<string, HasilDokumen[]> }
 
 const ANGKA = ['jumlahHalaman', 'barisHilang', 'barisLebih', 'msPerHalaman', 'tokenMasuk', 'tokenKeluar'] as const
-const KUNCI = new Set(['nama', 'halamanGagal', 'kesinambungan', 'lolosTanpaKoreksi', 'identik', ...ANGKA])
+/** Hanya ada pada uji dengan model pengulang; status lama tanpa kunci ini tetap sah. */
+const ANGKA_ULANG = ['tokenUlangMasuk', 'tokenUlangKeluar'] as const
+const KUNCI = new Set(['nama', 'halamanGagal', 'kesinambungan', 'lolosTanpaKoreksi', 'identik', 'halamanDiulang', ...ANGKA, ...ANGKA_ULANG])
+const angka = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
 
 function hasilSah(x: unknown): x is HasilDokumen {
   if (typeof x !== 'object' || x === null || Array.isArray(x)) return false
@@ -23,7 +26,9 @@ function hasilSah(x: unknown): x is HasilDokumen {
     Object.keys(o).every(k => KUNCI.has(k)) &&
     typeof o.nama === 'string' &&
     o.nama.startsWith('UJI-B-') &&
-    ANGKA.every(k => typeof o[k] === 'number' && Number.isFinite(o[k])) &&
+    ANGKA.every(k => angka(o[k])) &&
+    ANGKA_ULANG.every(k => o[k] === undefined || angka(o[k])) &&
+    (o.halamanDiulang === undefined || (Array.isArray(o.halamanDiulang) && o.halamanDiulang.every(angka))) &&
     typeof o.lolosTanpaKoreksi === 'boolean' &&
     typeof o.identik === 'boolean' &&
     (o.kesinambungan === 'lolos' || o.kesinambungan === 'putus' || o.kesinambungan === 'tanpa-saldo') &&

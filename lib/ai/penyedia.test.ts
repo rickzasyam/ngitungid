@@ -17,7 +17,7 @@ import { ANTHROPIC_MODEL_BAWAAN, penyediaAnthropic, type KlienAnthropic } from '
 import { penyediaGemini } from './gemini'
 import { penyediaOpenAi, type KlienOpenAi } from './openai'
 import { GalatAi, jenisGalatAi, skemaKetat, type PermintaanJson, type SkemaJson } from './penyedia'
-import { MODEL_EKSTRAKSI_GEMINI, penyediaDariEnv, penyediaEkstraksi } from './pilih-penyedia'
+import { MODEL_EKSTRAKSI_GEMINI, MODEL_ULANG_EKSTRAKSI_GEMINI, penyediaDariEnv, penyediaEkstraksi, penyediaUlangDariEnv } from './pilih-penyedia'
 
 const gen = vi.mocked(generateContentWithRetry)
 // Jalur lapisan baru memanggil klien langsung (lewat `ulangGemini`).
@@ -208,6 +208,39 @@ describe('penyediaDariEnv — AI_PROVIDER_EKSTRAKSI + AI_MODEL_EKSTRAKSI', () =>
     for (const v of ['Gemini', 'claude', ' gemini', 'deepseek']) {
       expect(() => penyediaDariEnv({ AI_PROVIDER_EKSTRAKSI: v })).toThrow(GalatAi)
     }
+  })
+})
+
+// Keputusan Ricko 2026-10-30: ulang halaman yang ditolak penjaga dengan Flash.
+describe('penyediaUlangDariEnv — AI_MODEL_EKSTRAKSI_ULANG', () => {
+  it('tidak diisi + Gemini → gemini-3.5-flash, dibuat seperti penyedia ekstraksi (thinking minimal, lewat ulangGemini)', async () => {
+    expect(MODEL_ULANG_EKSTRAKSI_GEMINI).toBe('gemini-3.5-flash')
+    for (const env of [{}, { AI_PROVIDER_EKSTRAKSI: '' }, { AI_PROVIDER_EKSTRAKSI: 'gemini', AI_MODEL_EKSTRAKSI: 'gemini-uji' }]) {
+      const p = penyediaUlangDariEnv(env)
+      expect([p?.nama, p?.model]).toEqual(['gemini', MODEL_ULANG_EKSTRAKSI_GEMINI])
+    }
+    genBaru.mockResolvedValue({ text: '[]' })
+    await penyediaUlangDariEnv({})!.mintaJson(MINTA)
+    expect(gen).not.toHaveBeenCalled()
+    expect(genBaru.mock.calls[0][0]).toMatchObject({ model: MODEL_ULANG_EKSTRAKSI_GEMINI, config: { thinkingConfig: { thinkingLevel: 'MINIMAL' } } })
+  })
+
+  it('dikosongkan → MATI (juga hanya spasi)', () => {
+    for (const v of ['', '  ']) expect(penyediaUlangDariEnv({ AI_MODEL_EKSTRAKSI_ULANG: v })).toBeNull()
+  })
+
+  it('diisi → model itu pada penyedia AI_PROVIDER_EKSTRAKSI', () => {
+    expect(penyediaUlangDariEnv({ AI_MODEL_EKSTRAKSI_ULANG: 'gemini-uji' })).toMatchObject({ nama: 'gemini', model: 'gemini-uji' })
+    expect(penyediaUlangDariEnv({ AI_PROVIDER_EKSTRAKSI: 'anthropic', AI_MODEL_EKSTRAKSI_ULANG: 'claude-x' })).toMatchObject({ nama: 'anthropic', model: 'claude-x' })
+  })
+
+  it('penyedia selain Gemini tanpa AI_MODEL_EKSTRAKSI_ULANG → mati (tidak ada bawaan)', () => {
+    expect(penyediaUlangDariEnv({ AI_PROVIDER_EKSTRAKSI: 'anthropic' })).toBeNull()
+    expect(penyediaUlangDariEnv({ AI_PROVIDER_EKSTRAKSI: 'openai', AI_MODEL_EKSTRAKSI: 'gpt-uji' })).toBeNull()
+  })
+
+  it('penyedia tak dikenal + model pengulang → galat konfigurasi', () => {
+    expect(() => penyediaUlangDariEnv({ AI_PROVIDER_EKSTRAKSI: 'deepseek', AI_MODEL_EKSTRAKSI_ULANG: 'x' })).toThrow(GalatAi)
   })
 })
 

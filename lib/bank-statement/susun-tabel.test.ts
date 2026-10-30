@@ -6,7 +6,7 @@ import { gabungLintasHalaman, kolomSebelumnyaBerposisi, kolomTerakhir, rangkumDo
 import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenTanpaSaldo } from './fikstur/koleksi'
 import type { DokumenSintetis } from './fikstur/dokumen-sintetis'
 import { jawabanSempurna, penyediaTiruan } from './fikstur/jawaban-ai'
-import { GalatSusun, PROMPT_SISTEM, SKEMA_SUSUN, periksaJawaban, susunHalaman, type JawabanSusun, type MasukanSusun } from './susun-tabel'
+import { GalatSusun, PROMPT_SISTEM, SISA_MIN_ULANG_MS, SKEMA_SUSUN, periksaJawaban, susunDenganUlang, susunHalaman, type JawabanSusun, type MasukanSusun } from './susun-tabel'
 
 // X3 — penyusun tabel. AI ditiru dengan jawaban yang dibentuk dari kebenaran
 // fikstur, jadi yang diuji: (1) jawaban yang benar menghasilkan HalamanMentah
@@ -122,6 +122,63 @@ describe('permintaan ke penyedia', () => {
     const [arg] = mintaJson.mock.calls[0] as unknown as [Parameters<AiProvider['mintaJson']>[0]]
     expect(arg.isi[1]).toEqual({ jenis: 'gambarPng', base64: 'iVBOR' })
     expect((arg.isi[0] as { teks: string }).teks).toContain('GAMBAR')
+  })
+})
+
+// Keputusan Ricko 2026-10-30. Alur route diuji di route-ekstrak-halaman.test.ts;
+// di sini batas waktu, catatan percobaan (token per model), dan batas satu ulang.
+describe('susunDenganUlang — satu ulang untuk halaman yang ditolak penjaga', async () => {
+  const d = dokumenSatuKolom()
+  const [baris1] = await barisTeks(d)
+  const m: MasukanSusun = { halaman: 1, sumber: { jenis: 'teks', baris: baris1 }, kolomSebelumnya: [], timeoutMs: 50_000 }
+  const penyedia = (model: string, teks: () => string, token: number) => {
+    const mintaJson = vi.fn(async (_: Parameters<AiProvider['mintaJson']>[0]) => ({ teks: teks(), model: `${model}-001`, pemakaian: { tokenMasuk: token, tokenKeluar: token + 1 } }))
+    return { nama: 'gemini' as const, model, mintaJson }
+  }
+  const benar = () => JSON.stringify(jawabanSempurna(d, 1, baris1))
+  const rusak = () => '{"rusak":'
+
+  it('lolos ulang: model = pengulang; percobaan mencatat token KEDUA model (yang ditolak tetap dibayar)', async () => {
+    const r = await susunDenganUlang(penyedia('lite', rusak, 10), penyedia('flash', benar, 20), m)
+    expect(r.halaman).toEqual(d.kebenaranHalaman[0])
+    expect([r.model, r.diulang]).toEqual(['flash', true])
+    expect(r.percobaan).toEqual([
+      { model: 'lite', pemakaian: { tokenMasuk: 10, tokenKeluar: 11 } },
+      { model: 'flash', pemakaian: { tokenMasuk: 20, tokenKeluar: 21 } },
+    ])
+  })
+
+  it('ditolak dua kali → GalatSusun inputManual dengan masalah percobaan terakhir; tidak ada ulang kedua', async () => {
+    const lite = penyedia('lite', rusak, 1)
+    const salahSel = () => {
+      const j = jawabanSempurna(d, 1, baris1)
+      return JSON.stringify({ ...j, baris: j.baris.map((x, i) => (i === 0 ? { ...x, saldo: '9.99' } : x)) })
+    }
+    const flash = penyedia('flash', salahSel, 2)
+    const e = await susunDenganUlang(lite, flash, m).catch(x => x)
+    expect(e).toBeInstanceOf(GalatSusun)
+    expect(e.inputManual).toBe(true)
+    expect(e.percobaan.map((p: { model: string }) => p.model)).toEqual(['lite', 'flash'])
+    expect(e.masalah).not.toContain('jawaban AI bukan JSON yang valid')
+    expect(lite.mintaJson).toHaveBeenCalledTimes(1)
+    expect(flash.mintaJson).toHaveBeenCalledTimes(1)
+  })
+
+  it('tanpa pengulang → GalatSusun pertama apa adanya (bukan input manual)', async () => {
+    const e = await susunDenganUlang(penyedia('lite', rusak, 1), null, m).catch(x => x)
+    expect([e instanceof GalatSusun, e.inputManual, e.percobaan.length]).toEqual([true, false, 1])
+  })
+
+  it('tenggat: sisa < SISA_MIN_ULANG_MS → tidak diulang; selain itu batas waktu ulang dipotong ke sisanya', async () => {
+    const flash = penyedia('flash', benar, 2)
+    const e = await susunDenganUlang(penyedia('lite', rusak, 1), flash, m, { tenggat: 1_000 + SISA_MIN_ULANG_MS - 1, jam: () => 1_000 }).catch(x => x)
+    expect([e instanceof GalatSusun, e.inputManual]).toEqual([true, false])
+    expect(flash.mintaJson).not.toHaveBeenCalled()
+
+    await susunDenganUlang(penyedia('lite', rusak, 1), flash, m, { tenggat: 31_000, jam: () => 1_000 })
+    expect(flash.mintaJson.mock.calls[0][0].timeoutMs).toBe(30_000)
+    await susunDenganUlang(penyedia('lite', rusak, 1), flash, m, { tenggat: 999_000, jam: () => 1_000 })
+    expect(flash.mintaJson.mock.calls[1][0].timeoutMs).toBe(50_000)
   })
 })
 

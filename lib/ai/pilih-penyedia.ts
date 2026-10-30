@@ -40,3 +40,22 @@ export function penyediaEkstraksi(nama: string, model?: string): AiProvider {
 export function penyediaDariEnv(env: Record<string, string | undefined> = process.env): AiProvider {
   return penyediaEkstraksi(env.AI_PROVIDER_EKSTRAKSI ?? '', env.AI_MODEL_EKSTRAKSI || undefined)
 }
+
+/** Model pengulang bawaan bila penyedianya Gemini (keputusan Ricko 2026-10-30). */
+export const MODEL_ULANG_EKSTRAKSI_GEMINI = 'gemini-3.5-flash'
+
+// Penyedia untuk SATU kali ulang halaman yang DITOLAK PENJAGA (`susunDenganUlang`,
+// lib/bank-statement/susun-tabel.ts) — keputusan Ricko 2026-10-30. Penyedianya
+// sama dengan AI_PROVIDER_EKSTRAKSI; hanya modelnya yang lain:
+//   AI_MODEL_EKSTRAKSI_ULANG  tidak diisi → Gemini: gemini-3.5-flash; penyedia lain: mati
+//                             diisi kosong ("") → MATI (halaman yang ditolak langsung
+//                             dikembalikan "ulangi halaman ini")
+//                             model lain → model itu (sama dengan model utama = mati)
+// Tetap di balik sakelar AI_EKSTRAKSI_REKENING_KORAN: hanya route ekstraksi yang
+// memanggil ini, sesudah gerbangnya.
+export function penyediaUlangDariEnv(env: Record<string, string | undefined> = process.env): AiProvider | null {
+  const nama = env.AI_PROVIDER_EKSTRAKSI ?? ''
+  const isi = env.AI_MODEL_EKSTRAKSI_ULANG
+  const model = isi === undefined ? (nama === '' || nama === 'gemini' ? MODEL_ULANG_EKSTRAKSI_GEMINI : '') : isi.trim()
+  return model === '' ? null : penyediaEkstraksi(nama, model)
+}

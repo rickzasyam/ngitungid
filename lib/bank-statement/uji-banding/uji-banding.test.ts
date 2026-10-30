@@ -104,6 +104,31 @@ describe('ujiDokumen', () => {
     const r2 = await ujiDokumen(await penyediaSempurna(s), s, kesinambunganSementara)
     expect(r2.halamanGagal).toEqual([{ halaman: 2, jenis: 'gambar-tidak-didukung-harness' }])
   })
+
+  // Keputusan Ricko 2026-10-30: harness memakai alur route (`susunDenganUlang`).
+  it('dengan model pengulang: halaman yang ditolak diulang, token dicatat per model, ditolak lagi = input-manual', async () => {
+    const d = dokumenSatuKolom()
+    const buang = (j: JawabanSusun, h: number) => (h !== 1 ? j : { ...j, baris: j.baris.filter((_, i) => i !== 2) })
+    const bertoken = (model: string, p: AiProvider, token: number): AiProvider => ({
+      nama: 'gemini',
+      model,
+      mintaJson: async a => ({ ...(await p.mintaJson(a)), pemakaian: { tokenMasuk: token, tokenKeluar: 1 } }),
+    })
+    const lite = bertoken('lite', await penyediaSempurna(d, buang), 100)
+    const r = await ujiDokumen(lite, d, kesinambunganSementara, { aiUlang: bertoken('flash', await penyediaSempurna(d), 1000) })
+    expect(r).toMatchObject({ halamanGagal: [], lolosTanpaKoreksi: true, identik: true, halamanDiulang: [1] })
+    // Lite: 2 halaman (termasuk yang ditolak); Flash: 1 halaman ulang.
+    expect([r.tokenMasuk, r.tokenUlangMasuk]).toEqual([200, 1000])
+
+    const r2 = await ujiDokumen(lite, d, kesinambunganSementara, { aiUlang: bertoken('flash', await penyediaSempurna(d, buang), 1000) })
+    expect(r2).toMatchObject({ halamanGagal: [{ halaman: 1, jenis: 'input-manual' }], lolosTanpaKoreksi: false, halamanDiulang: [1] })
+    // Halaman yang akhirnya gagal tetap dibayar — kedua percobaannya.
+    expect([r2.tokenMasuk, r2.tokenUlangMasuk]).toEqual([200, 1000])
+    // Tanpa pengulang: bentuk hasil lama (tanpa kunci ulang) — status lama tetap sebanding.
+    const r3 = await ujiDokumen(lite, d, kesinambunganSementara)
+    expect(Object.keys(r3)).not.toContain('halamanDiulang')
+    expect(r3.tokenMasuk).toBe(200)
+  })
 })
 
 describe('rangkumUji & laporan', () => {
@@ -121,6 +146,17 @@ describe('rangkumUji & laporan', () => {
     expect(r).toMatchObject({ dokumen: 3, dokumenBersaldo: 2, persenLolosTanpaKoreksi: 50, persenIdentik: 66.7, halamanGagal: 1, barisHilang: 3, msPerHalaman: 200 })
     expect(r.biayaPerDokumen).toEqual({ nilai: 0.35, mataUang: 'USD', tanggalHarga: '2026-10-06' })
     expect(rangkumUji({ nama: 'gemini', model: 'x' }, [h({})]).biayaPerDokumen).toBeNull()
+  })
+
+  it('dengan pengulang: token pengulang dihargai harga MODEL PENGULANG; tanpa harganya → biaya belum diisi', () => {
+    const lite = { masukPerJuta: 0.1, keluarPerJuta: 0.5, mataUang: 'USD', tanggal: '2026-10-30' }
+    const flash = { masukPerJuta: 1, keluarPerJuta: 2, mataUang: 'USD', tanggal: '2026-10-30' }
+    const hasil = [h({ halamanDiulang: [2], tokenUlangMasuk: 1_000_000, tokenUlangKeluar: 500_000 }), h({ halamanDiulang: [], tokenUlangMasuk: 0, tokenUlangKeluar: 0 })]
+    const r = rangkumUji({ nama: 'gemini', model: 'lite' }, hasil, lite, { model: 'flash', harga: flash })
+    // Per dokumen: lite 0,35 + flash (0,5×1 + 0,25×2) / 1 = 0,35 + 1 = 1,35
+    expect(r).toMatchObject({ modelUlang: 'flash', halamanDiulang: 1, biayaPerDokumen: { nilai: 1.35 } })
+    expect(rangkumUji({ nama: 'gemini', model: 'lite' }, hasil, lite, { model: 'flash' }).biayaPerDokumen).toBeNull()
+    expect(laporanMarkdown([r], { tanggal: '2026-10-30', pemeriksa: 'p', dokumen: '2' })).toContain('| gemini · lite + ulang flash (1 hlm diulang) |')
   })
 
   it('penyedia tanpa dokumen selesai → "belum diuji", bukan 0% / 0 USD', () => {
@@ -156,6 +192,13 @@ describe('status uji (dilanjutkan sesudah kuota direset)', () => {
     expect(() => uraiStatus(teks([{ ...sah, nama: 'rekening-nyata' }]))).toThrow()
     expect(() => uraiStatus(teks([{ ...sah, tokenMasuk: '10' }]))).toThrow()
     expect(() => uraiStatus(teks([sah], 2))).toThrow()
+    expect(() => uraiStatus(teks([{ ...sah, halamanDiulang: ['isi'] }]))).toThrow()
+    expect(() => uraiStatus(teks([{ ...sah, tokenUlangMasuk: '1' }]))).toThrow()
+  })
+
+  it('hasil dengan model pengulang terbaca kembali utuh; status lama (tanpa kuncinya) tetap sah', () => {
+    const ulang = { ...sah, halamanDiulang: [2], tokenUlangMasuk: 7, tokenUlangKeluar: 3 }
+    expect(uraiStatus(teks([ulang, sah])).hasil['gemini:m']).toEqual([ulang, sah])
   })
 })
 

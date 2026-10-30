@@ -4,8 +4,8 @@ import { canAccessClientData } from '@/lib/roles'
 import { loadCashAccount } from '@/lib/api/cash-mutation-queries'
 import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 import { jenisGalatAi } from '@/lib/ai/penyedia'
-import { penyediaDariEnv } from '@/lib/ai/pilih-penyedia'
-import { GalatSusun, susunHalaman, type KolomBerposisi, type SumberHalaman } from '@/lib/bank-statement/susun-tabel'
+import { penyediaDariEnv, penyediaUlangDariEnv } from '@/lib/ai/pilih-penyedia'
+import { GalatSusun, susunDenganUlang, type KolomBerposisi, type SumberHalaman } from '@/lib/bank-statement/susun-tabel'
 
 export const runtime = 'nodejs'
 // Satu halaman per panggilan; penyedia bisa lambat saat antre.
@@ -19,6 +19,8 @@ const BARIS_MAKS = 400
 const PANJANG_BARIS_MAKS = 2_000
 const HALAMAN_MAKS = 500
 const TIMEOUT_PENYEDIA_MS = 50_000
+/** Anggaran SELURUH permintaan ke penyedia (utama + ulang), di bawah maxDuration. */
+const ANGGARAN_PENYEDIA_MS = 55_000
 /** Batas rentang kolom karakter judul berposisi — jauh di atas lebar baris mana pun. */
 const POSISI_MAKS = PANJANG_BARIS_MAKS
 
@@ -26,6 +28,12 @@ const POSISI_MAKS = PANJANG_BARIS_MAKS
 //   { clientId, akunKasId, halaman, baris: string[] | gambarPng: string,
 //     kolomSebelumnya?: string[] | { judul, awal, akhir }[] }
 //   → HalamanMentah (lib/mutasi-kas/kontrak-baris-mentah.ts), persis.
+//     Model yang menyusunnya di header (keputusan Ricko 2026-10-30: catat model
+//     per halaman — kontraknya tidak diubah): X-Model-Ekstraksi, dan
+//     X-Ekstraksi-Diulang "1" bila halaman ditolak penjaga lalu lolos dengan
+//     model pengulang (AI_MODEL_EKSTRAKSI_ULANG, lib/ai/pilih-penyedia.ts).
+//   422 penjaga → { error, masalah, model: string[], inputManual }; inputManual
+//     = sudah diulang dan tetap ditolak, halaman diisi manual.
 //
 // SATU halaman per panggilan; browser memanggilnya berurutan (progres, ulangi
 // per halaman, bisa dibatalkan). Teks halaman sudah diekstrak DI BROWSER (D56):
@@ -113,14 +121,26 @@ export async function POST(req: Request) {
   }
 
   try {
-    const ai = penyediaDariEnv()
-    const r = await susunHalaman(ai, { halaman, sumber, kolomSebelumnya: kolomSebelumnya as string[] | KolomBerposisi[], timeoutMs: TIMEOUT_PENYEDIA_MS })
-    return NextResponse.json(r.halaman)
+    const tenggat = Date.now() + ANGGARAN_PENYEDIA_MS
+    const r = await susunDenganUlang(
+      penyediaDariEnv(),
+      penyediaUlangDariEnv(),
+      { halaman, sumber, kolomSebelumnya: kolomSebelumnya as string[] | KolomBerposisi[], timeoutMs: TIMEOUT_PENYEDIA_MS },
+      { tenggat }
+    )
+    return NextResponse.json(r.halaman, { headers: { 'X-Model-Ekstraksi': r.model, 'X-Ekstraksi-Diulang': r.diulang ? '1' : '0' } })
   } catch (e) {
     if (e instanceof GalatSusun) {
       // `masalah` hanya menyebut nomor baris & jenis kerusakan — tanpa isi baris.
       return NextResponse.json(
-        { error: `Halaman ${halaman} tidak bisa disusun dengan yakin — ulangi halaman ini.`, masalah: e.masalah },
+        {
+          error: e.inputManual
+            ? `Halaman ${halaman} tetap tidak bisa disusun dengan yakin sesudah diulang dengan model lain — isi halaman ini secara manual.`
+            : `Halaman ${halaman} tidak bisa disusun dengan yakin — ulangi halaman ini.`,
+          masalah: e.masalah,
+          model: e.percobaan.map(p => p.model),
+          inputManual: e.inputManual,
+        },
         { status: 422 }
       )
     }
