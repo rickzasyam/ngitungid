@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { masterCoa } from '@/lib/db/schema'
+import { masterCoa, masterSupplier } from '@/lib/db/schema'
 import { isHutangAccount } from '@/lib/supplier'
 
 // Penjaga yang dipakai BERSAMA oleh route tambah, ubah, dan impor supplier.
@@ -47,4 +47,19 @@ export async function assertAkunHutangMilikKlien(
     )
   }
   return null
+}
+
+/**
+ * Kolom yang dibaca untuk `nilai_sebelum` riwayat supplier — tujuh kolom data
+ * yang sama dengan `snapshotSupplier` (lib/supplier.ts). Satu salinan untuk
+ * route ubah, hapus, dan impor.
+ */
+export const KOLOM_SNAPSHOT_SUPPLIER = {
+  nama: masterSupplier.nama,
+  kontak: masterSupplier.kontak,
+  npwp: masterSupplier.npwp,
+  bankNama: masterSupplier.bankNama,
+  bankRekening: masterSupplier.bankRekening,
+  bankAtasNama: masterSupplier.bankAtasNama,
+  akunHutangDefaultId: masterSupplier.akunHutangDefaultId,
 }
