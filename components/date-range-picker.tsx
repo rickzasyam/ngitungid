@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Calendar, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ModalPortal } from '@/components/ui/modal-portal'
-import { hariIniJakarta, ymdToLocalDate } from '@/lib/ymd'
+import { hariAktif, tujuanTombol } from '@/lib/kalender-keyboard'
+import { hariIniJakarta, localDateToYmd, ymdToLocalDate } from '@/lib/ymd'
 
 interface DateRange {
   from: Date | undefined
@@ -55,15 +56,22 @@ function CalendarMonth({
   month,
   range,
   hoverDate,
+  aktif,
   onDayClick,
   onDayHover,
+  onDayFocus,
+  onDayKeyDown,
 }: {
   year: number
   month: number
   range: DateRange | undefined
   hoverDate: Date | null
+  /** Tanggal (1…31) satu-satunya sel Tab di bulan ini — roving tabindex (lib/kalender-keyboard). */
+  aktif: number
   onDayClick: (date: Date) => void
   onDayHover: (date: Date | null) => void
+  onDayFocus: (date: Date) => void
+  onDayKeyDown: (date: Date, e: ReactKeyboardEvent<HTMLButtonElement>) => void
 }) {
   const daysInMonth = getDaysInMonth(year, month)
   const firstDayOffset = getFirstDayOfWeek(year, month)
@@ -209,11 +217,18 @@ function CalendarMonth({
                 // separuhnya. Fokus menyalakan pratinjau rentang yang SAMA
                 // dengan hover (gotcha #4) — tanpa itu pengguna keyboard memilih
                 // tanggal akhir tanpa pernah melihat rentangnya.
+                //
+                // Roving tabindex: hanya SATU sel per bulan di urutan Tab; antar
+                // tanggal berpindah dengan panah/Home/End/PageUp/PageDown
+                // (pola date grid WAI-ARIA). Tanpa ini Tab harus melewati ±60
+                // tombol untuk keluar dari kalender.
                 return (
                   <button
                     type="button"
                     key={colIdx}
                     data-hari=""
+                    data-tanggal={localDateToYmd(date)}
+                    tabIndex={date.getDate() === aktif ? 0 : -1}
                     aria-label={formatDayLabel(date)}
                     aria-pressed={isSelected}
                     aria-current={isToday ? 'date' : undefined}
@@ -222,8 +237,12 @@ function CalendarMonth({
                     onClick={() => onDayClick(date)}
                     onMouseEnter={() => onDayHover(date)}
                     onMouseLeave={() => onDayHover(null)}
-                    onFocus={() => onDayHover(date)}
+                    onFocus={() => {
+                      onDayHover(date)
+                      onDayFocus(date)
+                    }}
                     onBlur={() => onDayHover(null)}
+                    onKeyDown={e => onDayKeyDown(date, e)}
                   >
                     <div
                       className="flex items-center justify-center transition-all duration-150 cursor-pointer group-focus-visible:ring-2 group-focus-visible:ring-(--color-accent-primary)"
@@ -263,6 +282,12 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
   const [isOpen, setIsOpen] = useState(false)
   const [tempRange, setTempRange] = useState<DateRange | undefined>(value)
   const [hoverDate, setHoverDate] = useState<Date | null>(null)
+  // Tanggal yang terakhir difokus di kalender — penentu sel Tab (roving
+  // tabindex) dan titik awal navigasi panah. Direset tiap panel dibuka.
+  const [fokusTanggal, setFokusTanggal] = useState<Date | null>(null)
+  // Tujuan panah yang jatuh di bulan yang belum tampil: tampilan digeser dulu,
+  // lalu efek di bawah memfokuskannya setelah sel itu ter-render.
+  const fokusTertunda = useRef<string | null>(null)
   const [viewYear, setViewYear] = useState(value?.from?.getFullYear() ?? TODAY.getFullYear())
   const [viewMonth, setViewMonth] = useState(value?.from?.getMonth() ?? 0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -361,9 +386,44 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
     const panel = panelRef.current
     const sasaran =
       panel?.querySelector<HTMLButtonElement>('button[data-hari][aria-pressed="true"]') ??
-      panel?.querySelector<HTMLButtonElement>('button[data-hari]')
+      panel?.querySelector<HTMLButtonElement>('button[data-hari][tabindex="0"]')
     sasaran?.focus({ preventScroll: true })
   }, [isOpen, panelReady])
+
+  /** Sel tanggal yang tampil (bulan kedua disembunyikan di layar sempit → offsetParent null). */
+  const selTampil = (ymd: string) => {
+    const el = panelRef.current?.querySelector<HTMLButtonElement>(`button[data-tanggal="${ymd}"]`)
+    return el && el.offsetParent !== null ? el : null
+  }
+
+  // Panah ke bulan yang belum tampil: tampilan sudah digeser, fokuskan selnya.
+  useEffect(() => {
+    const ymd = fokusTertunda.current
+    if (!ymd) return
+    const el = selTampil(ymd)
+    if (el) {
+      fokusTertunda.current = null
+      el.focus({ preventScroll: true })
+    }
+  }, [viewYear, viewMonth])
+
+  const handleDayKeyDown = (date: Date, e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const tujuan = tujuanTombol(date, e.key, e.shiftKey)
+    if (!tujuan) return
+    e.preventDefault()
+    setFokusTanggal(tujuan)
+    const ymd = localDateToYmd(tujuan)
+    const el = selTampil(ymd)
+    if (el) {
+      el.focus({ preventScroll: true })
+      return
+    }
+    // Di luar bulan yang tampil: jadikan bulan tujuan bulan PERTAMA (selalu
+    // tampil, juga di layar sempit), lalu fokus menyusul lewat efek di atas.
+    fokusTertunda.current = ymd
+    setViewYear(tujuan.getFullYear())
+    setViewMonth(tujuan.getMonth())
+  }
 
   /** Tutup lewat tombol di dalam panel — fokus kembali ke pemicunya. */
   const tutupKePemicu = () => {
@@ -373,6 +433,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
 
   const secondMonth = viewMonth === 11 ? 0 : viewMonth + 1
   const secondYear = viewMonth === 11 ? viewYear + 1 : viewYear
+  const kandidatAktif = [fokusTanggal, tempRange?.from, TODAY]
 
   const handlePrev = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
@@ -406,6 +467,8 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
   const handleClear = () => {
     setTempRange(undefined)
     onChange(undefined)
+    // Tombol hapus lenyap begitu nilainya kosong — fokus jangan ikut hilang ke <body>.
+    triggerRef.current?.focus()
   }
 
   return (
@@ -420,17 +483,19 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
       {/* Trigger button */}
       <button
         ref={triggerRef}
+        type="button"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         onClick={() => {
           setTempRange(value)
+          setFokusTanggal(null)
           if (value?.from) {
             setViewYear(value.from.getFullYear())
             setViewMonth(value.from.getMonth())
           }
           setIsOpen(!isOpen)
         }}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all duration-200"
+        className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
         style={{
           background: 'white',
           border: isOpen ? '1.5px solid #bbb3f3' : '1.5px solid #e5e5e5',
@@ -450,18 +515,30 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
         >
           {formatRangeLabel(value) ?? placeholder}
         </span>
-        {value?.from && (
-          <span
-            onClick={(e) => { e.stopPropagation(); handleClear() }}
-            className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors"
-            style={{ background: '#f0f0f0' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#e5e5e5'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#f0f0f0'}
-          >
+        {/* Ruang untuk tombol hapus di bawah — ukurannya sama dengan bulatan X
+            lama, jadi tata letak pemicu tidak berubah. */}
+        {value?.from && <span aria-hidden className="w-5 h-5 flex-shrink-0" />}
+      </button>
+
+      {/* Tombol hapus = TOMBOL ASLI, SAUDARA pemicu (bukan anaknya): tombol di
+          dalam tombol tidak sah dan tidak bisa dicapai Tab. Diletakkan absolut
+          tepat di atas ruang di atas — bulatan 20px tampil sama seperti dulu,
+          area sentuhnya 32px (gotcha #5). Hover lewat kelas CSS (gotcha #4). */}
+      {value?.from && (
+        <button
+          type="button"
+          aria-label="Hapus rentang tanggal"
+          onClick={handleClear}
+          className="drp-clear group absolute top-1/2 cursor-pointer -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center focus-visible:outline-none"
+          // Tengah bulatan lama = padding kanan pemicu (1rem) + border (1.5px) + 10px;
+          // tombol 32px berpusat di titik itu → kanan = 1rem + 1.5px − 6px.
+          style={{ right: 'calc(1rem + 1.5px - 6px)' }}
+        >
+          <span className="drp-clear-dot w-5 h-5 rounded-full flex items-center justify-center transition-colors group-focus-visible:ring-2 group-focus-visible:ring-(--color-accent-primary)">
             <X className="w-2.5 h-2.5" style={{ color: 'var(--color-text-muted)' }} />
           </span>
-        )}
-      </button>
+        </button>
+      )}
 
       {/* Dropdown — di-portal ke <body>.
           Versi lama memakai `absolute … z-50` di dalam card. Itu tidak pernah
@@ -503,16 +580,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                 type="button"
                 onClick={handlePrev}
                 aria-label="Bulan sebelumnya"
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
-                  e.currentTarget.style.color = 'white'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.5)'
-                }}
+                className="drp-nav w-7 h-7 rounded-full flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
@@ -520,16 +588,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                 type="button"
                 onClick={handleNext}
                 aria-label="Bulan berikutnya"
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
-                  e.currentTarget.style.color = 'white'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.5)'
-                }}
+                className="drp-nav w-7 h-7 rounded-full flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -542,8 +601,11 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                 month={viewMonth}
                 range={tempRange}
                 hoverDate={hoverDate}
+                aktif={hariAktif(viewYear, viewMonth, kandidatAktif)}
                 onDayClick={handleDayClick}
                 onDayHover={setHoverDate}
+                onDayFocus={setFokusTanggal}
+                onDayKeyDown={handleDayKeyDown}
               />
               <div className="hidden sm:block" style={{ width: '1px', background: 'rgba(255,255,255,0.06)', flexShrink: 0 }} />
               <div className="hidden sm:block">
@@ -552,8 +614,11 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                   month={secondMonth}
                   range={tempRange}
                   hoverDate={hoverDate}
+                  aktif={hariAktif(secondYear, secondMonth, kandidatAktif)}
                   onDayClick={handleDayClick}
                   onDayHover={setHoverDate}
+                  onDayFocus={setFokusTanggal}
+                  onDayKeyDown={handleDayKeyDown}
                 />
               </div>
             </div>
@@ -582,10 +647,7 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
               <button
                 type="button"
                 onClick={tutupKePemicu}
-                className="px-4 py-1.5 rounded-full text-xs font-medium transition-all"
-                style={{ color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.06)' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                className="drp-batal px-4 py-1.5 rounded-full text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
               >
                 Batal
               </button>
@@ -593,16 +655,12 @@ export function DateRangePicker({ value, onChange, placeholder = 'Pilih periode 
                 type="button"
                 onClick={handleApply}
                 disabled={!tempRange?.from}
-                className="px-4 py-1.5 rounded-full text-xs font-semibold transition-all"
+                className="drp-terapkan px-4 py-1.5 rounded-full text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 style={{
                   background: tempRange?.from ? '#daf163' : 'rgba(255,255,255,0.1)',
                   color: tempRange?.from ? '#222124' : 'rgba(255,255,255,0.3)',
                   cursor: tempRange?.from ? 'pointer' : 'not-allowed',
                 }}
-                onMouseEnter={e => {
-                  if (tempRange?.from) e.currentTarget.style.boxShadow = '0 4px 12px rgba(218,241,99,0.35)'
-                }}
-                onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
               >
                 Terapkan
               </button>
