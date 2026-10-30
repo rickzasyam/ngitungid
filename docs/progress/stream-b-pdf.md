@@ -39,6 +39,14 @@ berkas bersama, atau menunggu keputusan — kosongkan (`—`) bila tidak.
 4. Nama env `AI_EKSTRAKSI_REKENING_KORAN` disetujui.
 5. Penyimpangan diterima: teks bertata letak, masukan route `baris: string[]`, adaptor Claude/OpenAI sebelum X0, lokasi route `ekstrak-halaman`.
 
+## Catatan untuk langkah 6 — Unggah PDF ke grid (dari Ricko 2026-10-30; BELUM dikerjakan)
+
+- **Label grid berubah:** Masuk → **"Debet"**, Keluar → **"Kredit"**, Akun lawan → **"Nama Akun"**. Kontrak data internal (masuk/keluar, `lib/mutasi-kas/kontrak-baris-mentah.ts`) **tidak** berubah.
+- **Setiap pratinjau hasil ekstraksi yang dilihat user** memakai label yang sama: **Debet = uang masuk ke rekening, Kredit = uang keluar** (sudut pandang buku klien). Di rekening koran bank, "DB" berarti uang KELUAR — kebalikannya. Jadi:
+  - arah tetap ditentukan kesinambungan saldo (S3/D50, seperti sekarang), bukan dari judul kolom atau penanda;
+  - **jangan** menyalin judul "Debet"/"Kredit" bank atau penanda DB/CR mentah-mentah ke kolom Debet/Kredit pratinjau. Kode X3 sekarang memang tidak menafsirkan keduanya (`nominal.pertama/kedua` + `judul` apa adanya, `penanda` teks apa adanya) — penerjemahan ke Debet/Kredit grid terjadi SESUDAH arah diputuskan.
+- **Kolom baru grid: Ref (nomor bukti) dan Catatan.** Nomor referensi transaksi bank yang terekstrak (di X3 masuk `lain` dengan judul tercetak, mis. "Reff", "No. Ref") adalah **kandidat isi Ref**. Komentar kontrak sekarang menyebut alias "Reff → catatan" (S2, milik Stream A) — perlu diselaraskan dengan kolom Ref baru (keputusan pemetaan alias ada di Stream A/Ricko, kontrak tidak diubah Stream B).
+
 ## Catatan lingkungan
 
 - Sesi 2026-10-27 berjalan TANPA rahasia dev (`.env.local` tidak ada; `DATABASE_URL`, `GEMINI_API_KEY`, `DEV_TEST_*` kosong), jadi belum ada panggilan AI sungguhan. Uji penyedia dengan PDF sintetis menunggu sesi berikutnya; perintahnya ada di kepala `lib/bank-statement/uji-banding/cli.ts`.
