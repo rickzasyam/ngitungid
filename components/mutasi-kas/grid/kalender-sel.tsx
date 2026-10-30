@@ -2,8 +2,9 @@
 
 // Ikon kalender di sel Tanggal (D66): membuka DATE PICKER YANG SUDAH ADA,
 // `components/date-range-picker.tsx`, APA ADANYA — berkasnya tidak diubah
-// (Stream B sedang merapikan aksesibilitasnya). Konsekuensinya, dan cara
-// grid menyiasatinya tanpa menyentuh komponennya:
+// (aksesibilitasnya dirapikan Stream B di PR #5; date picker SATU tanggal
+// dari Stream B akan menggantikan penyiasatan ini sebagai langkah terpisah).
+// Konsekuensinya, dan cara grid menyiasatinya tanpa menyentuh komponennya:
 //
 // 1. Pemicunya adalah tombol lebar berlabel; di sel ia dipersempit jadi ikon
 //    lewat CSS `.gm-kalender` (grid-mutasi.css). Label tanggalnya disembunyikan
@@ -26,6 +27,11 @@
 //    membacanya dua kali. Wadahnya `aria-hidden`: ini jalur MOUSE — jalur
 //    keyboard dan pembaca layar adalah Alt+↓, yang membuka panel (dialog
 //    berlabel) langsung.
+// 8. Sejak PR #5 tombol hapus rentang adalah tombol asli yang bisa di-Tab.
+//    Di sel ia tak terlihat di dalam wadah `aria-hidden` — disingkirkan lewat
+//    CSS (`.gm-kalender button:not([aria-haspopup])`); sel dikosongkan lewat
+//    Delete. Panah/Home/End/PageUp/PageDown di panel ditangani komponennya;
+//    event-nya ikut dihentikan di sini (butir 6), jadi grid tidak ikut bergerak.
 
 import { DateRangePicker } from '@/components/date-range-picker'
 import { ymdToLocalDate } from '@/lib/ymd'

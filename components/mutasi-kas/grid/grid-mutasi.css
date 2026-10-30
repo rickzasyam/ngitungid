@@ -230,6 +230,15 @@
   white-space: nowrap;
 }
 
+/* Tombol hapus rentang (date-range-picker sejak PR #5: tombol asli, SAUDARA
+   pemicu, bisa dicapai Tab). Di sel grid ia jatuh di wadah 480px yang tak
+   terlihat — tombol tak terlihat yang bisa di-Tab, di dalam wadah aria-hidden.
+   Di grid, sel tanggal dikosongkan lewat Delete; tombol ini disingkirkan dari
+   tampilan, urutan Tab, dan pohon aksesibilitas sekaligus. */
+.grid-mutasi .gm-kalender button:not([aria-haspopup]) {
+  display: none !important;
+}
+
 .grid-mutasi .gm-kalender button[aria-haspopup='dialog'] svg {
   color: var(--color-text-primary) !important;
 }

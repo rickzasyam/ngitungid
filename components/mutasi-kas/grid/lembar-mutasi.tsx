@@ -95,7 +95,7 @@ export type AkunGrid = { id: string; kode: string; nama: string; jenis?: Account
 // Hanya kolom OPSIONAL yang bisa disembunyikan; Tanggal s.d. Saldo dan Status
 // selalu tampil. Pilihan per klien di localStorage — kenyamanan per peramban,
 // bukan data; akses dibungkus try/catch (mode privat / penyimpanan diblokir).
-const KOLOM_OPSIONAL: readonly KolomGrid[] = ['catatan']
+const KOLOM_OPSIONAL: readonly KolomGrid[] = ['ref', 'catatan']
 const kunciKolom = (clientId: string) => `ngitungid:grid-mutasi:kolom-tersembunyi:${clientId}`
 
 function bacaKolomTersembunyi(clientId: string): ReadonlySet<KolomGrid> {
@@ -121,6 +121,7 @@ type BarisS8 = {
   tanggal: string
   keterangan: string | null
   catatan: string | null
+  ref: string | null
   debit: string
   kredit: string
   saldo: string | null
@@ -175,6 +176,7 @@ const keBarisServer = (m: BarisS8): BarisServer => ({
     saldo: m.saldo,
     keterangan: m.keterangan,
     catatan: m.catatan,
+    ref: m.ref,
     akunLawanId: m.akunLawanId,
   },
   akunLawanTeks: m.akunLawanKode ?? '',

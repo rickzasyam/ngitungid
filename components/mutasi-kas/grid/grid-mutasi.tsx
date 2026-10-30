@@ -111,6 +111,7 @@ const LEBAR: Record<KolomGrid, number> = {
   masuk: 132,
   keluar: 132,
   saldo: 144,
+  ref: 120,
   catatan: 170,
 }
 

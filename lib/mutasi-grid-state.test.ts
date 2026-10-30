@@ -44,6 +44,7 @@ const server = (id: string, o: Partial<BarisServer['nilai']> = {}, terkunci = TA
     saldo: '993500.00',
     keterangan: 'BIAYA ADM',
     catatan: null,
+    ref: null,
     akunLawanId: null,
     ...o,
   },
@@ -69,13 +70,20 @@ describe('muat & sel dari server', () => {
       keluar: '6.500',
       saldo: '993.500',
       akunLawan: '6-2000',
+      ref: '',
       catatan: '',
     })
+    expect(keadaanAwal([server('m2', { ref: 'BKK-9' })]).baris[0].sel.ref).toBe('BKK-9')
   })
 
   it('keadaan yang baru dimuat tidak punya perubahan', () => {
     const s = keadaanAwal([server('m1', { akunLawanId: ADMIN })])
     expect(adaPerubahan(diff(s))).toBe(false)
+  })
+
+  it('mengubah Ref SAJA tetap terkirim sebagai ubah (D64)', () => {
+    const s = reducerGrid(keadaanAwal([server('m1', { ref: 'BKK-1' })]), { jenis: 'ubahSel', kunci: 'm1', kolom: 'ref', nilai: 'BKK-2' })
+    expect(diff(s).ubah).toEqual([expect.objectContaining({ id: 'm1', ref: 'BKK-2', keterangan: 'BIAYA ADM' })])
   })
 })
 

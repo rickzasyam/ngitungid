@@ -429,10 +429,10 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 | **D60** | Baris tanpa tanggal: **(a) wajib diisi** + aksi "Isi tanggal akhir periode" (rekomendasi) vs (b) otomatis akhir periode bertanda; baris di luar periode = galat | ✅ **disetujui Ricko 2026-10-26** |
 | **D61** | Saldo awal: **tidak dimajukan untuk grid** (jangkar = fakta dokumen); saldo awal buku akun kas dimajukan bersama laporan Cash Flow dari mutasi | ✅ **disetujui Ricko 2026-10-26** |
 | **D62** | Class CF: kolom sudah ada; kosakata baku 4 nilai tanpa migrasi; "Operating Balance" = akun kas/bank → aksi "Tandai sebagai akun kas"; `deriveIsKas` tidak diubah | ✅ **Dikonfirmasi Ricko 2026-10-26: Operating Balance = akun kas/bank** (sesuai master data template Rasyuka) |
-| **D63** | Grid mutasi kas: urutan kolom **# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · (Ref) · Catatan · Status** = urutan sheet kas template akuntan; label **"Akun lawan" → "Nama Akun", "Masuk" → "Debet", "Keluar" → "Kredit"** (Debet = uang masuk ke rekening ini, Kredit = uang keluar) di grid, tampilan Daftar, form, pesan validasi, dan ringkasan. **Hanya tampilan**: kunci internal `masuk`/`keluar`/`akunLawan`, kontrak draf, cadangan IndexedDB, dan `kontrak-baris-mentah.ts` tidak berubah. Tempelan TANPA judul mengikuti urutan kolom baru (seperti spreadsheet); judul lama Masuk/Keluar/Akun lawan tetap dikenali di samping Debet/Kredit/Nama Akun. Judul "Debet/Kredit" di berkas tetap TANPA petunjuk arah (aturan 2026-10-26: arah dari rantai saldo, karena rekening koran bank memakai Debet = keluar) | ✅ **ditetapkan Ricko 2026-10-30** (masukan uji grid PR #1) |
-| **D64** | Kolom **Ref** dan **Catatan**, keduanya tidak wajib, bisa disembunyikan lewat **"Atur kolom"** (localStorage per klien; kolom inti tidak bisa). Catatan = field `cash_mutations.catatan` yang sudah ada. **Ref: `cash_mutations` TIDAK punya field nomor bukti** (`no_bukti` hanya ada di `journal_entries`, dan jurnal mutasi selalu NULL) — Ref belum tampil; tanpa kolom DB baru sesuai instruksi. Sementara itu judul berkas "Ref/Reff" tetap masuk Catatan | ⏸ **Catatan ✅ ditetapkan Ricko 2026-10-30 · Ref MENUNGGU KEPUTUSAN RICKO**: (a) kolom baru `cash_mutations.no_ref text NULL` (migrasi 0022, seluruhnya tambah — ikut checklist rilis), (b) Ref & Catatan berbagi `catatan`, atau (c) tunda sampai Data Induk |
+| **D63** | Grid mutasi kas: urutan kolom **# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · (Ref) · Catatan · Status** = urutan sheet kas template akuntan; label **"Akun lawan" → "Nama Akun", "Masuk" → "Debet", "Keluar" → "Kredit"** (Debet = uang masuk ke rekening ini, Kredit = uang keluar) di grid, tampilan Daftar, form, pesan validasi, dan ringkasan. **Hanya tampilan**: kunci internal `masuk`/`keluar`/`akunLawan`, kontrak draf, cadangan IndexedDB, dan `kontrak-baris-mentah.ts` tidak berubah. Tempelan TANPA judul mengikuti urutan kolom baru (seperti spreadsheet); judul lama Masuk/Keluar/Akun lawan tetap dikenali di samping Debet/Kredit/Nama Akun. Judul "Debet/Kredit" di berkas tetap TANPA petunjuk arah (aturan 2026-10-26: arah dari rantai saldo, karena rekening koran bank memakai Debet = keluar) | ✅ **ditetapkan Ricko 2026-10-30** (masukan uji grid PR #1). Warna item aktif combobox Nama Akun = **token aplikasi lime `#daf163`** (`--color-accent-primary`), bukan `#c0ff33` dari instruksi masukan — ✅ **disetujui Ricko 2026-10-30** (token aplikasi jadi acuan) |
+| **D64** | Kolom **Ref** dan **Catatan**, keduanya tidak wajib, bisa disembunyikan lewat **"Atur kolom"** (localStorage per klien; kolom inti tidak bisa). Catatan = `cash_mutations.catatan` (0021). **Ref = kolom baru `cash_mutations.ref text NULL`** (migrasi **0022**, seluruhnya tambah), maks 100 karakter (`REF_MAX`), tidak ikut fingerprint, **tidak disalin ke jurnal untuk sekarang**. Tampil di grid (# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · **Ref** · Catatan · Status), tampilan **Daftar** (sesudah Kredit), dan **form satu-satu**. Alias judul tempel/CSV/PDF: **Ref, Reff, No. Ref, No Ref, No Bukti, Referensi** (sebelumnya Ref/Reff → Catatan) | ✅ **ditetapkan Ricko 2026-10-30** — Catatan, lalu Ref = opsi (a) kolom baru (dinamai `ref`, bukan `no_ref`); dikerjakan 2026-10-30, 0022 di dev saja, dirilis bersama 0021 |
 | **D65** | Kolom **Konfirmasi** template akuntan **tidak dipakai**: tidak ada kolom grid-nya, dan impor/tempel MENGABAIKAN judul "Konfirmasi" (sebelumnya dialiaskan ke Catatan) | ✅ **ditetapkan Ricko 2026-10-30** |
-| **D66** | **Aturan tanggal sel grid** (`lib/mutasi-tanggal.ts`): bisa diketik & ditempel, **selalu dinormalisasi ke YYYY-MM-DD** (tanpa `new Date(string)`); bentuk yang diterima: hari saja ("15" = tgl 15 bulan grid), dd/mm/yyyy, d/m/yy, dd-mm-yyyy, yyyy-mm-dd, nama bulan Indonesia & Inggris singkat/panjang ("15 Okt 2026", "15 Oct 2026"), "21/Apr/2026". **Tanggal ambigu diputus bulan grid** ("04/01/2026" di grid April 2026 = 1 April, contoh sheet Rasyuka); tidak ada tafsiran di bulan grid = sel merah, baris tak bisa disimpan; di luar bulan = **"Tanggal di luar Oktober 2026"**. Tampilan sel "15 Okt 2026". Ikon kalender + **Alt+↓** membuka `date-range-picker` yang SUDAH ADA (tidak diubah). **Menggantikan keputusan 2026-09-21 "berkas MM/DD ditolak" untuk grid** | ✅ **ditetapkan Ricko 2026-10-30** — satu tambahan pilihan pelaksana **menunggu konfirmasi**: untuk BLOK tempelan/berkas, bukti urutan dari blok itu sendiri didahulukan (ada sel "25/04" → seluruh blok hari/bulan), baru bulan grid. Tanpa itu, berkas hari/bulan berisi "04/01/2026" (4 Jan) di grid April diam-diam jadi 1 April |
+| **D66** | **Aturan tanggal sel grid** (`lib/mutasi-tanggal.ts`): bisa diketik & ditempel, **selalu dinormalisasi ke YYYY-MM-DD** (tanpa `new Date(string)`); bentuk yang diterima: hari saja ("15" = tgl 15 bulan grid), dd/mm/yyyy, d/m/yy, dd-mm-yyyy, yyyy-mm-dd, nama bulan Indonesia & Inggris singkat/panjang ("15 Okt 2026", "15 Oct 2026"), "21/Apr/2026". **Tanggal ambigu diputus bulan grid** ("04/01/2026" di grid April 2026 = 1 April, contoh sheet Rasyuka); tidak ada tafsiran di bulan grid = sel merah, baris tak bisa disimpan; di luar bulan = **"Tanggal di luar Oktober 2026"**. Tampilan sel "15 Okt 2026". Ikon kalender + **Alt+↓** membuka `date-range-picker` yang SUDAH ADA (tidak diubah). **Menggantikan keputusan 2026-09-21 "berkas MM/DD ditolak" untuk grid** | ✅ **ditetapkan Ricko 2026-10-30**, termasuk tambahan pelaksana yang ✅ **disetujui Ricko 2026-10-30**: untuk BLOK tempelan/berkas, **bukti urutan dari blok itu sendiri didahulukan** (ada sel "25/04" → seluruh blok hari/bulan), baru bulan grid. Tanpa itu, berkas hari/bulan berisi "04/01/2026" (4 Jan) di grid April diam-diam jadi 1 April |
 | R1–R11 | Revisi dari spesifikasi ekspor 214 task (MP §3.3): R1 saran AI ≤3 pasangan sebagai daftar; R2 `journal_events` → **`audit_events`** generik (jurnal, COA, kunci periode); R3 kas kecil **jurnal-per-transaksi**, tabel `petty_cash_expenses` dihapus; **R4 dijawab Ricko 2026-09-15: finance boleh LIHAT saja** (baca `requireInternal`, tulis tetap `requireAkunting`; tab masuk `FINANCE_VISIBLE_TABS`, read-only); R5 halaman **`/laporan-keuangan`** + endpoint statements; R6–R11 penyelarasan detail | R2 ✅ 2026-09-18 (diambil) · R4 ✅ 2026-09-15 · R1, R3, R5–R11 ⏳ menunggu |
 
 ### 5.13 Skema baru (ringkas — rincian MP §8)
@@ -490,7 +490,8 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 - ✅ S8 `GET /api/cash-mutations?urut=buku` — **(2026-10-28) selesai.** Mode grid wajib `akunKasId` akun kas klien; `listCashMutations({ urut: 'buku' })` = urutan baku naik `tanggal, created_at, urutan, id` (D49) + `updatedAt`, `catatan`, `urutan`, kode akun lawan. `lib/api/cash-mutation-grid.ts` menambah per baris `jurnalStatus`/`jurnalDibalik` (`muatInfoJurnal`, kueri massal), `jumlahAlokasi`, dan **`kunci` dari `kunciMutasi`** — aturan yang sama dengan Simpan S7, jadi grid tidak menghitung kunci sendiri. `terkunciSampai` = kunci periode terakhir. **`saldoJangkar` (D61)** = saldo tercetak baris bersaldo terakhir sebelum rentang + Σ(masuk − keluar) baris sesudahnya, **seluruhnya di SQL** (`created_at` mikrodetik tidak dipotong lewat JS; `numeric`, tanpa float). **Temuan & perbaikan:** respons 10.004 baris = 8,4 MB JSON → melewati batas respons fungsi Vercel 4,5 MB yang berlaku sebelum kompresi CDN → baris grid dirampingkan (4,93 MB) dan **dikompres gzip di fungsi** (`lib/api/json-gzip.ts`): **393 KB di kabel**, 1,8 dtk panas di `next dev`. Daftar lama (tanpa `urut`) tidak berubah bentuk selain kolom tambahan
 - 🔨 S9 UI — **(2026-10-28) dibangun · ⏸ CP-20 dijawab SEBAGIAN oleh Ricko 2026-10-29** (uji klik Ricko menyusul; rincian di `docs/progress/stream-a-grid.md`):
   - **Jawaban Ricko CP-20 (2026-10-29):** pilihan pelaksana S2, S4, S5, S6, S9 **diterima**, dengan satu tambahan — sebelum "Muat ulang dari server" mengganti draf: peringatan jelas + draf yang tertimpa disimpan ke IndexedDB dan bisa dipulihkan (**dikerjakan 2026-10-29**: panel `alertdialog`, slot cadangan `tertimpa` terpisah dari autosave, muat ulang dibatalkan bila cadangan gagal ditulis). Perubahan D42 untuk mutasi & penghapusan wizard CSV **diterima**. Diminta juga: tautan baris grid → jurnal ringkasannya (/jurnal boleh diubah) — **dikerjakan 2026-10-29**: `/jurnal?jurnal=<id>` (`hrefJurnal`/`PARAM_TAUTAN_JURNAL` di `lib/journal.ts`) memuat jurnal itu, menolak bila bukan milik klien aktif, pindah ke bulannya, membuka rinciannya, dan menggulir ke barisnya; di grid, kolom Status menautkan "jurnal ↗" / "jurnal ringkasan (n baris) ↗" dan bilah alat punya "Buka jurnal" untuk baris aktif — hanya untuk owner/akunting (finance tidak bisa membuka /jurnal, gerbang `canDoAccounting` yang sama).
-  - **Masukan uji grid Ricko (2026-10-30), D63–D66 — dikerjakan 2026-10-30:** urutan & label kolom (Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Catatan · Status; Daftar/form/pesan/ringkasan ikut); **"Atur kolom"** (Catatan bisa disembunyikan, localStorage per klien); judul berkas lama & baru dikenali, "Konfirmasi" diabaikan; **tanggal** = `lib/mutasi-tanggal.ts` (ketik/tempel, normalisasi YYYY-MM-DD, ambigu diputus bulan grid, "Tanggal di luar <bulan>"), tampilan "15 Okt 2026", ikon kalender + Alt+↓ membuka `date-range-picker` yang ada **tanpa mengubah berkasnya**; **combobox Nama Akun** buatan sendiri (`kombo-akun.tsx`, tanpa paket baru — `cmdk` tidak terpasang) menggantikan `<datalist>` di sel & dialog "Isi Nama Akun kosong"; tab kas dari satu fungsi `muatAkunKas` (`lib/akun-kas-klien.ts`). **Ref belum tampil — D64 menunggu keputusan field.** Checklist uji klik: § "Checklist uji klik CP-20" di bawah.
+  - **Masukan uji grid Ricko (2026-10-30), D63–D66 — dikerjakan 2026-10-30:** urutan & label kolom (Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Catatan · Status; Daftar/form/pesan/ringkasan ikut); **"Atur kolom"** (Catatan bisa disembunyikan, localStorage per klien); judul berkas lama & baru dikenali, "Konfirmasi" diabaikan; **tanggal** = `lib/mutasi-tanggal.ts` (ketik/tempel, normalisasi YYYY-MM-DD, ambigu diputus bulan grid, "Tanggal di luar <bulan>"), tampilan "15 Okt 2026", ikon kalender + Alt+↓ membuka `date-range-picker` yang ada **tanpa mengubah berkasnya**; **combobox Nama Akun** buatan sendiri (`kombo-akun.tsx`, tanpa paket baru — `cmdk` tidak terpasang) menggantikan `<datalist>` di sel & dialog "Isi Nama Akun kosong"; tab kas dari satu fungsi `muatAkunKas` (`lib/akun-kas-klien.ts`). Checklist uji klik: § "Checklist uji klik CP-20" di bawah.
+  - **Keputusan Ricko atas `0759128` — dikerjakan 2026-10-30:** **kolom Ref** (D64) lewat migrasi **0022** `cash_mutations.ref` (dev saja; rilis bersama 0021) — grid, Atur kolom (Ref & Catatan), Daftar, form satu-satu, alias Ref/Reff/No. Ref/No Ref/No Bukti/Referensi, riwayat `updated` membawa ref, tidak ke jurnal. Form satu-satu kini ikut mengirim `catatan` (sebelumnya PATCH dari form **mengosongkan** catatan yang diisi lewat grid). Rebase ke `main` sesudah PR #3 + #5: komentar `RIWAYAT_ABADI` diperbarui; **KalenderSel jalan dengan `date-range-picker` versi PR #5** — tombol hapus rentang yang kini bisa di-Tab disingkirkan dari sel lewat CSS grid (berkas komponen tidak diubah); penggantian KalenderSel dengan date picker satu tanggal Stream B = langkah terpisah sesudah komponennya masuk `main`.
   - tab sheet per akun kas; grid sebagai tampilan utama (≥ md)
   - banner arah / pemilih arah wajib; usulan lilac + Terapkan
   - panel Pindah Buku dan isian saldo awal rekening koran
@@ -995,15 +996,20 @@ sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache 
 
 > Untuk Ricko, di Preview `feat/grid-mutasi` (DB dev). Klien **PT Uji Coba**, akun **Kas Kecil**, bulan **April 2026**
 > (kosong — aman dipakai). Uraian data uji diawali `UJI-A-`; pembersihannya menunggu hasil uji ini (S11). Uji otomatis
-> agen atas butir A–D: 30/30 lulus di dev 2026-10-30 — yang belum pernah diuji adalah mata, tangan, dan NVDA.
+> agen atas butir A–D: 30/30 lulus di dev 2026-10-30; sesudah kolom Ref + rebase PR #5: 29/29 lulus (Ref, Atur kolom,
+> B7–B8 dengan picker PR #5, Daftar, form) — yang belum pernah diuji adalah mata, tangan, dan NVDA.
 
 **A. Kolom & label (D63, D64, D65)**
-1. Judul grid berurutan **# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Catatan · Status**; ringkasan di
+1. Judul grid berurutan **# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Ref · Catatan · Status**; ringkasan di
    atas grid "Debet Rp… · Kredit Rp…"; tampilan **Daftar** berjudul Debet/Kredit; form satu-satu: tombol arah
    **Debet / Kredit**, field **Nama Akun**.
-2. **Atur kolom** → hilangkan centang Catatan → kolom hilang; muat ulang halaman → tetap hilang; pindah ke klien lain →
-   pilihan klien itu sendiri; centang lagi → kolom kembali. Kolom inti tidak punya pilihan.
-3. Kolom **Ref belum ada** (D64 menunggu keputusan field) — bukan cacat.
+2. **Atur kolom** → pilihannya hanya **Ref** dan **Catatan**; hilangkan centang salah satunya → kolom hilang; muat ulang
+   halaman → tetap hilang; pindah ke klien lain → pilihan klien itu sendiri; centang lagi → kolom kembali. Kolom inti
+   tidak punya pilihan.
+3. **Ref (D64):** ketik `BKK-001` di sel Ref → Simpan → muat ulang → masih ada. Ref lebih dari 100 karakter → sel merah
+   "Ref maksimal 100 karakter.". Tampilan **Daftar**: kolom Ref sesudah Kredit. Form satu-satu (ikon pensil): field
+   **Ref** terisi; ubah Keterangan saja lalu simpan → Ref **dan** Catatan baris itu tetap. Jurnal mutasinya tidak memuat
+   Ref.
 
 **B. Tanggal (D66)** — di grid April 2026
 4. Ketik `15`, `04/01/2026`, `21/Apr/2026`, `3 april 26`, `2026-04-07` → tampil 15 Apr / **1 Apr** / 21 Apr / 3 Apr /
@@ -1013,9 +1019,12 @@ sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache 
 6. Salin satu kolom tanggal dari sheet Rasyuka (bulan/hari) lalu tempel di kolom Tanggal → semua jatuh di April, tidak
    ada penolakan blok.
 7. Hover baris / pilih sel → ikon kalender muncul; klik → klik satu tanggal → **Terapkan** → sel berganti. Catatan:
-   komponennya pemilih RENTANG — footernya menampilkan rentang; cukup satu klik lalu Terapkan.
-8. Keyboard: sel Tanggal aktif → **Alt+↓** → kalender terbuka dengan fokus di dalamnya; **Esc** → kalender tertutup,
-   fokus kembali ke sel, panah grid jalan lagi.
+   komponennya pemilih RENTANG — footernya menampilkan rentang; cukup satu klik lalu Terapkan. Tidak ada tombol ✕ di
+   sel (versi PR #5 membuatnya bisa di-Tab; di grid ia disingkirkan — kosongkan sel dengan Delete).
+8. Keyboard: sel Tanggal aktif → **Alt+↓** → kalender terbuka dengan fokus di tanggal sel; **panah** memindah tanggal
+   (grid tidak ikut bergerak), **Enter** memilih, **Tab** ke Terapkan, **Enter** → sel berganti dan fokus kembali ke sel
+   yang sama. **Esc** → kalender tertutup tanpa mengubah sel, fokus kembali ke sel, panah grid jalan lagi. **Tab** dari
+   sel Tanggal pindah ke sel Nama Akun (tidak tersangkut di tombol tersembunyi).
 
 **C. Nama Akun (combobox)**
 9. Sel Nama Akun aktif → ketik `gaji` → daftar tersaring (kode + nama), dikelompokkan per jenis akun (Liabilitas,
@@ -1029,6 +1038,8 @@ sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache 
 **D. Berkas CSV**
 14. Buka CSV berjudul lama (`Tanggal;Akun lawan;Keterangan;Masuk;Keluar;Saldo`) dan berjudul baru
     (`Tanggal;Nama Akun;Uraian;Debet;Kredit;Saldo;Catatan;Konfirmasi`) → keduanya terbaca; kolom Konfirmasi diabaikan.
+    Berkas/tempelan berjudul **Ref, Reff, No. Ref, No Ref, No Bukti,** atau **Referensi** → masuk kolom Ref (bukan
+    Catatan).
 
 **E. Yang tersisa dari CP-20 sebelumnya**
 15. "Muat ulang dari server" saat konflik 409 → peringatan + cadangan "draf tertimpa" yang bisa dipulihkan.
@@ -1038,30 +1049,32 @@ sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache 
 
 ## Checklist rilis Grid Mutasi Kas (§5.14 Modul A, S1–S9) ke produksi (hanya Ricko)
 
-> **BELUM DIJALANKAN.** Ditulis 2026-10-29 (sesudah jawaban sebagian CP-20). Rilis dijalankan **Ricko dari laptop lewat
-> `.env.main`**, bukan dari sesi agen. Satu migrasi (**0021**, seluruhnya TAMBAH) + kode branch `feat/grid-mutasi`
-> (PR #1) yang di-merge ke `main`.
+> **BELUM DIJALANKAN.** Ditulis 2026-10-29 (sesudah jawaban sebagian CP-20), diperbarui 2026-10-30 (D64: + 0022). Rilis
+> dijalankan **Ricko dari laptop lewat `.env.main`**, bukan dari sesi agen. **Dua migrasi dirilis BERSAMA** — **0021**
+> (grid) + **0022** (kolom Ref), keduanya seluruhnya TAMBAH; main naik **21 → 23** — lalu kode branch `feat/grid-mutasi`
+> (PR #1) di-merge ke `main`. 0022 hanya pernah diterapkan ke dev (`ep-rapid-hat`).
 
 **Prasyarat (sebelum langkah 1):**
 - ✅ PR #4 `chore/fix-ci` di-merge Ricko (`4469498`), dan `feat/grid-mutasi` di-rebase ke atasnya 2026-10-29 tanpa konflik
   (gerbang lokal sesudah rebase: install `--frozen-lockfile`, tsc, lint 0 error / 24 warning, 2259 test, build — lulus).
-  Yang tetap diperiksa sebelum langkah 1: **CI PR #1 hijau pada head terakhir** (bila Stream B masuk `main` lebih dulu,
-  PR #1 di-rebase lagi — konflik di assertion `RIWAYAT_ABADI` `lib/cash-mutation-api.test.ts` memakai versi Stream B).
+  Yang tetap diperiksa sebelum langkah 1: **CI PR #1 hijau pada head terakhir**. ✅ 2026-10-30: di-rebase ke `main`
+  sesudah PR #3 (`chore/audit-supplier`) dan PR #5 (date-range-picker) — konflik `RIWAYAT_ABADI` diselesaikan dengan
+  assertion versi Stream B.
 - ✅ **Backup terjadwal hidup lagi:** Ricko memperbarui secret GitHub `DATABASE_URL_MAIN` (gagal sejak 23 Okt: kata sandi
   lama, lihat PR #4) lalu menjalankan "Backup DB (branch main)" manual 2026-10-29 → run #110 **hijau**, artifact
   `db-backup-main-20261029-042916Z` **944.490 byte** (backup sukses terakhir 22 Okt: 938.597 byte; yang gagal: 188 byte).
   Ini bukan pengganti langkah 3 (branch backup Neon tepat sebelum migrasi) — langkah itu tetap wajib.
 - **CP-20 selesai:** uji klik Ricko (+ NVDA) atas grid di Preview — § "Checklist uji klik CP-20" di atas; S11 (ROADMAP +
   graphify) menyusul sesudahnya.
-- **D64 (kolom Ref) diputuskan.** Bila opsi (a) — kolom `cash_mutations.no_ref` — dipilih, checklist ini bertambah
-  migrasi **0022** (tambah saja) yang dijalankan SESUDAH 0021, dengan pola verifikasi yang sama.
+- ✅ **D64 (kolom Ref) diputuskan Ricko 2026-10-30:** kolom baru `cash_mutations.ref` lewat migrasi **0022** (tambah
+  saja), diterapkan SESUDAH 0021 oleh perintah yang sama (`db:migrate:main` menerapkan keduanya berurutan).
 - Tim akunting diberi tahu **perubahan perilaku**: impor CSV kini lewat grid ("Buka berkas CSV"), wizard lama hilang;
   mutasi berjurnal terposting **tidak** bisa disunting walau "posting bisa diedit" menyala (balik jurnal dulu).
 
-**Kenapa migrasi DULU, kode SESUDAHNYA (jangan dibalik):** kode baru membaca `cash_mutations.urutan`/`catatan`,
+**Kenapa migrasi DULU, kode SESUDAHNYA (jangan dibalik):** kode baru membaca `cash_mutations.urutan`/`catatan`/`ref`,
 `client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules` — kode yang naik lebih dulu membuat
-`/mutasi-kas`, Settings, dan setiap Simpan mutasi gagal 500. Sebaliknya aman: 0021 hanya menambah (kolom nullable, tabel
-baru), kode lama tidak mengenalnya.
+`/mutasi-kas`, Settings, dan setiap Simpan mutasi gagal 500. Sebaliknya aman: 0021 dan 0022 hanya menambah (kolom
+nullable, tabel baru), kode lama tidak mengenalnya.
 
 1. **Ricko mengisi `.env.main`** — `DATABASE_URL` branch main, **host tanpa `-pooler`** (berkasnya di `.gitignore`).
 2. **`pnpm env:cek .env.main`** → harus `endpoint ep-small-mode-ao8ouvtp (main ✓)`; selain itu keluar kode 1.
@@ -1071,22 +1084,29 @@ baru), kode lama tidak mengenalnya.
    ```sql
    select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 21, last = 1792991626845 (0020)
    select to_regclass('public.cash_mutation_rules');                                         -- NULL
+   select column_name from information_schema.columns
+    where table_name = 'cash_mutations' and column_name in ('urutan', 'catatan', 'ref');    -- 0 baris
    select (select count(*) from clients) c, (select count(*) from master_coa) coa,
           (select count(*) from cash_mutations) cm, (select count(*) from cash_mutation_allocations) ca,
           (select count(*) from journal_entries) je, (select count(*) from journal_lines) jl,
           (select count(*) from client_accounting_settings) cas, (select count(*) from audit_events) ae;
    ```
-   Bukan 21 → **berhenti** (lebih = 0021 sudah diterapkan seseorang; kurang = main tertinggal).
-5. **`pnpm db:migrate:main`** → `env:cek .env.main` lalu `drizzle-kit migrate` dengan `.env.main`. Hasil: **22 migrasi**.
+   Bukan 21 → **berhenti** (lebih = 0021/0022 sudah diterapkan seseorang; kurang = main tertinggal).
+5. **`pnpm db:migrate:main`** → `env:cek .env.main` lalu `drizzle-kit migrate` dengan `.env.main`. Menerapkan 0021 lalu
+   0022 dalam satu jalan. Hasil: **23 migrasi**.
    Isi 0021 (dibaca, gotcha #8): `CREATE TABLE cash_mutation_rules`; `ALTER TABLE cash_mutations ADD COLUMN urutan integer,
    catatan text` + `CHECK (urutan IS NULL OR urutan >= 1)`; `ALTER TABLE client_accounting_settings ADD COLUMN
    akun_pindah_buku_id uuid` (FK master_coa **SET NULL**); FK aturan → clients CASCADE, akun lawan/akun kas/pembuat RESTRICT;
-   indeks `cash_mutation_rules_client_aktif_idx`. Tidak ada DROP, tidak ada perubahan enum, tidak ada isi ulang data.
+   indeks `cash_mutation_rules_client_aktif_idx`. Isi 0022 (`0022_ref_mutasi.sql`, satu baris): `ALTER TABLE cash_mutations
+   ADD COLUMN ref text`. Tidak ada DROP, tidak ada perubahan enum, tidak ada isi ulang data.
 6. **Verifikasi baca-saja:**
    ```sql
-   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 22, last = 1793153169380 (0021)
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 23, last = 1793358152950 (0022)
+   select created_at from drizzle.__drizzle_migrations order by created_at desc limit 2;  -- 1793358152950 (0022) · 1793153169380 (0021)
    select column_name, data_type, is_nullable from information_schema.columns
-    where table_name = 'cash_mutations' and column_name in ('urutan', 'catatan');        -- catatan text YES · urutan integer YES
+    where table_name = 'cash_mutations' and column_name in ('urutan', 'catatan', 'ref')
+    order by column_name;                                       -- catatan text YES · ref text YES · urutan integer YES
+   select count(*) from cash_mutations where ref is not null;                            -- 0
    select data_type from information_schema.columns
     where table_name = 'client_accounting_settings' and column_name = 'akun_pindah_buku_id';  -- uuid
    select conname from pg_constraint
@@ -1100,7 +1120,8 @@ baru), kode lama tidak mengenalnya.
 7. **Merge PR #1 ke `main`** (Ricko, di GitHub; PR harus hijau dan sudah keluar dari Draft). Pantau deployment Vercel
    `ngitungid` sampai **READY** dan ter-alias ke `ngid.vercel.app`.
 8. **Smoke test produksi, baca-saja** (owner/akunting — **jangan menekan Simpan, Terapkan usulan, atau Kosongkan saldo**):
-   - `/mutasi-kas` ≥ md: tab akun kas tampil, pemilih bulan, grid memuat tanpa 500; pindah tab & bulan; "Daftar" tetap jalan.
+   - `/mutasi-kas` ≥ md: tab akun kas tampil, pemilih bulan, grid memuat tanpa 500 dengan kolom **Ref**; pindah tab &
+     bulan; "Daftar" tetap jalan (kolom Ref, isinya "—").
    - Kolom Status menautkan jurnal → `/jurnal?jurnal=<id>` membuka jurnal itu (owner/akunting).
    - Settings › **Aturan Mutasi** dan Settings › Pembukuan (**Akun Pindah Buku**) terbuka tanpa galat.
    - HP (< md): daftar + "Mutasi Baru" tampil, grid tidak.
@@ -1110,8 +1131,9 @@ baru), kode lama tidak mengenalnya.
 **Data yang sudah ada di produksi:** jurnal mutasi per baris yang masih **draf** digabung ke jurnal ringkasan (D58) **saat
 kuncinya tersentuh** oleh Simpan berikutnya — bukan sekaligus saat rilis. Jurnal terposting tidak pernah diubah.
 
-**Jalan mundur:** gagal di langkah 5 → branch backup langkah 3. Deploy bermasalah di langkah 7 → promosikan deployment
-Vercel sebelumnya (0021 hanya menambah; kode lama tidak terganggu). Jangan menjalankan `db:push` ke main.
+**Jalan mundur:** gagal di langkah 5 → branch backup langkah 3 (bila 0021 sudah masuk tapi 0022 gagal, main ada di 22 —
+jangan diperbaiki tangan; pulihkan dari backup). Deploy bermasalah di langkah 7 → promosikan deployment Vercel sebelumnya
+(0021 dan 0022 hanya menambah; kode lama tidak terganggu). Jangan menjalankan `db:push` ke main.
 
 ## Checklist rilis Kunci Periode (§5.9) ke produksi (hanya Ricko)
 

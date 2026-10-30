@@ -25,8 +25,10 @@ import { fmtTanggal } from '@/lib/ymd'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const KETERANGAN_MAX = 500
-/** Kolom catatan (Konfirmasi/Reff template akuntan, 0021). Tidak ikut fingerprint. */
+/** Kolom catatan (0021). Tidak ikut fingerprint. */
 export const CATATAN_MAX = 500
+/** Kolom ref / nomor bukti (0022, D64). Tidak ikut fingerprint, tidak disalin ke jurnal. */
+export const REF_MAX = 100
 
 // ── Validasi ─────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ export type CashMutationInput = {
   saldo?: unknown
   akunLawanId?: unknown
   catatan?: unknown
+  ref?: unknown
 }
 
 export type CashMutationValue = {
@@ -51,6 +54,7 @@ export type CashMutationValue = {
   saldo: string | null
   akunLawanId: string | null
   catatan: string | null
+  ref: string | null
 }
 
 export type CashMutationCheck =
@@ -132,6 +136,12 @@ export function validateCashMutation(input: CashMutationInput): CashMutationChec
     if (catatan.length > CATATAN_MAX) errors.push(`Catatan maksimal ${CATATAN_MAX} karakter.`)
   }
 
+  let ref: string | null = null
+  if (typeof input.ref === 'string' && input.ref.trim() !== '') {
+    ref = input.ref.trim()
+    if (ref.length > REF_MAX) errors.push(`Ref maksimal ${REF_MAX} karakter.`)
+  }
+
   if (errors.length > 0) return { ok: false, errors }
 
   return {
@@ -145,6 +155,7 @@ export function validateCashMutation(input: CashMutationInput): CashMutationChec
       saldo,
       akunLawanId,
       catatan,
+      ref,
     },
   }
 }
@@ -390,7 +401,7 @@ export function buildCounterAccountJournalLines({
 // ── Kunci sunting mutasi (S7) — SATU aturan untuk server dan grid ──
 
 /** Kolom grid mutasi — sama dengan `KOLOM_GRID` di lib/mutasi-draf.ts. */
-export type KolomMutasi = 'tanggal' | 'uraian' | 'masuk' | 'keluar' | 'saldo' | 'akunLawan' | 'catatan'
+export type KolomMutasi = 'tanggal' | 'uraian' | 'masuk' | 'keluar' | 'saldo' | 'akunLawan' | 'ref' | 'catatan'
 
 /** `baris` = seluruh baris (dan hapus) terkunci; `kolom` = alasan per kolom. */
 export type KunciBaris = {

@@ -49,7 +49,7 @@ export type BarisMentah = {
   uraian: string
   nominal: NominalMentah
   saldo: string
-  /** Kolom tercetak lain (No. Ref, Cabang, Teller, …), urut kiri-ke-kanan. Dipetakan S2 lewat alias judul (mis. Reff → catatan). */
+  /** Kolom tercetak lain (No. Ref, Cabang, Teller, …), urut kiri-ke-kanan. Dipetakan S2 lewat alias judul (mis. Ref/Reff → ref). */
   lain: { judul: string; teks: string }[]
 }
 

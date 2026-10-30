@@ -16,6 +16,7 @@ import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import { GalatNominal, merahBila } from '@/components/ui/galat-nominal'
 import { NominalInput } from '@/components/ui/nominal-input'
 import { pesanGalatNominal } from '@/lib/nominal'
+import { REF_MAX } from '@/lib/cash-mutation'
 import type { AccountType } from '@/lib/coa/account-type'
 
 export interface AkunOption {
@@ -33,12 +34,20 @@ export interface MutationFormValue {
   arah: 'masuk' | 'keluar'
   nominal: string
   keterangan: string
+  /** Ref / nomor bukti (0022, D64). Opsional. */
+  ref: string
+  /**
+   * Catatan dari grid — TIDAK ditampilkan di form ini, hanya dibawa apa adanya:
+   * PATCH mengganti seluruh baris, jadi catatan yang tidak ikut terkirim akan
+   * terhapus.
+   */
+  catatan: string
   /** Kosong = mutasi masuk berstatus "belum dijurnal" — keadaan yang sah. */
   akunLawanId: string
 }
 
 export function blankMutationForm(tanggal: string, akunKasId: string): MutationFormValue {
-  return { tanggal, akunKasId, arah: 'keluar', nominal: '', keterangan: '', akunLawanId: '' }
+  return { tanggal, akunKasId, arah: 'keluar', nominal: '', keterangan: '', ref: '', catatan: '', akunLawanId: '' }
 }
 
 export function MutationFormModal({
@@ -192,6 +201,20 @@ export function MutationFormModal({
             value={form.keterangan}
             onChange={e => set('keterangan', e.target.value)}
             placeholder="Misal: TRF BRI ke supplier A"
+            style={input}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="m-ref" style={label}>
+            Ref <span style={opsional}>(opsional)</span>
+          </label>
+          <input
+            id="m-ref"
+            value={form.ref}
+            onChange={e => set('ref', e.target.value)}
+            maxLength={REF_MAX}
+            placeholder="Misal: BKK-001"
             style={input}
           />
         </div>

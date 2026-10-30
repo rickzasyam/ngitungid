@@ -173,6 +173,7 @@ export function selDariServer(b: BarisServer): SelDraf {
     keluar: b.nilai.kredit === '0.00' ? '' : nominalKeSel(b.nilai.kredit),
     saldo: nominalKeSel(b.nilai.saldo),
     akunLawan: b.akunLawanTeks,
+    ref: b.nilai.ref ?? '',
     catatan: b.nilai.catatan ?? '',
   }
 }
@@ -512,12 +513,15 @@ export function reducerGrid(s: KeadaanGrid, a: AksiGrid): KeadaanGrid {
     }
 
     case 'pulihkan': {
+      // Cadangan dari sebelum kolom Ref (0022) tidak punya `sel.ref` maupun
+      // `nilai.ref`: dilengkapi di sini, kalau tidak setiap baris tersimpan
+      // terbaca "berubah" (null ≠ undefined) dan sel Ref-nya undefined.
       const c = a.cadangan
       return {
         ...keadaanAwal(),
-        baris: c.baris,
+        baris: c.baris.map(b => ({ ...b, sel: { ...selKosong(), ...b.sel } })),
         blok: c.blok,
-        server: new Map(c.server.map(b => [b.id, b])),
+        server: new Map(c.server.map(b => [b.id, { ...b, nilai: { ...b.nilai, ref: b.nilai.ref ?? null } }])),
         urutanServer: c.urutanServer,
         berikut: c.berikut,
       }
@@ -630,6 +634,7 @@ const samaNilai = (a: NilaiDraf, b: NilaiDraf) =>
   a.saldo === b.saldo &&
   a.keterangan === b.keterangan &&
   a.catatan === b.catatan &&
+  a.ref === b.ref &&
   a.akunLawanId === b.akunLawanId
 
 const saldoKanonik = (teks: string | null): string | null => {

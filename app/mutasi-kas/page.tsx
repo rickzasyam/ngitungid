@@ -64,6 +64,8 @@ interface MutasiRow {
   id: string
   tanggal: string
   keterangan: string | null
+  ref: string | null
+  catatan: string | null
   debit: string
   kredit: string
   saldo: string | null
@@ -300,6 +302,8 @@ function MutasiKasContent() {
       arah: masuk ? 'masuk' : 'keluar',
       nominal: masuk ? r.debit : r.kredit,
       keterangan: r.keterangan ?? '',
+      ref: r.ref ?? '',
+      catatan: r.catatan ?? '',
       akunLawanId: r.akunLawanId ?? '',
     })
     setFormMode('edit')
@@ -316,6 +320,8 @@ function MutasiKasContent() {
       debit: v.arah === 'masuk' ? v.nominal : '',
       kredit: v.arah === 'keluar' ? v.nominal : '',
       keterangan: v.keterangan,
+      ref: v.ref,
+      catatan: v.catatan,
       akunLawanId: v.akunLawanId || null,
     }
     try {
@@ -681,6 +687,7 @@ function MutasiKasContent() {
                       <th scope="col" style={th}>Keterangan</th>
                       <th scope="col" style={{ ...th, textAlign: 'right' }}>Debet</th>
                       <th scope="col" style={{ ...th, textAlign: 'right' }}>Kredit</th>
+                      <th scope="col" style={th}>Ref</th>
                       {/* Judulnya sama dengan panel alokasi, bukan "Sisa":
                           angka ini soal ALOKASI, dan "Sisa" mengundang dibaca
                           sebagai "belum beres" oleh mutasi yang sudah selesai
@@ -732,6 +739,7 @@ function MutasiKasContent() {
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {Number(r.kredit) > 0 ? rupiahPersis(r.kredit) : '—'}
                             </td>
+                            <td style={{ ...td, color: 'var(--color-text-muted)' }}>{r.ref ?? '—'}</td>
                             <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {/* Mutasi yang lawannya sebuah AKUN tidak memakai
                                   alokasi sama sekali — menampilkan nominal
@@ -779,7 +787,7 @@ function MutasiKasContent() {
                           </tr>
                           {terbuka && (
                             <tr style={{ background: '#fcfcfc' }}>
-                              <td colSpan={9} style={{ padding: 0 }}>
+                              <td colSpan={10} style={{ padding: 0 }}>
                                 {detailLoading || !detail || detail.id !== r.id ? (
                                   <div className="flex items-center gap-2 px-4 py-4" style={{ color: 'var(--color-text-muted)' }}>
                                     <Loader2 className="w-4 h-4 animate-spin" />

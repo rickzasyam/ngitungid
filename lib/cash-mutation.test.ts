@@ -17,6 +17,7 @@ import {
   ALASAN_TERALOKASI,
   ALASAN_TERPOSTING,
   CATATAN_MAX,
+  REF_MAX,
   KETERANGAN_MAX,
 } from './cash-mutation'
 import { isBalanced, computeTotals } from './journal'
@@ -126,6 +127,21 @@ describe('validateCashMutation — field lain', () => {
     // tampak berbeda bagi pemeriksa duplikat.
     const m = { tanggal: '2026-09-21', debit: '1', kredit: '0', keterangan: 'TRF' }
     expect(fingerprintMutasi({ ...m, catatan: 'A' } as typeof m)).toBe(fingerprintMutasi(m))
+  })
+
+  it('ref (0022, D64): tidak wajib, kosong → NULL, > REF_MAX ditolak, TIDAK ikut fingerprint', () => {
+    const tanpa = validateCashMutation({ ...dasar, debit: '1' })
+    expect(tanpa.ok && tanpa.value.ref).toBeNull()
+    const kosong = validateCashMutation({ ...dasar, debit: '1', ref: '   ' })
+    expect(kosong.ok && kosong.value.ref).toBeNull()
+    const isi = validateCashMutation({ ...dasar, debit: '1', ref: ' BKK-001 ' })
+    expect(isi.ok && isi.value.ref).toBe('BKK-001')
+    expect(validateCashMutation({ ...dasar, debit: '1', ref: 'x'.repeat(REF_MAX) }).ok).toBe(true)
+    const panjang = validateCashMutation({ ...dasar, debit: '1', ref: 'x'.repeat(REF_MAX + 1) })
+    expect(panjang.ok).toBe(false)
+    if (!panjang.ok) expect(panjang.errors).toEqual([`Ref maksimal ${REF_MAX} karakter.`])
+    const m = { tanggal: '2026-09-21', debit: '1', kredit: '0', keterangan: 'TRF' }
+    expect(fingerprintMutasi({ ...m, ref: 'BKK-1' } as typeof m)).toBe(fingerprintMutasi(m))
   })
 
   it('akunLawanId yang bukan uuid diabaikan jadi null, tidak menggagalkan barisnya', () => {

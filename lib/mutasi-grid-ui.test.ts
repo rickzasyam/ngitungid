@@ -19,6 +19,7 @@ const KOMBO_CSS = baca('components', 'mutasi-kas', 'grid', 'kombo-akun.css')
 const KALENDER = baca('components', 'mutasi-kas', 'grid', 'kalender-sel.tsx')
 const AKUN_KAS = baca('lib', 'akun-kas-klien.ts')
 const SETTINGS = baca('app', 'settings', 'page.tsx')
+const FORM = baca('components', 'mutasi-kas', 'mutation-form-modal.tsx')
 const PKG = JSON.parse(baca('package.json')) as { dependencies: Record<string, string> }
 
 describe('grid tidak menghitung angka buku sendiri (pola CP-18)', () => {
@@ -196,9 +197,26 @@ describe('kolom & label (D63)', () => {
   })
 })
 
+describe('Ref (D64, migrasi 0022)', () => {
+  it('Daftar punya kolom Ref, colSpan rincian ikut bertambah', () => {
+    expect(PAGE).toContain('<th scope="col" style={th}>Ref</th>')
+    expect(PAGE).toContain("{r.ref ?? '—'}")
+    expect(PAGE).toContain('colSpan={10}')
+  })
+  it('form satu-satu: field Ref (maks REF_MAX); ref DAN catatan ikut terkirim — PATCH tidak mengosongkannya', () => {
+    expect(FORM).toContain('id="m-ref"')
+    expect(FORM).toContain('maxLength={REF_MAX}')
+    expect(PAGE).toContain("ref: r.ref ?? '',")
+    expect(PAGE).toContain("catatan: r.catatan ?? '',")
+    const body = PAGE.slice(PAGE.indexOf('async function simpan('), PAGE.indexOf('const url = editingId'))
+    expect(body).toContain('ref: v.ref,')
+    expect(body).toContain('catatan: v.catatan,')
+  })
+})
+
 describe('Atur kolom', () => {
   it('hanya kolom opsional yang bisa disembunyikan; kolom inti tidak', () => {
-    expect(LEMBAR).toContain("const KOLOM_OPSIONAL: readonly KolomGrid[] = ['catatan']")
+    expect(LEMBAR).toContain("const KOLOM_OPSIONAL: readonly KolomGrid[] = ['ref', 'catatan']")
     expect(LEMBAR).toContain('KOLOM_OPSIONAL.filter(k => isi.includes(k))')
   })
   it('pilihan per klien di localStorage, setiap akses dibungkus try/catch', () => {
@@ -272,6 +290,11 @@ describe('Alt+↓ & ikon di sel', () => {
   it('ikon hanya di baris aktif/hover (CSS), tidak jadi tempat berhenti Tab', () => {
     expect(CSS).toContain(".rdg-row:has(> .rdg-cell[aria-selected='true']) .gm-picu")
     expect(GRID).toContain('tabIndex={-1}')
+  })
+  it('tombol hapus rentang (PR #5, bisa di-Tab) disingkirkan dari sel — hanya pemicu yang tersisa', () => {
+    const i = CSS.indexOf('.grid-mutasi .gm-kalender button:not([aria-haspopup]) {')
+    expect(i).toBeGreaterThan(-1)
+    expect(CSS.slice(i, CSS.indexOf('}', i))).toContain('display: none !important;')
   })
 })
 

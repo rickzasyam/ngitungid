@@ -41,8 +41,8 @@ const tempel = (teks: string, periode = APRIL, sumber: 'tempel' | 'berkas' = 'te
 // ── Kolom grid (D63) ─────────────────────────────────────────
 
 describe('kolom grid: urutan sheet kas template & label Debet/Kredit (D63)', () => {
-  it('urutan: Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Catatan', () => {
-    expect(KOLOM_GRID.map(k => LABEL_KOLOM[k])).toEqual(['Tanggal', 'Nama Akun', 'Uraian', 'Debet', 'Kredit', 'Saldo', 'Catatan'])
+  it('urutan: Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Ref · Catatan', () => {
+    expect(KOLOM_GRID.map(k => LABEL_KOLOM[k])).toEqual(['Tanggal', 'Nama Akun', 'Uraian', 'Debet', 'Kredit', 'Saldo', 'Ref', 'Catatan'])
   })
   it('kunci internal tidak berubah: Debet = masuk, Kredit = keluar, Nama Akun = akunLawan', () => {
     expect(LABEL_KOLOM.masuk).toBe('Debet')
@@ -87,20 +87,27 @@ describe('judul kolom → peran, tanpa arah dari Debet/Kredit', () => {
     expect(p.filter(k => k.peran === 'nominal').map(k => k.petunjuk)).toEqual(['keluar', 'masuk'])
   })
 
-  it('kolom tambahan (No. Ref, Cabang) TIDAK menggeser apa pun', () => {
+  it('kolom tambahan (Cabang) TIDAK menggeser apa pun; No. Ref di tengah jadi Ref', () => {
     const h = ok(
       tempel('Tanggal\tNo. Ref\tUraian\tCabang\tDebet\tKredit\tSaldo\n05/04/2026\tR-1\tSetoran\t0998\t\t250.000\t1.250.000\n')
     )
-    expect(h.baris[0].sel).toMatchObject({ tanggal: '2026-04-05', uraian: 'Setoran', saldo: '1.250.000' })
+    expect(h.baris[0].sel).toMatchObject({ tanggal: '2026-04-05', uraian: 'Setoran', saldo: '1.250.000', ref: 'R-1', catatan: '' })
     expect(h.baris[0].sel.keluar).toBe('250.000')
   })
 
-  it('catatan: alias Reff / Ref / Catatan → kolom catatan, bukan uraian', () => {
-    for (const judul of ['Reff', 'Ref', 'Catatan']) {
+  it('ref (D64): alias Ref / Reff / No. Ref / No Ref / No Bukti / Referensi → kolom Ref, bukan Catatan/Uraian', () => {
+    for (const judul of ['Ref', 'Reff', 'No. Ref', 'No Ref', 'No Bukti', 'Referensi', 'NO. BUKTI']) {
       const h = ok(tempel(`Tanggal\tUraian\tMasuk\t${judul}\n05/04/2026\tSetoran\t100\tOK-${judul}\n`))
-      expect(h.baris[0].sel.catatan, judul).toBe(`OK-${judul}`)
+      expect(h.pemetaan[3].peran, judul).toBe('ref')
+      expect(h.baris[0].sel.ref, judul).toBe(`OK-${judul}`)
+      expect(h.baris[0].sel.catatan, judul).toBe('')
       expect(h.baris[0].sel.uraian, judul).toBe('Setoran')
     }
+  })
+
+  it('catatan: alias Catatan → kolom Catatan; Ref dan Catatan dalam satu berkas tidak tertukar', () => {
+    const h = ok(tempel('Tanggal\tUraian\tMasuk\tCatatan\tReff\n05/04/2026\tSetoran\t100\tsudah cek\tBKM-7\n'))
+    expect(h.baris[0].sel).toMatchObject({ uraian: 'Setoran', catatan: 'sudah cek', ref: 'BKM-7' })
   })
 
   it('kolom Konfirmasi TIDAK dipakai (D65) — diabaikan, tidak masuk Catatan maupun Uraian', () => {
@@ -207,6 +214,7 @@ describe('lima kelas baris dilewati — sebagai DAFTAR beralasan, bukan galat', 
       penanda: '',
       saldo: '',
       akunLawan: '',
+      ref: '',
       catatan: '',
       ...o,
     }
@@ -313,11 +321,11 @@ describe('PDF (HalamanMentah) lewat jalur yang sama dengan tempelan', () => {
     ])
   })
 
-  it('transaksi membawa nomor halaman, Reff → catatan, tahun dari periode', () => {
+  it('transaksi membawa nomor halaman, Reff → ref (D64), tahun dari periode', () => {
     const transaksi = h.baris.filter(b => b.sel.uraian !== 'teks nyasar')
-    expect(transaksi.map(b => [b.halaman, b.sel.tanggal, b.sel.catatan])).toEqual([
-      [1, '2026-10-02', 'R-1'],
-      [2, '2026-10-03', ''],
+    expect(transaksi.map(b => [b.halaman, b.sel.tanggal, b.sel.ref, b.sel.catatan])).toEqual([
+      [1, '2026-10-02', 'R-1', ''],
+      [2, '2026-10-03', '', ''],
     ])
   })
 
@@ -512,7 +520,7 @@ describe('validasiBaris — galat per sel, lalu validateCashMutation sebagai hak
   const sel = (o: Partial<SelDraf>): SelDraf => ({ ...selKosong(), tanggal: '05/04/2026', keluar: '6.500', ...o })
 
   it('baris sah → nilai siap kirim (debit = MASUK, D36)', () => {
-    const r = validasiBaris(sel({ masuk: '1.000', keluar: '', akunLawan: '6-2000', catatan: 'Reff 1', saldo: '-500' }), k)
+    const r = validasiBaris(sel({ masuk: '1.000', keluar: '', akunLawan: '6-2000', catatan: 'cek 1', ref: ' BKK-01 ', saldo: '-500' }), k)
     expect(r.galat).toEqual({})
     expect(r.nilai).toEqual({
       tanggal: '2026-04-05',
@@ -520,9 +528,18 @@ describe('validasiBaris — galat per sel, lalu validateCashMutation sebagai hak
       kredit: '0.00',
       saldo: '-500.00',
       keterangan: null,
-      catatan: 'Reff 1',
+      catatan: 'cek 1',
+      ref: 'BKK-01',
       akunLawanId: LAWAN,
     })
+  })
+
+  it('Ref tidak wajib (kosong → null); lebih dari 100 karakter = galat di sel Ref', () => {
+    expect(validasiBaris(sel({}), k).nilai?.ref).toBeNull()
+    const r = validasiBaris(sel({ ref: 'x'.repeat(101) }), k)
+    expect(r.galat.ref).toBe('Ref maksimal 100 karakter.')
+    expect(r.nilai).toBeNull()
+    expect(validasiBaris(sel({ ref: 'x'.repeat(100) }), k).galat).toEqual({})
   })
 
   it('D60/D66: tanggal kosong WAJIB diisi; di luar bulan grid = galat "Tanggal di luar April 2026"', () => {

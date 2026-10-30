@@ -132,6 +132,11 @@ describe('rencanakanSimpanMutasi — semua atau tidak sama sekali', () => {
     expect(h.jenis).toBe('tolak')
   })
 
+  it('Ref (0022, D64) lebih dari 100 karakter → galat sel ref', async () => {
+    const h = await rencanakanSimpanMutasi(minta({ baru: [baris({ kunci: 'a', ref: 'x'.repeat(101) })] }), 'u')
+    expect(h.jenis === 'tolak' && h.body.galat).toEqual([{ kunci: 'a', kolom: 'ref', pesan: 'Ref maksimal 100 karakter.', jenis: 'validasi' }])
+  })
+
   it('akun lawan = akun kas → galat sel akun lawan', async () => {
     const h = await rencanakanSimpanMutasi(minta({ baru: [baris({ kunci: 'a', akunLawanId: KAS })] }), 'u')
     expect(h.jenis === 'tolak' && (h.body.galat as { kolom: string }[]).map(g => g.kolom)).toContain('akunLawan')

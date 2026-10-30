@@ -30,7 +30,7 @@ const baris = (kunci: string, sel: Partial<SelDraf>, o: Partial<BarisGrid> = {})
 const server = (id: string, o: Partial<BarisServer['nilai']> = {}, kunci = TANPA_KUNCI): BarisServer => ({
   id,
   updatedAt: '2026-10-20T00:00:00.000Z',
-  nilai: { tanggal: '2026-10-05', debit: '0.00', kredit: '100.00', saldo: null, keterangan: 'TRF', catatan: null, akunLawanId: null, ...o },
+  nilai: { tanggal: '2026-10-05', debit: '0.00', kredit: '100.00', saldo: null, keterangan: 'TRF', catatan: null, ref: null, akunLawanId: null, ...o },
   akunLawanTeks: '',
   terkunci: kunci,
 })
@@ -159,13 +159,14 @@ describe('rencanaTempel — persegi sel atau blok transaksi', () => {
     expect(rencanaTempel('05/10/2026\t6-1001\tA\n', { kolom: 'tanggal' }, OKT).jenis).toBe('sel')
   })
   it('blok tanpa judul dipetakan POSISIONAL mengikuti urutan kolom grid (D63)', () => {
-    const t = rencanaTempel('05/10/2026\t6-1001\tGaji\t\t2.000\t8.000\tcatat\n', { kolom: 'tanggal' }, OKT)
+    const t = rencanaTempel('05/10/2026\t6-1001\tGaji\t\t2.000\t8.000\tBKK-3\tcatat\n', { kolom: 'tanggal' }, OKT)
     expect(t.jenis === 'blok' && t.hasil.baris[0].sel).toMatchObject({
       tanggal: '2026-10-05',
       akunLawan: '6-1001',
       uraian: 'Gaji',
       keluar: '2.000',
       saldo: '8.000',
+      ref: 'BKK-3',
       catatan: 'catat',
     })
   })
@@ -222,6 +223,20 @@ describe('pulihkan (D51) — draf kembali dengan snapshot server LAMA', () => {
     const d = diffKeBatch(s2, buatValidator(konteks, s2.server))
     expect(d.ubah).toEqual([expect.objectContaining({ id: 'm1', updatedAt: '2026-10-20T00:00:00.000Z', keterangan: 'diubah' })])
     expect(s2.lalu).toEqual([])
+  })
+
+  it('cadangan dari sebelum kolom Ref (0022): dilengkapi, baris yang tidak disentuh tidak terbaca berubah', () => {
+    const konteks = { periode: OKT, akunKasId: KAS, akun: indeks, terkunciSampai: null }
+    const s1 = reducerGrid(keadaanAwal([server('m1'), server('m2')]), { jenis: 'ubahSel', kunci: 'm1', kolom: 'uraian', nilai: 'diubah' })
+    const c = JSON.parse(JSON.stringify(potretCadangan(s1)))
+    // Bentuk cadangan lama: tanpa sel.ref dan nilai.ref.
+    for (const b of c.baris) delete b.sel.ref
+    for (const b of c.server) delete b.nilai.ref
+    const s2 = reducerGrid(keadaanAwal(), { jenis: 'pulihkan', cadangan: c })
+    expect(s2.baris.map(b => b.sel.ref)).toEqual(['', ''])
+    const d = diffKeBatch(s2, buatValidator(konteks, s2.server))
+    expect(d.ubah.map(u => u.id)).toEqual(['m1'])
+    expect(d.ubah[0].ref).toBeNull()
   })
 })
 

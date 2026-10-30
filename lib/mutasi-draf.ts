@@ -26,7 +26,7 @@
 import { normalizeHeader, parseCsv } from '@/lib/csv/mutasi-kas'
 import { bacaNominal, pesanGalatNominal } from '@/lib/nominal'
 import { fromMinorUnits, toMinorUnits } from '@/lib/journal'
-import { CATATAN_MAX, KETERANGAN_MAX, validateCashMutation } from '@/lib/cash-mutation'
+import { CATATAN_MAX, KETERANGAN_MAX, REF_MAX, validateCashMutation } from '@/lib/cash-mutation'
 import { bacaTanggalGrid, bulanGridDari, normalisasiTanggal, tampakTanggal, urutanBlok } from '@/lib/mutasi-tanggal'
 import type { BarisMentah, HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 
@@ -41,7 +41,7 @@ import type { BarisMentah, HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-
  * Kunci internal TETAP `masuk`/`keluar`/`akunLawan` (kontrak draf, cadangan
  * IndexedDB, galat server); yang berubah hanya labelnya.
  */
-export const KOLOM_GRID = ['tanggal', 'akunLawan', 'uraian', 'masuk', 'keluar', 'saldo', 'catatan'] as const
+export const KOLOM_GRID = ['tanggal', 'akunLawan', 'uraian', 'masuk', 'keluar', 'saldo', 'ref', 'catatan'] as const
 export type KolomGrid = (typeof KOLOM_GRID)[number]
 
 /**
@@ -57,6 +57,7 @@ export const LABEL_KOLOM: Record<KolomGrid, string> = {
   masuk: 'Debet',
   keluar: 'Kredit',
   saldo: 'Saldo',
+  ref: 'Ref',
   catatan: 'Catatan',
 }
 
@@ -64,7 +65,7 @@ export const LABEL_KOLOM: Record<KolomGrid, string> = {
 export type SelDraf = Record<KolomGrid, string>
 
 export function selKosong(): SelDraf {
-  return { tanggal: '', uraian: '', masuk: '', keluar: '', saldo: '', akunLawan: '', catatan: '' }
+  return { tanggal: '', uraian: '', masuk: '', keluar: '', saldo: '', akunLawan: '', ref: '', catatan: '' }
 }
 
 /** Rentang periode grid, inklusif, 'YYYY-MM-DD'. Memutus makna tanggal ambigu. */
@@ -83,6 +84,7 @@ export type Peran =
   | 'penanda'
   | 'saldo'
   | 'akunLawan'
+  | 'ref'
   | 'catatan'
   | 'abaikan'
 
@@ -194,15 +196,19 @@ const JUDUL: Record<string, Alias> = {
   'coa': { peran: 'akunLawan' },
   'kode coa': { peran: 'akunLawan' },
   'account': { peran: 'akunLawan' },
-  // catatan. "Ref"/"Reff" template masih ke Catatan selama kolom Ref belum
-  // punya field sendiri (D64 menunggu keputusan Ricko). "Konfirmasi" TIDAK
-  // dipakai (D65) — tanpa alias, jadi kolomnya diabaikan.
+  // ref / nomor bukti — kolom sendiri sejak 0022 (D64). "No. Ref" dan
+  // "No Ref" sama-sama jadi "no ref" setelah `normalizeHeader`.
+  'ref': { peran: 'ref' },
+  'reff': { peran: 'ref' },
+  'no ref': { peran: 'ref' },
+  'no bukti': { peran: 'ref' },
+  'referensi': { peran: 'ref' },
+  // catatan. "Konfirmasi" TIDAK dipakai (D65) — tanpa alias, jadi kolomnya
+  // diabaikan.
   'catatan': { peran: 'catatan' },
-  'reff': { peran: 'catatan' },
-  'ref': { peran: 'catatan' },
 }
 
-/** Peran satu judul kolom; `abaikan` bila tidak dikenali (No. Ref, Cabang, …). */
+/** Peran satu judul kolom; `abaikan` bila tidak dikenali (Cabang, Teller, …). */
 export function peranJudul(judul: string): PeranKolom {
   const a = JUDUL[normalizeHeader(judul)]
   if (!a) return { peran: 'abaikan', judul }
@@ -484,6 +490,7 @@ export type BarisTerpetakan = {
   penanda: string
   saldo: string
   akunLawan: string
+  ref: string
   catatan: string
   /** Seluruh sel apa adanya — untuk deteksi judul berulang & daftar dilewati. */
   semua: string[]
@@ -693,6 +700,7 @@ export function bacaBlok(opsi: OpsiBacaBlok): HasilBacaBlok {
   const iPenanda = indeksPeran('penanda')
   const iSaldo = indeksPeran('saldo')
   const iAkun = indeksPeran('akunLawan')
+  const iRef = indeksPeran('ref')
   const iCatatan = indeksPeran('catatan')
   const iNominal = pemetaan.flatMap((p, i) => (p.peran === 'nominal' ? [i] : [])).slice(0, 2)
   const satuKolom = iNominal.length === 1
@@ -726,6 +734,7 @@ export function bacaBlok(opsi: OpsiBacaBlok): HasilBacaBlok {
       penanda: ambil(r, iPenanda),
       saldo: rapikanSpasi(ambil(r, iSaldo)),
       akunLawan: rapikanSpasi(ambil(r, iAkun)),
+      ref: rapikanSpasi(ambil(r, iRef)),
       catatan: rapikanSpasi(ambil(r, iCatatan)),
       semua: [...r],
     }
@@ -741,6 +750,7 @@ export function bacaBlok(opsi: OpsiBacaBlok): HasilBacaBlok {
       const sebelum = calon[calon.length - 1]
       if (sebelum) {
         sebelum.b.uraian = rapikanSpasi(`${sebelum.b.uraian} ${b.uraian}`)
+        if (b.ref !== '') sebelum.b.ref = rapikanSpasi(`${sebelum.b.ref} ${b.ref}`)
         if (b.catatan !== '') sebelum.b.catatan = rapikanSpasi(`${sebelum.b.catatan} ${b.catatan}`)
         dilewati.push({ nomor: nomorDari(i), halaman: halamanDari(i), kelas, alasan: `Digabung ke uraian baris ${sebelum.nomor}.`, teks: gabung(r) })
         continue
@@ -765,6 +775,7 @@ export function bacaBlok(opsi: OpsiBacaBlok): HasilBacaBlok {
     sel.uraian = c.b.uraian
     sel.saldo = c.b.saldo
     sel.akunLawan = c.b.akunLawan
+    sel.ref = c.b.ref
     sel.catatan = c.b.catatan
 
     const dariKolom = bacaKolomPenanda(c.b.penanda)
@@ -809,8 +820,9 @@ export function belahTempelan(teks: string): { baris: string[][]; nomor: number[
 /**
  * `HalamanMentah[]` dari X4/X5 → masukan `bacaBlok`, TANPA interpretasi:
  * semua sel tetap teks. Kolomnya tetap: Tanggal · Uraian · nominal pertama ·
- * nominal kedua · penanda · Saldo · Catatan. Kolom `lain` yang judulnya alias
- * catatan (Reff/Ref/Konfirmasi/Catatan) jadi catatan; sisanya diabaikan.
+ * nominal kedua · penanda · Saldo · Ref · Catatan. Kolom `lain` yang judulnya
+ * alias ref (Ref/Reff/No. Ref/No Bukti/Referensi) jadi ref, alias catatan jadi
+ * catatan; sisanya diabaikan.
  *
  * Judul kolom yang tercetak ulang dan baris SALDO AWAL tiap halaman tetap
  * dikirim sebagai baris biasa (kontrak) — `kelasBaris` yang melewatkannya;
@@ -841,14 +853,17 @@ export function dariHalamanMentah(halaman: readonly HalamanMentah[]): Pick<
     ...(judul2 !== '' || contoh?.nominal.bentuk === 'dua-kolom' ? [peranNominal(judul2)] : [{ peran: 'abaikan' as const, judul: '' }]),
     { peran: 'penanda', judul: '' },
     { peran: 'saldo', judul: 'Saldo' },
+    { peran: 'ref', judul: 'Ref' },
     { peran: 'catatan', judul: 'Catatan' },
   ]
   const baris = semua.map(b => {
     const n = b.nominal
-    const catatan = b.lain.find(l => peranJudul(l.judul).peran === 'catatan')?.teks ?? ''
+    const lain = (peran: Peran) => b.lain.find(l => peranJudul(l.judul).peran === peran)?.teks ?? ''
+    const ref = lain('ref')
+    const catatan = lain('catatan')
     return n.bentuk === 'dua-kolom'
-      ? [b.tanggal, b.uraian, n.pertama.teks, n.kedua.teks, '', b.saldo, catatan]
-      : [b.tanggal, b.uraian, n.teks, '', n.penanda, b.saldo, catatan]
+      ? [b.tanggal, b.uraian, n.pertama.teks, n.kedua.teks, '', b.saldo, ref, catatan]
+      : [b.tanggal, b.uraian, n.teks, '', n.penanda, b.saldo, ref, catatan]
   })
   return {
     baris,
@@ -874,6 +889,7 @@ export type NilaiDraf = {
   saldo: string | null
   keterangan: string | null
   catatan: string | null
+  ref: string | null
   akunLawanId: string | null
 }
 
@@ -935,6 +951,8 @@ export function validasiBaris(sel: SelDraf, k: KonteksValidasi): HasilValidasi {
   if (uraian.length > KETERANGAN_MAX) galat.uraian = `Uraian maksimal ${KETERANGAN_MAX} karakter.`
   const catatan = sel.catatan.trim()
   if (catatan.length > CATATAN_MAX) galat.catatan = `Catatan maksimal ${CATATAN_MAX} karakter.`
+  const ref = sel.ref.trim()
+  if (ref.length > REF_MAX) galat.ref = `Ref maksimal ${REF_MAX} karakter.`
 
   if (Object.keys(galat).length > 0) return { galat, galatBaris: [], nilai: null }
 
@@ -947,6 +965,7 @@ export function validasiBaris(sel: SelDraf, k: KonteksValidasi): HasilValidasi {
     saldo: saldo.status === 'ok' ? fromMinorUnits(saldo.minor) : null,
     akunLawanId,
     catatan,
+    ref,
   })
   if (!hakim.ok) return { galat, galatBaris: hakim.errors, nilai: null }
   const v = hakim.value
@@ -960,6 +979,7 @@ export function validasiBaris(sel: SelDraf, k: KonteksValidasi): HasilValidasi {
       saldo: v.saldo,
       keterangan: v.keterangan,
       catatan: v.catatan,
+      ref: v.ref,
       akunLawanId: v.akunLawanId,
     },
   }

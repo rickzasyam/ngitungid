@@ -135,6 +135,7 @@ export async function POST(req: Request) {
     saldo: raw.saldo,
     akunLawanId: raw.akunLawanId,
     catatan: raw.catatan,
+    ref: raw.ref,
   })
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
@@ -177,6 +178,7 @@ export async function POST(req: Request) {
           saldo: check.value.saldo,
           keterangan: check.value.keterangan,
           catatan: check.value.catatan,
+          ref: check.value.ref,
           akunLawanId: check.value.akunLawanId,
           urutan: null,
           asal: 'ketik',

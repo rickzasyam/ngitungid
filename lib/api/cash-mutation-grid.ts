@@ -110,6 +110,7 @@ export async function muatGridMutasi(opts: {
       tanggal: b.tanggal,
       keterangan: b.keterangan,
       catatan: b.catatan,
+      ref: b.ref,
       urutan: b.urutan,
       debit: b.debit,
       kredit: b.kredit,

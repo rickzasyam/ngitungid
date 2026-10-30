@@ -1028,6 +1028,13 @@ export const cashMutations = pgTable(
     // dan TIDAK ikut fingerprint: catatan yang ditambahkan belakangan tidak
     // boleh membuat baris yang sama tampak berbeda bagi pemeriksa duplikat.
     catatan: text('catatan'),
+    // ── Migrasi 0022 (D64) ─────────────────────────────────────
+    // Ref / nomor bukti template akuntan ("Ref", "Reff", "No. Ref", "No Bukti").
+    // Tidak wajib, ≤ 100 karakter (validateCashMutation), kosong = NULL. Sama
+    // dengan `catatan`: TIDAK ikut fingerprint dan TIDAK disalin ke jurnal
+    // (keputusan Ricko 2026-10-30) — jurnal mutasi adalah ringkasan banyak
+    // baris (D58), satu ref per jurnal tidak bermakna.
+    ref: text('ref'),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),

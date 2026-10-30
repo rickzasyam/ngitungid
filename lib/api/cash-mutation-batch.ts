@@ -58,6 +58,8 @@ export type MasukanBaru = {
   saldo: unknown
   keterangan: unknown
   catatan: unknown
+  /** Ref / nomor bukti (0022, D64) — opsional: pemanggil lama tanpa ref = NULL. */
+  ref?: unknown
   akunLawanId: unknown
   urutan: unknown
   asal: unknown
@@ -74,6 +76,7 @@ export type MasukanUbah = {
   saldo: unknown
   keterangan: unknown
   catatan: unknown
+  ref?: unknown
   akunLawanId: unknown
   saldoDikosongkan: unknown
   /** Hanya form satu-satu: memindah mutasi ke akun kas lain. Grid selalu satu akun. */
@@ -139,6 +142,7 @@ function kolomDariGalat(pesan: string): string | undefined {
   if (p.startsWith('saldo')) return 'saldo'
   if (p.startsWith('keterangan')) return 'uraian'
   if (p.startsWith('catatan')) return 'catatan'
+  if (p.startsWith('ref')) return 'ref'
   if (p.startsWith('mutasi')) return 'masuk'
   return undefined
 }
@@ -283,6 +287,7 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
             kredit: cashMutations.kredit,
             saldo: cashMutations.saldo,
             catatan: cashMutations.catatan,
+            ref: cashMutations.ref,
             journalId: cashMutations.journalId,
             updatedAt: cashMutations.updatedAt,
           })
@@ -462,6 +467,7 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
           kredit: b.v.kredit,
           saldo: b.v.saldo,
           catatan: b.v.catatan,
+          ref: b.v.ref,
           fingerprint: fpBaru[i + j],
           importId: b.blok ? (importPerBlok.get(b.blok) ?? null) : null,
           akunLawanId: b.v.akunLawanId,
@@ -476,7 +482,7 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
     const tuples = sql.join(
       ubah.slice(i, i + 1_000).map(
         (u, j) =>
-          sql`(${u.id}::uuid, ${u.v.tanggal}::date, ${u.v.akunKasId}::uuid, ${u.v.keterangan}::text, ${u.v.debit}::numeric, ${u.v.kredit}::numeric, ${u.v.saldo}::numeric, ${u.v.akunLawanId}::uuid, ${u.v.catatan}::text, ${fpUbah[i + j]}::text)`
+          sql`(${u.id}::uuid, ${u.v.tanggal}::date, ${u.v.akunKasId}::uuid, ${u.v.keterangan}::text, ${u.v.debit}::numeric, ${u.v.kredit}::numeric, ${u.v.saldo}::numeric, ${u.v.akunLawanId}::uuid, ${u.v.catatan}::text, ${u.v.ref}::text, ${fpUbah[i + j]}::text)`
       ),
       sql`, `
     )
@@ -485,8 +491,8 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
         update ${cashMutations} as cm
         set tanggal = v.tanggal, akun_kas_id = v.akun_kas_id, keterangan = v.keterangan,
             debit = v.debit, kredit = v.kredit, saldo = v.saldo, akun_lawan_id = v.akun_lawan_id,
-            catatan = v.catatan, fingerprint = v.fingerprint, updated_at = now()
-        from (values ${tuples}) as v(id, tanggal, akun_kas_id, keterangan, debit, kredit, saldo, akun_lawan_id, catatan, fingerprint)
+            catatan = v.catatan, ref = v.ref, fingerprint = v.fingerprint, updated_at = now()
+        from (values ${tuples}) as v(id, tanggal, akun_kas_id, keterangan, debit, kredit, saldo, akun_lawan_id, catatan, ref, fingerprint)
         where cm.id = v.id
       `)
     )
@@ -512,8 +518,8 @@ export async function rencanakanSimpanMutasi(p: PermintaanSimpan, userId: string
       ...base,
       entityId: u.id,
       event: 'updated',
-      nilaiSebelum: { tanggal: r.tanggal, keterangan: r.keterangan, debit: r.debit, kredit: r.kredit, saldo: r.saldo, catatan: r.catatan, akunKasId: r.akunKasId, akunLawanId: r.akunLawanId },
-      nilaiSesudah: { tanggal: u.v.tanggal, keterangan: u.v.keterangan, debit: u.v.debit, kredit: u.v.kredit, saldo: u.v.saldo, catatan: u.v.catatan, akunKasId: u.v.akunKasId, akunLawanId: u.v.akunLawanId },
+      nilaiSebelum: { tanggal: r.tanggal, keterangan: r.keterangan, debit: r.debit, kredit: r.kredit, saldo: r.saldo, catatan: r.catatan, ref: r.ref, akunKasId: r.akunKasId, akunLawanId: r.akunLawanId },
+      nilaiSesudah: { tanggal: u.v.tanggal, keterangan: u.v.keterangan, debit: u.v.debit, kredit: u.v.kredit, saldo: u.v.saldo, catatan: u.v.catatan, ref: u.v.ref, akunKasId: u.v.akunKasId, akunLawanId: u.v.akunLawanId },
     })
     if (u.saldoDikosongkan !== null && u.v.saldo === null && r.saldo !== null) {
       ev.push({ ...base, entityId: u.id, event: 'saldo_dikosongkan', nilaiSebelum: { saldo: r.saldo } })
