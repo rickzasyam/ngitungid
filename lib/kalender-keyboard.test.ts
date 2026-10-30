@@ -66,3 +66,20 @@ describe('hariAktif — satu sel Tab per bulan (roving tabindex)', () => {
     expect(hariAktif(2027, 9, [t('2026-10-20')])).toBe(1)
   })
 })
+
+// DatePicker min/max (2026-10-30): sel di luar batas mati dan tidak bisa difokus.
+describe('hariAktif dengan batas', () => {
+  const batas = { min: '2026-10-10', max: '2026-10-25' }
+
+  it('kandidat di luar batas dilewati; pengganti = tanggal pertama yang boleh, bukan tanggal 1', () => {
+    expect(hariAktif(2026, 9, [t('2026-10-05'), t('2026-10-30'), t('2026-10-12')], batas)).toBe(12)
+    expect(hariAktif(2026, 9, [t('2026-10-05'), t('2026-10-30')], batas)).toBe(10)
+    expect(hariAktif(2026, 9, [t('2026-10-25')], { max: '2026-10-25' })).toBe(25)
+  })
+
+  it('tanpa batas: perilaku DateRangePicker tidak berubah', () => {
+    expect(hariAktif(2026, 9, [t('2026-10-05')])).toBe(5)
+    expect(hariAktif(2026, 9, [t('2026-10-05')], {})).toBe(5)
+    expect(hariAktif(2026, 10, [])).toBe(1)
+  })
+})

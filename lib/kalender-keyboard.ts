@@ -1,4 +1,4 @@
-// Navigasi keyboard kalender DateRangePicker — MURNI (tanpa React, tanpa DOM),
+// Navigasi keyboard kalender (DateRangePicker & DatePicker, panel bersama) — MURNI (tanpa React, tanpa DOM),
 // supaya bisa diuji di environment node seperti lib lain.
 //
 // Pola "date grid" WAI-ARIA APG: panah kiri/kanan = ±1 hari, atas/bawah = ±1
@@ -7,6 +7,9 @@
 // Semua tanggal adalah Date tengah malam LOKAL (lib/ymd.ts) dan dibentuk lewat
 // konstruktor (tahun, bulan, tanggal) — tidak ada aritmetika milidetik, jadi
 // pergantian jam musim panas tidak menggeser hari.
+
+import { dalamBatas, type BatasKalender } from './kalender-batas'
+import { localDateToYmd } from './ymd'
 
 /** Kolom kalender: Senin = 0 … Minggu = 6. */
 const kolomMinggu = (d: Date) => (d.getDay() + 6) % 7
@@ -52,10 +55,17 @@ export function tujuanTombol(tanggal: Date, key: string, shift = false): Date | 
  * pemanggil (tanggal yang sedang difokus, tanggal awal terpilih, hari ini) —
  * selain itu tanggal 1. Tiap bulan yang tampil punya tepat satu, jadi kalender
  * tetap terjangkau Tab walau bulan kedua disembunyikan di layar sempit.
+ *
+ * Dengan `batas` (DatePicker min/max): sel di luar batas MATI dan tidak bisa
+ * difokus, jadi kandidat di luar batas dilewati dan penggantinya tanggal
+ * pertama yang boleh dipilih — bukan tanggal 1 yang mungkin mati.
  */
-export function hariAktif(tahun: number, bulan: number, kandidat: readonly (Date | null | undefined)[]): number {
+export function hariAktif(tahun: number, bulan: number, kandidat: readonly (Date | null | undefined)[], batas?: BatasKalender): number {
+  const boleh = (tanggal: number) => dalamBatas(localDateToYmd(new Date(tahun, bulan, tanggal)), batas)
   for (const k of kandidat) {
-    if (k && k.getFullYear() === tahun && k.getMonth() === bulan) return k.getDate()
+    if (k && k.getFullYear() === tahun && k.getMonth() === bulan && boleh(k.getDate())) return k.getDate()
   }
+  const akhir = new Date(tahun, bulan + 1, 0).getDate()
+  for (let t = 1; t <= akhir; t++) if (boleh(t)) return t
   return 1
 }
