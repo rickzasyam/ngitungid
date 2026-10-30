@@ -5,6 +5,7 @@ import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import {
   cashMutationImports,
+  cashMutationRules,
   cashMutations,
   clientAccountingSettings,
   clients,
@@ -356,23 +357,60 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .select({
             clientId: clientAccountingSettings.clientId,
             akunPpnMasukanId: clientAccountingSettings.akunPpnMasukanId,
+            akunPindahBukuId: clientAccountingSettings.akunPindahBukuId,
           })
           .from(clientAccountingSettings)
           .where(eq(clientAccountingSettings.clientId, id))
 
-  const { plan, relinks, journalRelinks, invoiceRelinks, settingRelinks, mutationRelinks } =
-    buildReplacePlan({
-      oldAccounts,
-      newKodeToId,
-      ambiguousKode: ambiguousKode ?? [],
-      lines,
-      history,
-      reports: reportRows,
-      journalLines: journalRows,
-      invoiceAccounts,
-      accountingSettings: settingRows,
-      mutationAccounts,
-    })
+  // ── Aturan mutasi (S1, D57): DUA kolom akun, keduanya memblokir ──────
+  // Alasannya di AffectedRuleAccount — `akun_kas_id` NULL berarti "semua akun
+  // kas", jadi memutusnya memperluas aturan diam-diam. Pola ikut dibaca supaya
+  // pesan blokir menyebut ATURAN MANA.
+  const ruleRows =
+    oldIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: cashMutationRules.id,
+            pola: cashMutationRules.pola,
+            akunLawanId: cashMutationRules.akunLawanId,
+            akunKasId: cashMutationRules.akunKasId,
+          })
+          .from(cashMutationRules)
+          .where(eq(cashMutationRules.clientId, id))
+
+  const ruleAccounts = ruleRows.flatMap(r =>
+    (
+      [
+        ['lawan', r.akunLawanId],
+        ['kas', r.akunKasId],
+      ] as const
+    )
+      .filter((pair): pair is readonly ['lawan' | 'kas', string] => pair[1] !== null)
+      .map(([kolom, masterCoaId]) => ({ ruleId: r.id, pola: r.pola, kolom, masterCoaId }))
+  )
+
+  const {
+    plan,
+    relinks,
+    journalRelinks,
+    invoiceRelinks,
+    settingRelinks,
+    mutationRelinks,
+    ruleRelinks,
+  } = buildReplacePlan({
+    oldAccounts,
+    newKodeToId,
+    ambiguousKode: ambiguousKode ?? [],
+    lines,
+    history,
+    reports: reportRows,
+    journalLines: journalRows,
+    invoiceAccounts,
+    accountingSettings: settingRows,
+    mutationAccounts,
+    ruleAccounts,
+  })
 
   if (dryRun) {
     // TETAP 200 walau ada yang memblokir: layar konfirmasi butuh `impact` untuk
@@ -462,6 +500,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
+  // ── Blokir: aturan mutasi menahan akun yang kodenya hilang (S1) ─────
+  //
+  // Kedua kolomnya FK RESTRICT, jadi tanpa blokir ini penggantiannya tetap
+  // gagal — tapi di DB, dengan galat yang tidak menyebut aturan mana. Di sini
+  // polanya disebut supaya akunting tahu aturan mana yang harus diubah dulu.
+  if (plan.ruleBlocked.length > 0) {
+    const labelKolom: Record<string, string> = {
+      lawan: 'akun lawan',
+      kas: 'akun kas',
+    }
+    return NextResponse.json(
+      {
+        error: 'Master COA tidak bisa diganti: ada akun terpakai aturan mutasi yang hilang di file baru.',
+        details: plan.ruleBlocked.map(
+          b =>
+            `Aturan mutasi "${b.pola}" memakai ${labelKolom[b.kolom] ?? b.kolom} ${b.kode}, yang tidak ada di file baru.`
+        ),
+        impact: plan,
+      },
+      { status: 409 }
+    )
+  }
+
   // ── Tulis: satu batch, urutan wajib dijaga ──────────────────────────
   const now = new Date()
   const statements: BatchItem<'pg'>[] = []
@@ -488,7 +549,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Invoice ikut menentukan jalurnya: keempat kolom akunnya juga FK RESTRICT,
   // jadi DELETE master_coa akan ditolak selama sebuah invoice masih menunjuk
   // ke sana — persis masalah yang sama dengan baris jurnal.
-  if (journalRows.length === 0 && invoiceAccounts.length === 0 && mutationAccounts.length === 0) {
+  //
+  // Aturan mutasi (FK restrict) dan setelan klien juga menentukan jalurnya.
+  // Setelan ber-FK SET NULL, jadi di jalur hapus-langsung ia tidak menahan
+  // DELETE — tapi DIPUTUS oleh FK sebelum sempat disambung ke id barunya,
+  // walau kodenya bertahan. Karena itu setelan yang punya relink juga memakai
+  // jalur ganti-nama di bawah, satu-satunya jalur yang menyambungnya.
+  if (
+    journalRows.length === 0 &&
+    invoiceAccounts.length === 0 &&
+    mutationAccounts.length === 0 &&
+    ruleAccounts.length === 0 &&
+    settingRelinks.length === 0
+  ) {
     // Jalur lama, tidak berubah sedikit pun: hapus dulu, lalu sisipkan.
     statements.push(db.delete(masterCoa).where(eq(masterCoa.clientId, id)))
     if (values.length > 0) statements.push(db.insert(masterCoa).values(values))
@@ -600,14 +673,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       )
     }
 
+    // Aturan mutasi disambung ulang per KOLOM, pola yang sama dengan mutasi.
+    for (const kolom of ['lawan', 'kas'] as const) {
+      const sekolom = ruleRelinks.filter(r => r.kolom === kolom)
+      if (sekolom.length === 0) continue
+      const tuples = sql.join(
+        sekolom.map(r => sql`(${r.ruleId}::uuid, ${r.newMasterCoaId}::uuid)`),
+        sql`, `
+      )
+      const target = kolom === 'lawan' ? sql`akun_lawan_id` : sql`akun_kas_id`
+      statements.push(
+        db.execute(sql`
+          update ${cashMutationRules} as cr
+          set ${target} = v.akun_id
+          from (values ${tuples}) as v(id, akun_id)
+          where cr.id = v.id
+        `)
+      )
+    }
+
     // Setelan klien BOLEH diputus (null) — ia pengisi awal formulir, bukan
     // bagian dari pencatatan. Invoice yang sudah ada tetap memegang akun
-    // PPN-nya sendiri lewat snapshot (D30).
+    // PPN-nya sendiri lewat snapshot (D30), mutasi Pindah Buku memegang
+    // akunnya di akun_lawan_id.
     for (const r of settingRelinks) {
       statements.push(
         db
           .update(clientAccountingSettings)
-          .set({ akunPpnMasukanId: r.newAkunPpnMasukanId, updatedAt: now })
+          .set(
+            r.kolom === 'ppn'
+              ? { akunPpnMasukanId: r.newMasterCoaId, updatedAt: now }
+              : { akunPindahBukuId: r.newMasterCoaId, updatedAt: now }
+          )
           .where(eq(clientAccountingSettings.clientId, r.clientId))
       )
     }

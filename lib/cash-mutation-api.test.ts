@@ -18,8 +18,11 @@ const LIST = read('app', 'api', 'cash-mutations', 'route.ts')
 const DETAIL = read('app', 'api', 'cash-mutations', '[id]', 'route.ts')
 const ALLOC = read('app', 'api', 'cash-mutations', '[id]', 'allocations', 'route.ts')
 const ALLOC_DEL = read('app', 'api', 'cash-mutations', '[id]', 'allocations', '[allocId]', 'route.ts')
-const IMPORT = read('app', 'api', 'cash-mutations', 'import', 'route.ts')
+const BATCH = read('app', 'api', 'cash-mutations', 'batch', 'route.ts')
 const QUERIES = read('lib', 'api', 'cash-mutation-queries.ts')
+const PERENCANA = read('lib', 'api', 'cash-mutation-batch.ts')
+const JURNAL_MUTASI = read('lib', 'api', 'cash-mutation-journal.ts')
+const MURNI = read('lib', 'cash-mutation.ts')
 const LIST_JURNAL = read('app', 'api', 'journals', 'route.ts')
 
 const handler = (src: string, method: string): string => {
@@ -44,7 +47,7 @@ describe('gerbang — baca internal, tulis akunting (D45)', () => {
       ['DELETE mutasi', DETAIL, 'DELETE'],
       ['POST alokasi', ALLOC, 'POST'],
       ['DELETE alokasi', ALLOC_DEL, 'DELETE'],
-      ['POST impor', IMPORT, 'POST'],
+      ['POST batch', BATCH, 'POST'],
     ]
     for (const [nama, src, method] of tulis) {
       const body = handler(src, method)
@@ -59,7 +62,7 @@ describe('gerbang — baca internal, tulis akunting (D45)', () => {
       ['detail', DETAIL],
       ['alokasi', ALLOC],
       ['hapus alokasi', ALLOC_DEL],
-      ['impor', IMPORT],
+      ['batch', BATCH],
     ] as const) {
       expect(src.includes('canAccessClientData('), nama).toBe(true)
     }
@@ -69,7 +72,7 @@ describe('gerbang — baca internal, tulis akunting (D45)', () => {
     for (const [nama, src, method] of [
       ['POST mutasi', LIST, 'POST'],
       ['POST alokasi', ALLOC, 'POST'],
-      ['POST impor', IMPORT, 'POST'],
+      ['POST batch', BATCH, 'POST'],
     ] as const) {
       const body = handler(src, method)
       const cek = body.indexOf('canAccessClientData(')
@@ -86,7 +89,7 @@ describe('akun kas datang dari penanda is_kas, bukan daftar hardcoded', () => {
     for (const [nama, src] of [
       ['POST mutasi', LIST],
       ['PATCH mutasi', DETAIL],
-      ['impor', IMPORT],
+      ['perencana batch', PERENCANA],
     ] as const) {
       expect(src.includes('loadCashAccount('), nama).toBe(true)
     }
@@ -139,22 +142,29 @@ describe('tiga batas lintas-baris ditegakkan di route (P15, §8.21)', () => {
   })
 })
 
-describe('jurnal mutasi — satu pembangun, satu batch', () => {
-  it('ketiga jalur yang mengubah keadaan memanggil syncMutationJournal', () => {
+// ══ S7 (D48, D58): SATU perencana simpan, SATU perencana jurnal ════════════
+describe('jurnal mutasi — satu perencana, satu batch (S7)', () => {
+  it('setiap jalur yang mengubah mutasi lewat perencana — tidak ada pembangun jurnal kedua', () => {
     for (const [nama, src] of [
       ['POST mutasi', LIST],
-      ['PATCH mutasi', DETAIL],
+      ['PATCH/DELETE mutasi', DETAIL],
+      ['batch', BATCH],
+    ] as const) {
+      expect(src.includes('rencanakanSimpanMutasi('), nama).toBe(true)
+    }
+    for (const [nama, src] of [
       ['POST alokasi', ALLOC],
       ['DELETE alokasi', ALLOC_DEL],
     ] as const) {
-      expect(src.includes('syncMutationJournal('), nama).toBe(true)
+      expect(src.includes('rencanakanJurnalMutasi('), nama).toBe(true)
     }
+    expect(PERENCANA).toContain('await rencanakanJurnalMutasi(')
+    // Pembangun lama sudah DIPINDAH, bukan diduplikasi.
+    for (const src of [LIST, DETAIL, ALLOC, ALLOC_DEL, QUERIES]) expect(src).not.toContain('syncMutationJournal(')
   })
 
   it('statement jurnal MASUK ke batch yang sama, bukan ditulis terpisah', () => {
     for (const [nama, src, method] of [
-      ['POST mutasi', LIST, 'POST'],
-      ['PATCH mutasi', DETAIL, 'PATCH'],
       ['POST alokasi', ALLOC, 'POST'],
       ['DELETE alokasi', ALLOC_DEL, 'DELETE'],
     ] as const) {
@@ -162,189 +172,166 @@ describe('jurnal mutasi — satu pembangun, satu batch', () => {
       expect(b.includes('...jurnal.statements'), nama).toBe(true)
       expect(b.includes('await db.batch('), nama).toBe(true)
     }
+    expect(PERENCANA).toContain('statements.push(...jurnal.statements)')
   })
 
-  it('syncMutationJournal TIDAK menulis sendiri — ia menyusun statement (P10)', () => {
-    const mulai = QUERIES.indexOf('export async function syncMutationJournal')
-    const blok = QUERIES.slice(mulai)
-    expect(mulai).toBeGreaterThan(-1)
-    expect(blok).not.toContain('await db.batch(')
-    expect(blok).not.toContain('await db.insert(')
+  it('kedua perencana TIDAK menulis sendiri — mereka menyusun statement (P10)', () => {
+    for (const src of [PERENCANA, JURNAL_MUTASI]) {
+      expect(src).not.toContain('await db.batch(')
+      expect(src).not.toContain('await db.insert(')
+      expect(src).not.toContain('await db.update(')
+      expect(src).not.toContain('await db.delete(')
+    }
   })
 
   it('jurnal dari alokasi memakai akun hutang MILIK INVOICE (snapshot D30)', () => {
-    // Membaca ulang dari supplier akan men-DEBIT akun yang berbeda dari yang
-    // di-KREDIT invoicenya; selisihnya mengendap permanen di dua akun.
+    expect(PERENCANA).toContain('akunHutangId: purchaseInvoices.akunHutangId')
     expect(QUERIES).toContain('akunHutangId: purchaseInvoices.akunHutangId')
-    expect(QUERIES).not.toContain('masterSupplier.akunHutangDefaultId')
+    for (const src of [PERENCANA, QUERIES, JURNAL_MUTASI]) expect(src).not.toContain('masterSupplier.akunHutangDefaultId')
   })
 
-  it('jurnalnya lahir DRAF dan bersumber mutasi_kas', () => {
-    expect(QUERIES).toContain("sumber: 'mutasi_kas'")
-    // Tidak ada status yang disetel eksplisit: bawaannya draft (D31).
-    expect(QUERIES).not.toContain("status: 'posted'")
+  it('jurnal lahir DRAF, bersumber mutasi_kas, no_bukti NULL', () => {
+    expect(JURNAL_MUTASI).toContain("sumber: 'mutasi_kas'")
+    expect(JURNAL_MUTASI).toContain('noBukti: null')
+    expect(JURNAL_MUTASI).not.toContain("status: 'posted'")
   })
 
-  it('no_bukti jurnal otomatis NULL — kolomnya unik per klien', () => {
-    expect(QUERIES).toContain('noBukti: null')
+  it('ringkasan per (akun kas, akun lawan, tanggal) dibangun ulang untuk kunci LAMA dan BARU', () => {
+    expect(JURNAL_MUTASI).toContain('buildDailySummaryJournalLines(')
+    expect(JURNAL_MUTASI).toContain('for (const a of opts.akhir)')
+    expect(JURNAL_MUTASI).toContain('for (const a of opts.awal)')
+    expect(JURNAL_MUTASI).toContain('kunci.add(kunciRingkasan(')
+    // Anggota tersimpan dibaca dalam SATU kueri massal, bukan per kunci.
+    expect(JURNAL_MUTASI).toContain('inArray(cashMutations.tanggal,')
   })
 
-  const SYNC = QUERIES.slice(QUERIES.indexOf('export async function syncMutationJournal'))
+  it('anggota jurnal terposting yang hidup TIDAK disentuh; anggota baru → draf kedua', () => {
+    expect(JURNAL_MUTASI).toContain("info.get(j)?.status === 'draft'")
+    expect(JURNAL_MUTASI).toContain('!(a.journalId && hidup(info.get(a.journalId)))')
+  })
 
-  it('nasib jurnal lama dibaca lewat helper BERSAMA dengan invoice — terkunci = 409', () => {
-    expect(QUERIES).toContain("import { loadJournalLineValues, loadNasibJurnalModul } from '@/lib/api/journal-queries'")
-    expect(SYNC).toContain('await loadNasibJurnalModul(m.journalId, m.clientId)')
-    const tolak = SYNC.indexOf("if (nasib === 'terkunci')")
+  it('jaring terakhir: perubahan atas anggota jurnal terposting yang hidup = 409', () => {
+    const jaring = JURNAL_MUTASI.indexOf('if (a.journalId && hidup(info.get(a.journalId)))')
+    expect(jaring).toBeGreaterThan(-1)
+    expect(JURNAL_MUTASI.slice(jaring, jaring + 300)).toContain('return tolak(')
+  })
+
+  it('"sudah dibalik" dihitung dari rantai pembalik TERPOSTING, dalam kueri massal (tanpa N+1)', () => {
+    expect(JURNAL_MUTASI).toContain("eq(journalEntries.status, 'posted')")
+    expect(JURNAL_MUTASI).toContain('inArray(journalEntries.reversalOfId,')
+    expect(JURNAL_MUTASI).toContain('dibalik = n % 2 === 1')
+  })
+
+  it('draf yang tidak dipakai lagi dihapus BESERTA riwayatnya; yang terposting tidak pernah', () => {
+    expect(JURNAL_MUTASI).toContain("purgeAuditEventsMany('journal', hapus)")
+    expect(JURNAL_MUTASI).toContain("info.get(j)?.status !== 'draft'")
+  })
+
+  it('D42 tidak membuka mutasi terposting — kunciMutasi tidak membaca setelannya', () => {
+    const k = MURNI.slice(MURNI.indexOf('export function kunciMutasi'))
+    expect(k.slice(0, k.indexOf('\n}\n'))).not.toContain('bolehEditPosting')
+  })
+})
+
+describe('perencana simpan (S7) — urutan pemeriksaan', () => {
+  const urut = (...jejak: string[]) =>
+    jejak.map(j => {
+      const i = PERENCANA.indexOf(j)
+      expect(i, j).toBeGreaterThan(-1)
+      return i
+    })
+
+  it('validasi → akun → baris lama (kueri massal) → konkurensi → kunci → duplikat → jurnal → statement', () => {
+    const i = urut(
+      'validateCashMutation({ ...b, akunKasId: p.akunKasId })',
+      'inArray(masterCoa.id, akunLawan)',
+      'inArray(cashMutations.id, idUbahHapus)',
+      'const konflik =',
+      'kunciMutasi({',
+      'fingerprintMutasi(b.v)',
+      'await rencanakanJurnalMutasi(',
+      'db.insert(cashMutations)'
+    )
+    for (let k = 1; k < i.length; k++) expect(i[k]).toBeGreaterThan(i[k - 1])
+  })
+
+  it('konkurensi: updatedAt beda → 409 untuk SELURUH batch, dengan daftar barisnya', () => {
+    expect(PERENCANA).toContain('return tolak(409,')
+    expect(PERENCANA).toContain('konflik,')
+  })
+
+  it('kunci periode memakai isDateLocked untuk tanggal BARU, kunciMutasi untuk tanggal lama', () => {
+    expect(PERENCANA).toContain('isDateLocked(tanggal, locks)')
+    expect(PERENCANA).toContain('for (const b of baru) tanggalTerkunci(b.kunci, b.v.tanggal)')
+    expect(PERENCANA).toContain('tanggalTerkunci(u.id, u.v.tanggal)')
+  })
+
+  it('satu galat → nol statement: penolakan dikembalikan SEBELUM statement pertama disusun', () => {
+    const tolak = PERENCANA.indexOf('if (galat.length > 0) {')
+    const pertama = PERENCANA.indexOf('const statements: BatchItem')
     expect(tolak).toBeGreaterThan(-1)
-    expect(SYNC.slice(tolak, SYNC.indexOf("if (nasib === 'sudah-dibalik')"))).toContain('status: 409')
-    // Tidak ada aturan "posted" kedua yang ditulis sendiri di sini.
-    expect(SYNC).not.toContain("status === 'posted'")
+    expect(tolak).toBeLessThan(pertama)
   })
 
-  // Dulu jalan buntu: pesan 409 menyuruh membalik jurnal, tapi mutasinya tetap
-  // ditolak sesudah dibalik karena journal_id masih menunjuk jurnal terposting.
-  it('jurnal yang SUDAH dibalik: mutasi dilepas dulu, lalu dijurnal dari nol', () => {
-    const lepas = SYNC.indexOf("if (nasib === 'sudah-dibalik')")
-    const susun = SYNC.indexOf('const lines =')
-    expect(lepas).toBeGreaterThan(-1)
-    expect(lepas).toBeLessThan(susun)
-    const blok = SYNC.slice(lepas, susun)
-    expect(blok).toContain('db.update(cashMutations).set({ journalId: null')
-    expect(blok).toContain('jurnalLama = null')
+  it('INSERT dipecah ≤ 4.000 baris per statement (batas 65.535 parameter) — tetap satu db.batch', () => {
+    expect(PERENCANA).toContain('const BARIS_PER_INSERT = 4_000')
+    expect(BATCH.split('await db.batch(').length - 1).toBe(1)
   })
 
-  it('D42 menyala: dibangun ulang di tempat DENGAN nilai_sebelum/nilai_sesudah, tapi tidak boleh menghapus', () => {
-    expect(SYNC).toContain("const ubahTerposting = nasib === 'ubah-terposting'")
-    expect(SYNC).toContain('await loadJournalLineValues(jurnalLama.id)')
-    expect(SYNC).toContain('nilaiSebelum: sebelum')
-    expect(SYNC).toContain('nilaiSesudah: ubahTerposting ?')
-    // Tanpa baris tersisa = jurnal terposting akan dihapus — setelan tidak membukanya.
-    const kosong = SYNC.indexOf('if (lines.length === 0)')
-    expect(SYNC.slice(kosong, SYNC.indexOf('if (jurnalLama)', kosong))).toContain('if (ubahTerposting)')
+  it('dryRun adalah jalur yang SAMA: kembali setelah statement disusun, tanpa db.batch', () => {
+    expect(PERENCANA).toContain("if (p.dryRun) return { jenis: 'dryRun'")
+    expect(BATCH).toContain('dryRun: body.dryRun === true')
   })
 
-  it('mutasi tanpa alokasi DAN tanpa akun lawan tidak punya jurnal', () => {
-    const mulai = QUERIES.indexOf('export async function syncMutationJournal')
-    const blok = QUERIES.slice(mulai)
-    expect(blok).toContain('if (lines.length === 0)')
-    // Jurnal lama ikut dihapus beserta riwayatnya — bukan ditinggal menggantung.
-    expect(blok).toContain("purgeAuditEvents('journal'")
-  })
-})
-
-describe('penghapusan mutasi', () => {
-  const body = handler(DETAIL, 'DELETE')
-
-  it('jurnal DAN riwayatnya dihapus di batch yang sama', () => {
-    const batch = body.indexOf('await db.batch(')
-    expect(body.indexOf('db.delete(journalEntries)')).toBeLessThan(batch)
-    expect(body.indexOf("purgeAuditEvents('journal'")).toBeLessThan(batch)
-    expect(body.indexOf("purgeAuditEvents('cash_mutation'")).toBeLessThan(batch)
+  it('duplikat = PERINGATAN (D38), dicari per (klien, akun kas) — tidak pernah menolak', () => {
+    expect(PERENCANA).toContain('eq(cashMutations.akunKasId, p.akunKasId), inArray(cashMutations.fingerprint, semuaFp)')
+    const dup = PERENCANA.slice(PERENCANA.indexOf('// ── 6. Dugaan duplikat'), PERENCANA.indexOf('// ── 7.'))
+    expect(dup).not.toContain('tolak(')
   })
 
-  it('riwayat mutasi IKUT MATI — mutasi bukan pengecualian riwayat abadi', () => {
-    // lib/audit.ts hanya menyebut 'purchase_invoice' sebagai pengecualian.
-    // Menambah pengecualian kedua tanpa menuliskannya di sana membuat aturan
-    // umumnya berhenti benar.
-    const AUDIT = read('lib', 'audit.ts')
-    expect(AUDIT).toContain("RIWAYAT_ABADI: readonly AuditEntityType[] = ['purchase_invoice']")
-    expect(body).not.toContain("event: 'deleted'")
+  it('riwayat: ketik/tempel = created per baris; berkas = cash_mutation_imports TANPA event per baris; saldo dikosongkan = event (D50)', () => {
+    expect(PERENCANA).toContain("if (b.asal !== 'berkas' && b.asal !== 'pdf') ev.push({ ...base, entityId: id, event: 'created' })")
+    expect(PERENCANA).toContain('db.insert(cashMutationImports)')
+    expect(PERENCANA).toContain("event: 'saldo_dikosongkan', nilaiSebelum: { saldo: b.saldoDikosongkan }")
+    expect(PERENCANA).toContain("event: 'saldo_dikosongkan', nilaiSebelum: { saldo: r.saldo }")
   })
 
-  it('jurnal terposting menahan penghapusan (409) — termasuk saat setelan D42 menyala', () => {
-    expect(body).toContain('await loadNasibJurnalModul(row.journalId, row.clientId)')
-    expect(body).toContain("if (nasib === 'terkunci' || nasib === 'ubah-terposting')")
-    expect(body).toContain('status: 409')
+  it('ubah menulis riwayat bernilai sebelum & sesudah; hapus memusnahkan riwayat mutasinya', () => {
+    expect(PERENCANA).toContain("event: 'updated',")
+    expect(PERENCANA).toContain('nilaiSebelum: { tanggal: r.tanggal')
+    expect(PERENCANA).toContain("purgeAuditEventsMany('cash_mutation', idHapus)")
   })
 
-  it('jurnal terposting yang sudah dibalik TIDAK ikut dihapus — ia riwayat buku besar', () => {
-    expect(body).toContain("const jurnalRiwayat = nasib === 'sudah-dibalik'")
-    expect(body).toContain('if (row.journalId && !jurnalRiwayat)')
+  it('batas D52 ditolak dengan pesan — tidak pernah dipecah diam-diam', () => {
+    expect(PERENCANA).toContain('return tolak(413,')
   })
 })
 
-describe('PATCH mutasi — nominal tidak boleh bergeser di bawah alokasinya', () => {
-  const body = handler(DETAIL, 'PATCH')
-
-  it('mutasi beralokasi menolak perubahan nominal & akun kas', () => {
-    expect(body).toContain('alokasi.length > 0')
-    expect(body).toContain('status: 409')
-  })
-
-  it('perubahan yang sah tetap menulis riwayat ber-nilai sebelum & sesudah', () => {
-    expect(body).toContain('nilaiSebelum: sebelum')
-    expect(body).toContain('nilaiSesudah:')
-    const batch = body.indexOf('await db.batch(')
-    expect(body.indexOf('snapshotMutation(id)')).toBeLessThan(batch)
-  })
-})
-
-describe('impor CSV', () => {
-  const body = handler(IMPORT, 'POST')
-
-  it('dryRun adalah FLAG di route yang sama, bukan endpoint terpisah', () => {
-    expect(body).toContain("form.get('dryRun') === '1'")
-    expect(body).toContain('if (dryRun)')
-  })
-
-  it('duplikat = PERINGATAN, tidak pernah menolak (D38)', () => {
-    expect(body).toContain('duplikatDiDatabase')
-    expect(body).toContain('duplikatDiBerkas')
-    expect(body).toContain('dugaanDuplikat')
-    // Tidak ada SATU PUN penolakan di jalur impor yang menyebut duplikat —
-    // diperiksa dengan membaca tiap pesan galat, bukan sekadar mencari katanya
-    // (kata itu memang muncul, di penanda dan di ringkasan).
-    const pesanGalat = [...body.matchAll(/error: '([^']*)'/g)].map(m => m[1])
-    expect(pesanGalat.length).toBeGreaterThan(0)
-    for (const p of pesanGalat) {
-      expect(p.toLowerCase().includes('duplikat'), p).toBe(false)
+describe('tidak ada penulis cash_mutations di luar perencana & alokasi', () => {
+  it('route tidak meng-insert/update cash_mutations sendiri', () => {
+    for (const [nama, src] of [
+      ['POST mutasi', LIST],
+      ['PATCH/DELETE mutasi', DETAIL],
+      ['batch', BATCH],
+      ['POST alokasi', ALLOC],
+      ['DELETE alokasi', ALLOC_DEL],
+    ] as const) {
+      expect(src.includes('.insert(cashMutations)'), nama).toBe(false)
+      expect(src.includes('.update(cashMutations)'), nama).toBe(false)
+      expect(src.includes('${cashMutations}'), nama).toBe(false)
     }
-    // Duplikat juga tidak boleh jadi 409: seluruh penolakan di route ini soal
-    // berkas atau pemetaan, bukan soal isinya yang mirip.
-    expect(body).not.toContain('status: 409')
   })
 
-  it('MVP CSV saja — tidak menyentuh xlsx maupun pdf (N3)', () => {
-    expect(body).not.toContain('XLSX')
-    expect(body).not.toContain('xlsx')
+  it('route impor CSV lama sudah tidak ada (D47 — berkas masuk lewat grid)', () => {
+    expect(() => read('app', 'api', 'cash-mutations', 'import', 'route.ts')).toThrow()
   })
+})
 
-  it('impor TIDAK membuat jurnal — barisnya masuk "belum dijurnal"', () => {
-    expect(body).not.toContain('syncMutationJournal')
-    expect(body).not.toContain('journalEntries')
-  })
-
-  it('pemetaan manual didukung, dan tanggal wajib dipetakan', () => {
-    expect(body).toContain("form.get('mapping')")
-    expect(body).toContain('manual.tanggal === undefined')
-  })
-
-  it('header tak dikenali → layar pemetaan, BUKAN galat buntu', () => {
-    expect(body).toContain('butuhPemetaan: true')
-    expect(body).toContain('contoh: parsed.rows.slice(0, 10)')
-  })
-
-  it('pemisah boleh ditentukan, dan nilainya dibatasi daftar', () => {
-    expect(body).toContain("form.get('pemisah')")
-    expect(body).toContain('PEMISAH_SAH.includes(pemisahRaw)')
-  })
-
-  it('berkas MM/DD/YYYY DITOLAK seluruhnya, bukan dibaca separuh', () => {
-    expect(body).toContain('deteksiTanggalMMDD(selTanggal)')
-    expect(body).toContain('MM/DD/YYYY')
-    // Diperiksa SEBELUM mapRows: kalau sesudahnya, sebagian baris sudah
-    // terbaca dengan hari dan bulan tertukar.
-    expect(body.indexOf('deteksiTanggalMMDD(')).toBeLessThan(body.indexOf('mapRows({'))
-  })
-
-  it('penolakannya menyebut baris buktinya, bukan sekadar "format salah"', () => {
-    expect(body).toContain('mmdd.contoh.map')
-  })
-
-  it('duplikat dicari per (klien, akun kas) — bukan lintas rekening', () => {
-    // Nominal & tanggal yang sama di dua rekening berbeda adalah dua transaksi
-    // berbeda; menandainya duplikat melatih orang mengabaikan peringatan.
-    expect(body).toContain('eq(cashMutations.akunKasId, akunKasId)')
+describe('route batch', () => {
+  it('requireAkunting, canAccessClientData, periode wajib (satu akun-bulan, D52)', () => {
+    expect(BATCH).toContain('await requireAkunting()')
+    expect(BATCH).toContain('canAccessClientData(')
+    expect(BATCH).toContain('Periode wajib dikirim')
   })
 })
 
@@ -369,13 +356,16 @@ describe('bentuk respons daftar', () => {
 describe('halaman /mutasi-kas', () => {
   const PAGE = read('app', 'mutasi-kas', 'page.tsx')
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
+  const GRID = read('components', 'mutasi-kas', 'grid', 'grid-mutasi.tsx')
   const JURNAL = read('app', 'jurnal', 'page.tsx')
 
   it('daftar akun kas datang dari ?kas=1, bukan disaring di browser', () => {
     // Penanda kas adalah aturan server (eksplisit ?? turunan). Menyalinnya ke
-    // browser berarti dua definisi "akun kas" yang bisa menyimpang.
-    expect(PAGE).toContain('/coa?kas=1')
+    // browser berarti dua definisi "akun kas" yang bisa menyimpang. Satu
+    // pintunya `muatAkunKas` (lib/akun-kas-klien.ts).
+    expect(PAGE).toContain('muatAkunKas(clientId)')
+    expect(read('lib', 'akun-kas-klien.ts')).toContain('/coa?kas=1')
   })
 
   it('sisa & status DIPAKAI apa adanya dari server, tidak dihitung ulang', () => {
@@ -411,21 +401,19 @@ describe('halaman /mutasi-kas', () => {
     expect(PANEL).toContain('Dipaku manual')
   })
 
-  it('wizard impor: pratinjau dulu, commit terkunci sampai ada pratinjau', () => {
-    expect(WIZARD).toContain("fd.append('dryRun', '1')")
-    expect(WIZARD).toContain('disabled={!file || busy || !pratinjau}')
+  // Wizard impor CSV diganti grid (D47, S9). Janji-janjinya pindah ke sana.
+  it('grid: dugaan duplikat ditanyakan lewat dryRun SEBELUM menulis, ditandai, dan bisa tetap disimpan (D38)', () => {
+    expect(LEMBAR).toContain('kirimSimpan({ ...body, dryRun: true })')
+    expect(LEMBAR).toContain('Tetap simpan')
+    expect(GRID).toContain('duplikat?')
   })
 
-  it('pratinjau memperingatkan agar arah beberapa baris pertama diperiksa', () => {
+  it('grid: arah blok dari rantai saldo; yang tak bisa ditentukan WAJIB dipilih dan menahan Simpan', () => {
     // Arah yang terbalik tidak pernah menimbulkan galat — satu-satunya saat ia
-    // murah diperbaiki adalah di layar ini, sebelum barisnya tersimpan.
-    expect(WIZARD).toContain('Periksa arah beberapa baris pertama')
-    expect(WIZARD).toContain('tidak menimbulkan galat')
-  })
-
-  it('wizard impor menandai duplikat DAN mengatakan ia tetap tersimpan (D38)', () => {
-    expect(WIZARD).toContain('duplikatDiDatabase')
-    expect(WIZARD).toContain('tetap akan tersimpan')
+    // murah diperbaiki adalah sebelum barisnya tersimpan.
+    expect(LEMBAR).toContain("const wajib = blok.status === 'wajib'")
+    expect(LEMBAR).toContain('Simpan tertahan sampai dipilih')
+    expect(LEMBAR).toContain('const gerbang = gerbangSimpan(s, diff, rantai, menyimpan)')
   })
 
   it('tautan "Koreksi di …" memakai satu sumber, bukan path yang di-hardcode', () => {
@@ -446,7 +434,7 @@ describe('halaman /mutasi-kas', () => {
 describe('pelabelan nominal & kolom', () => {
   const PAGE = read('app', 'mutasi-kas', 'page.tsx')
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
 
   it('kolom alokasi di tabel memakai judul yang SAMA dengan panelnya', () => {
     // "Sisa" mengundang dibaca sebagai "belum beres" oleh mutasi yang sudah
@@ -475,12 +463,12 @@ describe('pelabelan nominal & kolom', () => {
     expect(PANEL).not.toContain('sisa ${i.sisa}')
   })
 
-  it('pratinjau impor diformat rupiah PERSIS — dicocokkan dengan rekening koran (CP-8)', () => {
+  it('ringkasan grid diformat rupiah PERSIS — dicocokkan dengan rekening koran (CP-8)', () => {
     // 12.345,67 lewat rupiah() tampil "Rp 12.346": tidak cocok dengan baris
     // mana pun di rekening koran yang sedang diperiksa.
-    expect(WIZARD).toContain("r.debit === '0.00' ? '—' : rupiahPersis(r.debit)")
-    expect(WIZARD).toContain("r.kredit === '0.00' ? '—' : rupiahPersis(r.kredit)")
-    expect(WIZARD).toContain('const { rupiahPersis } = useRupiah()')
+    expect(LEMBAR).toContain('rupiahPersis(ringkas.totalMasuk)')
+    expect(LEMBAR).toContain('rupiahPersis(ringkas.totalKeluar)')
+    expect(LEMBAR).toContain('const { rupiahPersis } = useRupiah()')
   })
 })
 
@@ -490,13 +478,13 @@ describe('pelabelan nominal & kolom', () => {
 // kertas. Tidak satu pun pemanggilan rupiah(...) boleh tersisa di sini.
 describe('rupiahPersis di layar pencocokan dokumen', () => {
   const PANEL = read('components', 'mutasi-kas', 'allocation-panel.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
   const INVOICE_FORM = read('components', 'pembelian', 'purchase-form-modal.tsx')
   const PAGE = read('app', 'mutasi-kas', 'page.tsx')
 
   it.each([
     ['panel alokasi', PANEL],
-    ['pratinjau impor', WIZARD],
+    ['grid mutasi', LEMBAR],
     ['form invoice', INVOICE_FORM],
     ['tabel utama /mutasi-kas', PAGE],
   ])('%s: tidak ada rupiah(...) yang membulatkan', (_nama, src) => {

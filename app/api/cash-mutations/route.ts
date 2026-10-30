@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
-import { cashMutations, clients } from '@/lib/db/schema'
+import { clients } from '@/lib/db/schema'
 import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { isValidYmd } from '@/lib/contracts'
-import { fingerprintMutasi, validateCashMutation } from '@/lib/cash-mutation'
+import { validateCashMutation } from '@/lib/cash-mutation'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { resolveUserId } from '@/lib/api/journal-queries'
 import {
@@ -15,16 +14,23 @@ import {
   listCashMutations,
   loadCashAccount,
   loadMutationDetail,
-  recordMutationEvent,
-  syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
 import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
+import { jawabanTunggal, rencanakanSimpanMutasi } from '@/lib/api/cash-mutation-batch'
+import { muatGridMutasi } from '@/lib/api/cash-mutation-grid'
+import { jsonGzip } from '@/lib/api/json-gzip'
 
 export const runtime = 'nodejs'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// GET /api/cash-mutations?clientId&periodStart&periodEnd[&akunKasId]
+// GET /api/cash-mutations?clientId&periodStart&periodEnd[&akunKasId][&urut=buku]
+//
+// `urut=buku` = MODE GRID (S8): wajib `akunKasId` (satu grid = satu akun kas),
+// urutan baku naik, per baris `updatedAt`/`catatan`/`urutan`/status jurnal/
+// jumlah alokasi/`kunci` (dari `kunciMutasi`, aturan yang sama dengan Simpan),
+// plus `saldoJangkar` (D61) dan `terkunciSampai`. Tanpa paginasi — satu
+// akun-bulan dikirim utuh, dikompres gzip DI FUNGSI (`jsonGzip`).
 //
 // ══ requireInternal UNTUK BACA, requireAkunting UNTUK TULIS (D45) ═════════
 // Sama dengan /api/purchase-invoices: `/mutasi-kas` masuk INTERNAL_ONLY_PREFIXES,
@@ -56,8 +62,28 @@ export async function GET(req: Request) {
   if (akunKasId !== '' && !UUID_RE.test(akunKasId)) {
     return NextResponse.json({ error: 'akunKasId tidak valid.' }, { status: 400 })
   }
+  const urut = url.searchParams.get('urut') ?? ''
+  if (urut !== '' && urut !== 'buku') {
+    return NextResponse.json({ error: 'urut tidak dikenal (hanya "buku").' }, { status: 400 })
+  }
   if (!canAccessClientData(g.user.role, g.user.clientId, clientId)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (urut === 'buku') {
+    if (akunKasId === '') {
+      return NextResponse.json({ error: 'Mode grid butuh akunKasId — satu grid = satu akun kas.' }, { status: 400 })
+    }
+    if (!(await loadCashAccount(clientId, akunKasId))) {
+      return NextResponse.json(
+        { error: 'Akun kas tidak ditemukan pada klien ini, atau bukan akun kas/bank.' },
+        { status: 400 }
+      )
+    }
+    const grid = await muatGridMutasi({ clientId, akunKasId, periodStart, periodEnd })
+    // Dikompres di fungsi: 10.000 baris ±8 MB JSON melewati batas respons
+    // Vercel 4,5 MB yang berlaku SEBELUM kompresi CDN (lib/api/json-gzip.ts).
+    return jsonGzip(req, { count: grid.mutations.length, ...grid })
   }
 
   const mutations = await listCashMutations({
@@ -69,13 +95,14 @@ export async function GET(req: Request) {
   return NextResponse.json({ count: mutations.length, mutations })
 }
 
-// POST /api/cash-mutations — mutasi MANUAL (impor CSV lewat route sendiri).
+// POST /api/cash-mutations — SATU mutasi dari form (HP, D48).
 //
-// ══ JURNALNYA LAHIR HANYA BILA SUDAH ADA LAWANNYA ════════════════════════
-// Mutasi tanpa akun lawan dan tanpa alokasi berstatus "belum dijurnal" — itu
-// keadaan yang SAH dan memang harus terlihat di layar (permintaan eksplisit
-// Ricko). Membuat jurnal timpang untuk mutasi semacam itu akan menaruh angka
-// separuh di buku besar.
+// ══ PEMBUNGKUS TIPIS ATAS PERENCANA BATCH ════════════════════════════════
+// Pemeriksaan di bawah hanya menjaga BENTUK jawaban lama yang dibaca form
+// (400 `{ error, details }`, 409 `{ lockedUntil }`). Yang memutuskan dan
+// menyusun tulisan — validasi, kunci, duplikat, jurnal ringkasan (D58) —
+// adalah `rencanakanSimpanMutasi`, sama persis dengan grid. Tidak ada jalur
+// simpan kedua.
 export async function POST(req: Request) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
@@ -107,6 +134,7 @@ export async function POST(req: Request) {
     keterangan: raw.keterangan,
     saldo: raw.saldo,
     akunLawanId: raw.akunLawanId,
+    catatan: raw.catatan,
   })
   if (!check.ok) {
     return NextResponse.json({ error: check.errors[0], details: check.errors }, { status: 400 })
@@ -135,53 +163,46 @@ export async function POST(req: Request) {
   const createdBy = await resolveUserId(g.user.email)
   if (!createdBy) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const mutationId = randomUUID()
-  const fingerprint = fingerprintMutasi(check.value)
-
-  const jurnal = await syncMutationJournal({
-    mutation: {
-      id: mutationId,
+  const rencana = await rencanakanSimpanMutasi(
+    {
       clientId,
       akunKasId: check.value.akunKasId,
-      akunLawanId: check.value.akunLawanId,
-      tanggal: check.value.tanggal,
-      keterangan: check.value.keterangan,
-      debit: check.value.debit,
-      kredit: check.value.kredit,
-      journalId: null,
+      periode: null,
+      baru: [
+        {
+          kunci: 'form',
+          tanggal: check.value.tanggal,
+          debit: check.value.debit,
+          kredit: check.value.kredit,
+          saldo: check.value.saldo,
+          keterangan: check.value.keterangan,
+          catatan: check.value.catatan,
+          akunLawanId: check.value.akunLawanId,
+          urutan: null,
+          asal: 'ketik',
+          blok: null,
+          saldoDikosongkan: null,
+        },
+      ],
+      ubah: [],
+      hapus: [],
+      berkas: [],
+      dryRun: false,
     },
-    alokasi: [],
-    userId: createdBy,
-  })
-  if ('error' in jurnal) return jurnal.error
-
-  const statements: BatchItem<'pg'>[] = [
-    db.insert(cashMutations).values({
-      id: mutationId,
-      clientId,
-      akunKasId: check.value.akunKasId,
-      tanggal: check.value.tanggal,
-      keterangan: check.value.keterangan,
-      debit: check.value.debit,
-      kredit: check.value.kredit,
-      saldo: check.value.saldo,
-      fingerprint,
-      akunLawanId: check.value.akunLawanId,
-      createdBy,
-    }),
-    // Statement jurnal menyusul SESUDAH mutasinya ada: ia memuat UPDATE atas
-    // baris mutasi (memasang journal_id), dan update terhadap baris yang belum
-    // lahir tidak melakukan apa pun tanpa melempar.
-    ...jurnal.statements,
-    recordMutationEvent({ clientId, mutationId, event: 'created', userId: createdBy }),
-  ]
+    createdBy
+  )
+  if (rencana.jenis === 'tolak') {
+    const j = jawabanTunggal(rencana)
+    return NextResponse.json(j.body, { status: j.status })
+  }
+  if (rencana.jenis !== 'siap') return NextResponse.json({ error: 'Rencana tidak lengkap.' }, { status: 500 })
 
   try {
-    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+    await db.batch(rencana.statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
   } catch (e) {
     return dbWriteErrorResponse(e, 'Gagal menyimpan mutasi kas. Coba lagi.')
   }
 
-  const detail = await loadMutationDetail(mutationId)
+  const detail = await loadMutationDetail(rencana.idBaru.get('form') as string)
   return NextResponse.json(detail, { status: 201 })
 }

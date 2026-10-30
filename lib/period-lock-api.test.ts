@@ -48,7 +48,6 @@ const JALUR: [string, string, string][] = [
   ['app/api/cash-mutations/[id]/route.ts', 'DELETE', '[row.tanggal]'],
   ['app/api/cash-mutations/[id]/allocations/route.ts', 'POST', '[mutation.tanggal]'],
   ['app/api/cash-mutations/[id]/allocations/[allocId]/route.ts', 'DELETE', '[mutation.tanggal]'],
-  ['app/api/cash-mutations/import/route.ts', 'POST', '[...rows.map(r => r.tanggal)]'],
   // Posting: bentuk penolakannya wajib sama dengan jalur tulis lain (temuan CP-13).
   ['app/api/journals/[id]/post/route.ts', 'POST', '[header.tanggal]'],
 ]
@@ -88,7 +87,7 @@ describe('pemindai: tidak ada route penulis jurnal/mutasi tanpa pemeriksaan kunc
     }
   }
   jelajah(join(process.cwd(), 'app', 'api'))
-  const MENULIS = /db\.(insert|delete)\((journalEntries|cashMutations)\)|\.update\((journalEntries|cashMutations)\)|sync(Mutation|Invoice)Journal\(/
+  const MENULIS = /db\.(insert|delete)\((journalEntries|cashMutations)\)|\.update\((journalEntries|cashMutations)\)|sync(Mutation|Invoice)Journal\(|rencanakan(SimpanMutasi|JurnalMutasi)\(/
 
   const penulis = routes.filter(p => MENULIS.test(readFileSync(p, 'utf8')))
 
@@ -100,9 +99,34 @@ describe('pemindai: tidak ada route penulis jurnal/mutasi tanpa pemeriksaan kunc
     const nama = relative(process.cwd(), p).split('\\').join('/')
     it(nama, () => {
       const src = readFileSync(p, 'utf8')
-      expect(src.includes('tolakBilaPeriodeTerkunci(') || src.includes('periodLockChecker(')).toBe(true)
+      // Route batch tidak memanggilnya sendiri: perencananya yang memeriksa
+      // SETIAP tanggal (isDateLocked + kunciMutasi) — dikunci test di bawah.
+      expect(
+        src.includes('tolakBilaPeriodeTerkunci(') || src.includes('periodLockChecker(') || src.includes('rencanakanSimpanMutasi(')
+      ).toBe(true)
     })
   }
+})
+
+// S7 — perencana simpan mutasi memeriksa kunci untuk SETIAP tanggal yang disentuh:
+// baru (tanggal baru), ubah (lama lewat kunciMutasi + baru), hapus (lama).
+describe('perencana batch mutasi kas memeriksa kunci periode (S7)', () => {
+  const P = read('lib', 'api', 'cash-mutation-batch.ts')
+  it('memuat kunci SEKALI lalu memeriksa tanggal baru, lama, dan yang dihapus — sebelum statement disusun', () => {
+    const muat = P.indexOf('await loadPeriodLocks(p.clientId)')
+    const susun = P.indexOf('const statements: BatchItem')
+    expect(muat).toBeGreaterThan(-1)
+    for (const jejak of [
+      'for (const b of baru) tanggalTerkunci(b.kunci, b.v.tanggal)',
+      'tanggalTerkunci(u.id, u.v.tanggal)',
+      'const k = kunciLama(h.id)',
+      'terkunciSampai,',
+    ]) {
+      const i = P.indexOf(jejak)
+      expect(i, jejak).toBeGreaterThan(muat)
+      expect(i, jejak).toBeLessThan(susun)
+    }
+  })
 })
 
 // K3 — route kunci & buka. Hak aksesnya keputusan D17, dan satu-satunya yang
@@ -158,7 +182,7 @@ describe('UI kunci periode (K4)', () => {
   const SETTINGS = read('app', 'settings', 'page.tsx')
   const FORM = read('components', 'jurnal', 'journal-form-modal.tsx')
   const JURNAL = read('app', 'jurnal', 'page.tsx')
-  const WIZARD = read('components', 'mutasi-kas', 'import-wizard.tsx')
+  const LEMBAR = read('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
 
   it('tab Pembukuan memuat kartu Kunci Periode; membuka = owner saja (D17)', () => {
     expect(SETTINGS).toContain('<KunciPeriodeCard clientId={clientId} bolehKunci={!readOnly} bolehBuka={bolehBuka} />')
@@ -192,9 +216,11 @@ describe('UI kunci periode (K4)', () => {
     expect(JURNAL).toContain('disabled={postingBusy || postingTerkunci}')
   })
 
-  it('wizard impor memperingatkan bahwa berkas akan ditolak seluruhnya', () => {
-    expect(WIZARD).toContain('fetch(`/api/period-locks?clientId=${clientId}`)')
-    expect(WIZARD).toContain('ditolak seluruhnya')
+  // Wizard impor CSV diganti grid (D47, S9): kunci periode datang dari S8 dan
+  // dipakai validator grid — tanggal di periode terkunci merah SEBELUM Simpan.
+  it('grid mutasi: kunci periode dari server, dipakai validator, dan disebut di layar', () => {
+    expect(LEMBAR).toContain('terkunciSampai: meta.terkunciSampai')
+    expect(LEMBAR).toContain('Periode terkunci s.d. {fmtTanggal(meta.terkunciSampai)}')
   })
 })
 

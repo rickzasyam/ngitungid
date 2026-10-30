@@ -13,8 +13,13 @@
 // Aturan pembukuan TIDAK hidup di sini. Selisih D/K dihitung modul yang sama
 // dengan server (lib/journal.ts), dan status "boleh diubah" dijawab
 // canEditJournal, bukan perbandingan status lokal.
+//
+// Tautan ke SATU jurnal: `/jurnal?jurnal=<id>` (hrefJurnal, lib/journal.ts) —
+// dari grid mutasi kas ke jurnal ringkasan barisnya. Jurnalnya dimuat, WAJIB
+// milik klien aktif, lalu periode pindah ke bulannya dan rinciannya terbuka.
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -39,6 +44,7 @@ import {
   canEditJournal,
   isSumberModul,
   JOURNAL_STATUS_LABEL,
+  PARAM_TAUTAN_JURNAL,
   SUMBER_MODUL_LABEL,
   sumberDokumenHref,
   TANPA_NO_BUKTI,
@@ -96,7 +102,17 @@ function bulanBerjalan(): { start: string; end: string } {
   return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
 }
 
-export default function JurnalPage() {
+/** Bulan kalender yang memuat `ymd` — periode tautan ke satu jurnal. */
+function bulanDari(ymd: string): { start: string; end: string } {
+  const [y, m] = ymd.split('-').map(Number)
+  const akhir = new Date(y, m, 0).getDate()
+  const mm = String(m).padStart(2, '0')
+  return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(akhir).padStart(2, '0')}` }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function JurnalContent() {
   const { activeClient, isLoaded } = useRequireClient()
   const { canDoAccounting } = useClient()
   const { rupiahPersis } = useRupiah()
@@ -130,6 +146,17 @@ export default function JurnalPage() {
   const [balikErrors, setBalikErrors] = useState<string[]>([])
   // Kunci periode (K4) — hanya untuk PERINGATAN; server menolak 409 sendiri (K2).
   const [terkunciSampai, setTerkunciSampai] = useState<string | null>(null)
+
+  // Tautan ke satu jurnal (?jurnal=<id>). Keadaan AWAL dari URL, bukan efek
+  // yang menyetel ulang — pola yang sama dengan ?mutasi= di /mutasi-kas.
+  const searchParams = useSearchParams()
+  const [tautan] = useState(() => {
+    const id = searchParams.get(PARAM_TAUTAN_JURNAL)
+    return id && UUID_RE.test(id) ? id : null
+  })
+  const [tautanGalat, setTautanGalat] = useState<string | null>(null)
+  const gulirKe = useRef<string | null>(null)
+  const tautanDiproses = useRef(false)
 
   const clientId = activeClient?.id ?? null
   const postingTerkunci =
@@ -173,6 +200,52 @@ export default function JurnalPage() {
       await muat()
     })()
   }, [muat])
+
+  // Tautan: muat jurnalnya, pastikan milik klien aktif, lalu pindah ke bulannya
+  // dan buka rinciannya. setState hanya sesudah await (set-state-in-effect).
+  // Diproses SEKALI (ref); periode ikut dependensi hanya untuk dibandingkan.
+  useEffect(() => {
+    if (!clientId || !tautan || tautanDiproses.current) return
+    let batal = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/journals/${tautan}`)
+        const d = (await res.json().catch(() => null)) as (JournalDetailData & { clientId?: string }) | null
+        if (batal) return
+        if (!res.ok || !d || d.clientId !== clientId) {
+          setTautanGalat(
+            'Jurnal pada tautan tidak ditemukan untuk klien aktif. Pilih klien pemilik jurnal itu di sidebar, lalu buka tautannya lagi.'
+          )
+          return
+        }
+        tautanDiproses.current = true
+        setTautanGalat(null)
+        gulirKe.current = d.id
+        // Bulan jurnal = bulan yang sedang tampil → tidak ada pemuatan ulang,
+        // jadi penanda `loading` TIDAK boleh dinyalakan (tak ada yang mematikannya).
+        const b = bulanDari(d.tanggal)
+        if (b.start !== periode.start || b.end !== periode.end) {
+          setLoading(true)
+          setPeriode(b)
+        }
+        setExpanded(d.id)
+        setDetail(d)
+      } catch {
+        if (!batal) setTautanGalat('Gagal memuat jurnal pada tautan.')
+      }
+    })()
+    return () => {
+      batal = true
+    }
+  }, [clientId, tautan, periode.start, periode.end])
+
+  // Gulir ke baris jurnal tautan begitu daftarnya memuat baris itu.
+  useEffect(() => {
+    const id = gulirKe.current
+    if (!id || !rows.some(r => r.id === id)) return
+    gulirKe.current = null
+    document.getElementById(`jurnal-baris-${id}`)?.scrollIntoView({ block: 'center' })
+  }, [rows])
 
   // Master COA dimuat sekali per klien — dipakai pemilih akun di form.
   useEffect(() => {
@@ -491,6 +564,19 @@ export default function JurnalPage() {
 
         {/* Body */}
         <main className="flex-1 overflow-y-auto" style={{ background: '#f8f8f8' }}>
+          {tautanGalat && (
+            <div
+              role="alert"
+              className="mx-4 mt-4 px-3.5 py-2.5 rounded-2xl text-xs"
+              style={{
+                background: 'color-mix(in srgb, var(--color-accent-critical) 8%, white)',
+                border: '1px solid color-mix(in srgb, var(--color-accent-critical) 35%, white)',
+                color: 'var(--color-text-primary)',
+              }}
+            >
+              {tautanGalat}
+            </div>
+          )}
           {actionError && (
             <div
               role="alert"
@@ -586,7 +672,7 @@ export default function JurnalPage() {
                       const adaAksi = bisaUbah || bisaPosting || bisaBalik || dariModul
                       return (
                         <Fragment key={r.id}>
-                          <tr style={{ borderTop: '1px solid #f5f5f5' }}>
+                          <tr id={`jurnal-baris-${r.id}`} style={{ borderTop: '1px solid #f5f5f5' }}>
                             <td style={{ ...td, paddingRight: 0 }}>
                               <button
                                 type="button"
@@ -1022,4 +1108,14 @@ const lencana: React.CSSProperties = {
   background: 'color-mix(in srgb, var(--color-accent-secondary) 28%, white)',
   color: 'var(--color-text-primary)',
   verticalAlign: 'middle',
+}
+
+// useSearchParams menuntut batas Suspense (bailout CSR) — pola yang sama
+// dengan /mutasi-kas. Fallback null: shell halamannya punya "Memuat…" sendiri.
+export default function JurnalPage() {
+  return (
+    <Suspense fallback={null}>
+      <JurnalContent />
+    </Suspense>
+  )
 }
