@@ -9,44 +9,55 @@ import { join } from 'node:path'
 // dari tombol pemicu Tab tidak pernah sampai ke kalender.
 
 const SRC = readFileSync(join(process.cwd(), 'components', 'date-range-picker.tsx'), 'utf8').replace(/\r\n/g, '\n')
+// Sejak 2026-10-30 panel kalendernya (sel tanggal, fokus, Escape, navigasi
+// panah) ada di komponen BERSAMA dengan DatePicker satu tanggal — assertion
+// yang sama, dibaca di tempat kodenya sekarang tinggal.
+const PANEL = readFileSync(join(process.cwd(), 'components', 'kalender-panel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 
 describe('sel tanggal bisa dipakai keyboard', () => {
   it('sel tanggal adalah TOMBOL ASLI — peran, fokus, dan Enter/Spasi dari browser', () => {
-    expect(SRC).toMatch(/<button\s+type="button"\s+key=\{colIdx\}\s+data-hari=""/)
+    expect(PANEL).toMatch(/<button\s+type="button"\s+key=\{colIdx\}\s+data-hari=""/)
     // Pemilih tanggal tidak lagi dipasang pada <div>.
-    expect(SRC).not.toMatch(/<div[^>]*\n[^<]*onClick=\{\(\) => onDayClick\(date\)\}/)
-    const tombol = SRC.slice(SRC.indexOf('data-hari=""'), SRC.indexOf('</button>', SRC.indexOf('data-hari=""')))
+    expect(PANEL).not.toMatch(/<div[^>]*\n[^<]*onClick=\{\(\) => onDayClick\(date\)\}/)
+    const tombol = PANEL.slice(PANEL.indexOf('data-hari=""'), PANEL.indexOf('</button>', PANEL.indexOf('data-hari=""')))
     expect(tombol).toContain('onClick={() => onDayClick(date)}')
   })
 
   it('tiap sel punya nama tanggal lengkap, status terpilih, dan penanda hari ini', () => {
-    expect(SRC).toContain('aria-label={formatDayLabel(date)}')
-    expect(SRC).toContain("weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'")
-    expect(SRC).toContain('aria-pressed={isSelected}')
-    expect(SRC).toContain("aria-current={isToday ? 'date' : undefined}")
+    expect(PANEL).toContain('aria-label={formatDayLabel(date)}')
+    expect(PANEL).toContain("weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'")
+    expect(PANEL).toContain('aria-pressed={isSelected}')
+    expect(PANEL).toContain("aria-current={isToday ? 'date' : undefined}")
   })
 
   it('fokus menyalakan pratinjau rentang yang SAMA dengan hover (gotcha #4)', () => {
-    expect(SRC).toContain('onMouseEnter={() => onDayHover(date)}')
+    expect(PANEL).toContain('onMouseEnter={() => onDayHover(date)}')
     // onFocus juga mencatat tanggal terfokus untuk roving tabindex — pratinjaunya tetap sama.
-    const fokus = SRC.slice(SRC.indexOf('onFocus={() => {'), SRC.indexOf('}}', SRC.indexOf('onFocus={() => {')))
+    const fokus = PANEL.slice(PANEL.indexOf('onFocus={() => {'), PANEL.indexOf('}}', PANEL.indexOf('onFocus={() => {')))
     expect(fokus).toContain('onDayHover(date)')
     expect(fokus).toContain('onDayFocus(date)')
-    expect(SRC).toContain('onMouseLeave={() => onDayHover(null)}')
-    expect(SRC).toContain('onBlur={() => onDayHover(null)}')
+    expect(PANEL).toContain('onMouseLeave={() => onDayHover(null)}')
+    expect(PANEL).toContain('onBlur={() => onDayHover(null)}')
   })
 
   it('cincin fokus terlihat untuk keyboard', () => {
-    expect(SRC).toContain('group-focus-visible:ring-2')
+    expect(PANEL).toContain('group-focus-visible:ring-2')
+  })
+
+  it('DateRangePicker memakai panel bersama: dua bulan, mode rentang, tanpa batas', () => {
+    const panel = SRC.slice(SRC.indexOf('<KalenderPanel'), SRC.indexOf('>', SRC.indexOf('onTutup=')))
+    expect(panel).toContain('jumlahBulan={2}')
+    expect(panel).toContain('range={tempRange}')
+    for (const s of ['tunggal', 'batas=', 'isolasiEvent']) expect(panel, s).not.toContain(s)
   })
 })
 
 describe('fokus masuk dan keluar kalender', () => {
   it('saat dibuka, fokus pindah ke tanggal awal terpilih atau tanggal pertama', () => {
-    expect(SRC).toContain('button[data-hari][aria-pressed="true"]')
+    expect(PANEL).toContain('button[data-hari][aria-pressed="true"]')
     // Tanpa tanggal terpilih: sel Tab bulan pertama (roving tabindex — hari ini atau tanggal 1).
-    expect(SRC).toContain("panel?.querySelector<HTMLButtonElement>('button[data-hari][tabindex=\"0\"]')")
-    expect(SRC).toContain('sasaran?.focus({ preventScroll: true })')
+    expect(PANEL).toContain("panel?.querySelector<HTMLButtonElement>('button[data-hari][tabindex=\"0\"]')")
+    expect(PANEL).toContain('sasaran?.focus({ preventScroll: true })')
   })
 
   it('Batal & Terapkan mengembalikan fokus ke tombol pemicu', () => {
@@ -56,15 +67,20 @@ describe('fokus masuk dan keluar kalender', () => {
   })
 
   it('Escape mengembalikan fokus HANYA bila fokus sedang di dalam panel', () => {
-    expect(SRC).toContain('if (panelRef.current?.contains(document.activeElement)) triggerRef.current?.focus()')
+    // Panel melaporkan apakah fokus ada di dalamnya; picker yang memindahkannya.
+    expect(PANEL).toContain("if (e.key !== 'Escape') return")
+    expect(PANEL).toContain('tutup.current(panelRef.current?.contains(document.activeElement) === true)')
+    expect(SRC).toContain('if (kembalikanFokus) triggerRef.current?.focus()')
   })
 
   it('pemicu mengumumkan panelnya; panel dan tombol bulan bernama', () => {
     expect(SRC).toContain('aria-haspopup="dialog"')
     expect(SRC).toContain('aria-expanded={isOpen}')
-    expect(SRC).toContain('role="dialog"')
-    expect(SRC).toContain('aria-label="Bulan sebelumnya"')
-    expect(SRC).toContain('aria-label="Bulan berikutnya"')
+    expect(PANEL).toContain('role="dialog"')
+    expect(PANEL).toContain('aria-label={label}')
+    expect(SRC).toContain('label="Pilih rentang tanggal"')
+    expect(PANEL).toContain('aria-label="Bulan sebelumnya"')
+    expect(PANEL).toContain('aria-label="Bulan berikutnya"')
   })
 })
 
@@ -117,15 +133,19 @@ describe('hover lewat kelas CSS, bukan onMouseEnter inline (gotcha #4)', () => {
   const CSS = readFileSync(join(process.cwd(), 'app', 'globals.css'), 'utf8')
 
   it('satu-satunya onMouseEnter/Leave yang tersisa = pratinjau rentang sel tanggal (berpasangan dengan onFocus/onBlur)', () => {
-    const masuk = SRC.split('onMouseEnter=').length - 1
-    const keluar = SRC.split('onMouseLeave=').length - 1
+    expect([SRC.split('onMouseEnter=').length - 1, SRC.split('onMouseLeave=').length - 1]).toEqual([0, 0])
+    const masuk = PANEL.split('onMouseEnter=').length - 1
+    const keluar = PANEL.split('onMouseLeave=').length - 1
     expect([masuk, keluar]).toEqual([1, 1])
-    expect(SRC).not.toContain('e.currentTarget.style')
-    expect(SRC).not.toContain('(e.currentTarget as HTMLElement).style')
+    for (const f of [SRC, PANEL]) {
+      expect(f).not.toContain('e.currentTarget.style')
+      expect(f).not.toContain('(e.currentTarget as HTMLElement).style')
+    }
   })
 
   it('tiap kelas punya gaya hover DAN fokus di globals.css, di luar @layer', () => {
-    for (const k of ['drp-nav', 'drp-batal', 'drp-terapkan', 'drp-clear']) expect(SRC, k).toContain(k)
+    expect(PANEL).toContain('drp-nav')
+    for (const k of ['drp-batal', 'drp-terapkan', 'drp-clear']) expect(SRC, k).toContain(k)
     for (const sel of ['.drp-nav:hover', '.drp-nav:focus-visible', '.drp-batal:hover', '.drp-batal:focus-visible', '.drp-terapkan:not(:disabled):hover', '.drp-clear:hover .drp-clear-dot', '.drp-clear:focus-visible .drp-clear-dot']) {
       expect(CSS, sel).toContain(sel)
     }
@@ -139,20 +159,24 @@ describe('hover lewat kelas CSS, bukan onMouseEnter inline (gotcha #4)', () => {
 
 describe('navigasi panah antar tanggal (roving tabindex)', () => {
   it('hanya satu sel Tab per bulan; panah ditangani lewat lib/kalender-keyboard', () => {
-    expect(SRC).toContain('tabIndex={date.getDate() === aktif ? 0 : -1}')
-    expect(SRC).toContain('data-tanggal={localDateToYmd(date)}')
-    expect(SRC).toContain('onKeyDown={e => onDayKeyDown(date, e)}')
-    expect(SRC).toContain('const tujuan = tujuanTombol(date, e.key, e.shiftKey)')
-    expect(SRC).toContain('e.preventDefault()')
-    expect(SRC).toContain('aktif={hariAktif(viewYear, viewMonth, kandidatAktif)}')
-    expect(SRC).toContain('aktif={hariAktif(secondYear, secondMonth, kandidatAktif)}')
+    expect(PANEL).toContain('tabIndex={date.getDate() === aktif ? 0 : -1}')
+    expect(PANEL).toContain('data-tanggal={localDateToYmd(date)}')
+    expect(PANEL).toContain('onKeyDown={e => onDayKeyDown(date, e)}')
+    expect(PANEL).toContain('const arah = tujuanTombol(date, e.key, e.shiftKey)')
+    expect(PANEL).toContain('e.preventDefault()')
+    // Satu pembuat bulan untuk kedua bulan yang tampil: sel Tab dari hariAktif bulan itu.
+    expect(PANEL).toContain('aktif={hariAktif(year, month, kandidatAktif, batas)}')
+    expect(PANEL).toContain('{bulan(viewYear, viewMonth)}')
+    expect(PANEL).toContain('{bulan(secondYear, secondMonth)}')
   })
 
   it('tujuan di luar bulan yang tampil → bulan tujuan jadi bulan pertama, fokus menyusul', () => {
-    const k = SRC.slice(SRC.indexOf('const handleDayKeyDown'), SRC.indexOf('const tutupKePemicu'))
+    const k = PANEL.slice(PANEL.indexOf('const handleDayKeyDown'), PANEL.indexOf('const secondMonth'))
     expect(k).toContain('fokusTertunda.current = ymd')
-    expect(k).toContain('setViewYear(tujuan.getFullYear())')
-    expect(k).toContain('setViewMonth(tujuan.getMonth())')
-    expect(SRC).toContain('el.offsetParent !== null')
+    expect(k).toContain('onViewChange(tujuan.getFullYear(), tujuan.getMonth())')
+    expect(PANEL).toContain('el.offsetParent !== null')
+    // DateRangePicker meneruskan pergeseran itu ke tampilannya sendiri.
+    expect(SRC).toContain('setViewYear(tahun)')
+    expect(SRC).toContain('setViewMonth(bulan)')
   })
 })
