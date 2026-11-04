@@ -506,14 +506,19 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 - ⏳ S11 ROADMAP + graphify
 
 **Modul B — PDF rekening koran**
+
+> **Status 2026-11-04:** X1–X4 dikerjakan sesi Stream B di **PR #2** (`feat/pdf-rekening-koran`, Draft, **belum di `main`**).
+> Sesi itu berhenti permanen 2026-11-04; sisanya dipegang satu sesi (`docs/HANDOFF.md`). Log rinci per langkah:
+> `docs/progress/stream-b-pdf.md` di branch PR #2. Rancangan yang diterapkan dicatat di MP §5.G Modul B (↳ per langkah).
+
 - 🔒 X0 **Gerbang Ricko:** akun AI **berbayar** dengan ketentuan tanpa pelatihan; free tier dilarang; API first-party DeepSeek/Z.ai dikecualikan. Sebelum gerbang ini hanya PDF sintetis yang dipakai
-- ⏳ X1 Lapisan penyedia `lib/ai/` (satu antarmuka, beberapa adaptor; Gemini dipindah, bukan ditulis ulang). Ketiga fitur AI yang ada ikut pindah tanpa perubahan perilaku
-- ⏳ X2 Teks PDF dibaca **di browser** (`pdfjs-dist` Apache-2.0 / `unpdf` MIT), `lib/pdf/susun-baris.ts` murni, cadangan OCR lewat render PNG
-- ⏳ X3 AI **hanya menyusun tabel** sebagaimana tercetak. Arah, tanggal, nominal, dan tahun diputuskan jalur S2/S3 yang sama dengan tempelan
-- ⏳ X4 `POST /api/cash-mutations/ekstrak-halaman` per halaman; sakelar fitur → 503; tidak menulis, tidak mencatat isi
-- ⏳ X5 Tombol "Unggah PDF rekening koran" dengan progres per halaman. Hasilnya masuk grid sebagai blok DRAF berpenanda lilac dengan kolom Hal.
-- 🔒 X6 Uji banding 2–3 penyedia × ≥ 12 rekening koran nyata. Ukuran utama **% dokumen lolos kesinambungan saldo tanpa koreksi**, ditambah biaya per dokumen — ⏸ **CP-21** (D54)
-- 🔒 X7 Aktivasi produksi hanya sesudah X0 dan D54 — ⏸ **CP-22**
+- ✅ X1 Lapisan penyedia `lib/ai/` (satu antarmuka; adaptor Gemini + Claude/OpenAI yang belum pernah dipanggil). Env per fitur `AI_PROVIDER_EKSTRAKSI` / `AI_MODEL_EKSTRAKSI`. Yang dipindah: saran akun jurnal → `lib/ai/saran-akun-jurnal.ts` (perilaku dikunci identik); fitur AI lama lain tetap memanggil Gemini langsung — **PR #2**
+- ✅ X2 Teks PDF dibaca **di browser** (`unpdf` 1.8.1), baris bertata letak bernomor `[nnn]` (`lib/bank-statement/susun-baris.ts`), cadangan gambar — **PR #2**
+- ✅ X3 AI **hanya menyusun tabel** (`lib/bank-statement/susun-tabel.ts`); penjaga salinan persis + cakupan + "sejajar dengan judul"; uraian terlipat digabung; halaman ditolak diulang sekali dengan Flash lalu input manual — **PR #2**. 🟡 **Celah cakupan** (entri pertama/terakhir dibuang, jawaban kosong lolos) — aturan a–c **disetujui Ricko 2026-11-04**, pengerjaan dicatat di log Stream B
+- ✅ X4 `POST /api/cash-mutations/ekstrak-halaman` per halaman; sakelar sendiri `AI_EKSTRAKSI_REKENING_KORAN` (bawaan mati) → 503; 422 penjaga / 429 kuota; tidak menulis, tidak mencatat isi — **PR #2**
+- ⏳ X5 Tombol "Unggah PDF rekening koran" dengan progres per halaman. Hasilnya masuk grid sebagai blok DRAF berpenanda lilac dengan kolom Hal. — **antrean (b)**: dikerjakan sesudah grid (PR #1) ada di `main`; label Debet/Kredit, nomor referensi bank → `ref`, model per halaman dari header `X-Model-Ekstraksi`
+- 🔒 X6 Uji banding 2–3 penyedia × ≥ 12 rekening koran nyata. Ukuran utama **% dokumen lolos kesinambungan saldo tanpa koreksi**, ditambah biaya per dokumen — ⏸ **CP-21** (D54). *Pra-uji SINTETIS 2026-10-31 (16 dok./47 hal.): Flash-Lite + ulang Flash lolos 14/15, identik 15/16, ±0,0067 USD/hal — bukan pengganti X6*
+- 🔒 X7 Aktivasi produksi hanya sesudah X0 dan D54 — ⏸ **CP-22**. Yang menyalakan: `AI_EKSTRAKSI_REKENING_KORAN="true"` + `AI_PROVIDER_EKSTRAKSI`/`AI_MODEL_EKSTRAKSI` + `AI_MODEL_EKSTRAKSI_ULANG` + kunci penyedia (`AI_FEATURES_ENABLED="true"` saja tidak cukup)
 - ⏳ X8 ROADMAP + graphify
 
 ---
