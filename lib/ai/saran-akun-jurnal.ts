@@ -1,7 +1,13 @@
-import { Type } from '@google/genai'
-import { GEMINI_MODEL, generateContentWithRetry } from './client'
+import { penyediaGemini } from './gemini'
+import type { AiProvider, SkemaJson } from './penyedia'
 
 // Saran PASANGAN AKUN untuk jurnal manual (D10, direvisi R1).
+//
+// Dipindah dari lib/gemini/suggest-journal-account.ts ke lapisan penyedia (X1)
+// TANPA perubahan perilaku: prompt, skema, penyaring, dan penyedianya sama —
+// tetap Gemini, dengan model, retry, dan `temperature: 0` yang sama (lewat
+// adaptor `penyediaGemini`). Penyedia lain hanya lewat parameter `ai`, dan
+// tidak ada pemanggil yang mengisinya.
 //
 // Bedanya dengan lib/gemini/suggest-coa.ts: di sana yang dicocokkan adalah SATU
 // nama akun mentah ke SATU akun COA. Di sini masukannya kalimat bebas yang
@@ -37,22 +43,22 @@ export interface AiJournalPair {
   reason: string
 }
 
-const responseSchema = {
-  type: Type.ARRAY,
+export const SKEMA_SARAN_AKUN: SkemaJson = {
+  type: 'array',
   items: {
-    type: Type.OBJECT,
+    type: 'object',
     properties: {
-      debitKode: { type: Type.STRING },
-      kreditKode: { type: Type.STRING },
-      confidence: { type: Type.INTEGER },
-      reason: { type: Type.STRING },
+      debitKode: { type: 'string' },
+      kreditKode: { type: 'string' },
+      confidence: { type: 'integer' },
+      reason: { type: 'string' },
     },
     required: ['debitKode', 'kreditKode', 'confidence', 'reason'],
   },
 }
 
 /**
- * Minta Gemini menyarankan pasangan akun debit/kredit dari keterangan transaksi.
+ * Minta AI (Gemini) menyarankan pasangan akun debit/kredit dari keterangan transaksi.
  *
  * Mengembalikan paling banyak tiga pasangan, terurut keyakinan menurun. Kode
  * yang dikembalikan adalah KODE akun (bukan UUID — model tidak perlu tahu id
@@ -61,7 +67,8 @@ const responseSchema = {
  */
 export async function suggestJournalAccounts(
   keterangan: string,
-  choices: JournalAccountChoice[]
+  choices: JournalAccountChoice[],
+  ai: AiProvider = penyediaGemini()
 ): Promise<AiJournalPair[]> {
   const teks = keterangan.trim()
   if (teks === '' || choices.length === 0) return []
@@ -90,17 +97,7 @@ Aturan:
 
 Kembalikan HANYA array JSON sesuai skema.`
 
-  const response = await generateContentWithRetry({
-    model: GEMINI_MODEL,
-    contents: [{ text: prompt }],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema,
-      temperature: 0,
-    },
-  })
-
-  const text = response.text
+  const { teks: text } = await ai.mintaJson({ isi: [{ jenis: 'teks', teks: prompt }], skema: SKEMA_SARAN_AKUN })
   if (!text) return []
 
   let parsed: unknown
