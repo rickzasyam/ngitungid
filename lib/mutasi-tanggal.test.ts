@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   bacaTanggalGrid,
+  batasKalenderGrid,
   bulanGridDari,
   namaBulanGrid,
   normalisasiTanggal,
   tampakTanggal,
   tampilTanggalSel,
-  tanggalDariRentang,
   urutanBlok,
   type BulanGrid,
 } from './mutasi-tanggal'
@@ -235,21 +235,15 @@ describe('tampakTanggal (kelas baris blok)', () => {
   it.each(['', 'SALDO AWAL', 'Tanggal', '45', '2026-13-01'])('"%s" → tidak', t => expect(tampakTanggal(t)).toBe(false))
 })
 
-describe('tanggalDariRentang — klik di date-range-picker yang dibuka dengan nilai awal', () => {
-  const d = (y: number, m: number, h: number) => new Date(y, m - 1, h)
-  it('klik sesudah nilai awal → [awal, klik] → tanggal klik', () => {
-    expect(tanggalDariRentang({ from: d(2026, 4, 7), to: d(2026, 4, 18) }, '2026-04-07')).toBe('2026-04-18')
+describe('batasKalenderGrid — kalender sel Tanggal dikunci ke bulan grid', () => {
+  it('bulan awal + tanggal pertama & terakhir bulan grid', () => {
+    expect(batasKalenderGrid(APR)).toEqual({ bulanAwal: '2026-04', min: '2026-04-01', max: '2026-04-30' })
+    expect(batasKalenderGrid(OKT)).toEqual({ bulanAwal: '2026-10', min: '2026-10-01', max: '2026-10-31' })
   })
-  it('klik sebelum nilai awal → [klik, awal] → tanggal klik', () => {
-    expect(tanggalDariRentang({ from: d(2026, 4, 3), to: d(2026, 4, 7) }, '2026-04-07')).toBe('2026-04-03')
-  })
-  it('klik nilai awal sendiri, atau klik ulang (rentang baru tanpa ujung) → tanggal mulai', () => {
-    expect(tanggalDariRentang({ from: d(2026, 4, 7), to: d(2026, 4, 7) }, '2026-04-07')).toBe('2026-04-07')
-    expect(tanggalDariRentang({ from: d(2026, 4, 20), to: undefined }, '2026-04-07')).toBe('2026-04-20')
-  })
-  it('tanpa tanggal → null', () => {
-    expect(tanggalDariRentang(undefined, '2026-04-07')).toBeNull()
-    expect(tanggalDariRentang({ from: undefined, to: undefined }, '2026-04-07')).toBeNull()
+  it('Februari kabisat & bukan kabisat', () => {
+    expect(batasKalenderGrid(FEB_KABISAT).max).toBe('2028-02-29')
+    expect(batasKalenderGrid({ tahun: 2026, bulan: 2 }).max).toBe('2026-02-28')
+    expect(batasKalenderGrid({ tahun: 2100, bulan: 2 }).max).toBe('2100-02-28')
   })
 })
 

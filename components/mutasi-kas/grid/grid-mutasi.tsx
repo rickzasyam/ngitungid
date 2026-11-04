@@ -18,14 +18,15 @@
 // Shift+Enter = naik. Menyunting: ketik langsung (menimpa) atau F2.
 //
 // ══ ALT+↓ (masukan Ricko 2026-10-30) ═══════════════════════════════════════
-// Di sel Tanggal membuka kalender (date-range-picker yang sudah ada); di sel
-// Nama Akun membuka daftar akun penuh. Ikon ▾/kalender muncul di baris yang
-// aktif atau di-hover.
+// Di sel Tanggal membuka kalender (`components/date-picker.tsx`, dibatasi ke
+// bulan grid — keadaan buka/tutupnya dipegang grid ini); di sel Nama Akun
+// membuka daftar akun penuh. Ikon ▾/kalender muncul di baris yang aktif atau
+// di-hover.
 
 import 'react-data-grid/lib/styles.css'
 import './grid-mutasi.css'
 
-import { createContext, useContext, useMemo, useRef, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   Cell,
   DataGrid,
@@ -51,7 +52,7 @@ import {
 import { alasanTerkunci, type BarisGrid } from '@/lib/mutasi-grid-state'
 import { labelAkun, type GalatServerBaris, type RantaiGrid, type Usulan } from '@/lib/mutasi-grid-turunan'
 import { bacaTanggalGrid, tampilTanggalSel, type BulanGrid } from '@/lib/mutasi-tanggal'
-import { KalenderSel, bukaKalenderDi } from './kalender-sel'
+import { KalenderSel } from './kalender-sel'
 import { KomboAkun, type AkunPilihan, type CaraPilih } from './kombo-akun'
 
 export type InfoServerBaris = {
@@ -303,6 +304,8 @@ function SelStatus({ b, kt }: { b: BarisGrid; kt: KonteksTampilan }) {
 
 export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembunyi, gridRef, onUbahSel, onTempel, onUndo, onRedo, onAktif }: Props) {
   const aktif = useRef<PosisiAktif>({ kunci: null, kolom: null })
+  // Kunci baris yang kalendernya terbuka (Alt+↓ atau ikon), null = tertutup.
+  const [kalender, setKalender] = useState<string | null>(null)
 
   const kolom = useMemo((): readonly Column<BarisGrid>[] => {
     const kt = konteks
@@ -327,8 +330,10 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
               {i.isi}
               {k === 'tanggal' && bolehSunting(row, k) && (
                 <KalenderSel
-                  ymd={tanggalPasti(row.sel.tanggal, kt.bulanGrid)}
+                  ymd={tanggalPasti(row.sel.tanggal, kt.bulanGrid) ?? ''}
                   bulanGrid={kt.bulanGrid}
+                  terbuka={kalender === row.kunci}
+                  onBuka={buka => setKalender(buka ? row.kunci : null)}
                   onPilih={ymd => onUbahSel(row.kunci, 'tanggal', ymd)}
                 />
               )}
@@ -392,7 +397,7 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
       renderCell: ({ row }) => <SelStatus b={row} kt={kt} />,
     }
     return [nomor, ...data, status]
-  }, [konteks, sembunyi, gridRef, onUbahSel])
+  }, [konteks, sembunyi, gridRef, onUbahSel, kalender])
 
   const jumlahBaris = baris.length
   const konteksEditor = useMemo(
@@ -440,6 +445,8 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
 
   const onPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
+    // Dari panel yang di-portal (kalender, daftar akun): bukan tempelan ke grid.
+    if (!e.currentTarget.contains(target)) return
     if (target.closest('.rdg-editor-container')) return // editor menangani tempelnya sendiri
     const teks = e.clipboardData.getData('text/plain')
     if (teks === '') return
@@ -461,6 +468,9 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
         rowKeyGetter={r => r.kunci}
         rowHeight={34}
         headerRowHeight={36}
+        // Panel kalender mengikuti selnya; sel yang digulir keluar dibuang
+        // react-data-grid, jadi kalendernya ditutup saat grid digulir.
+        onScroll={kalender === null ? undefined : () => setKalender(null)}
         rowClass={r => (r.id === null ? 'gm-baris-baru' : undefined)}
         onRowsChange={(rows, data) => {
           const k = data.column.key as KolomGrid
@@ -483,13 +493,14 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
             e.preventGridDefault()
             e.preventDefault()
             if (!konteks.bolehTulis || alasanTerkunci(args.row, 'tanggal') !== null) return
-            const selAktif = () => gridRef.current?.element?.querySelector('.rdg-cell[aria-selected="true"]') ?? null
+            const kunci = args.row.kunci
             if (args.mode === 'EDIT') {
-              // Simpan ketikan dulu; kalender dibuka dari sel yang sudah kembali tampil.
+              // Simpan ketikan dulu; kalender dibuka sesudah sel kembali tampil
+              // dan menerima fokusnya lagi (fokus lalu pindah ke panel).
               args.onClose(true, true)
-              window.setTimeout(() => bukaKalenderDi(selAktif()), 0)
+              window.setTimeout(() => setKalender(kunci), 0)
             } else {
-              bukaKalenderDi(selAktif())
+              setKalender(kunci)
             }
             return
           }

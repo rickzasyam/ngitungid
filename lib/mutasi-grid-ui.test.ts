@@ -271,30 +271,46 @@ describe('tanggal ketikan & kalender (D66)', () => {
   it('ketikan sel dinormalisasi lewat teksKetikan sebelum masuk reducer', () => {
     expect(LEMBAR).toContain("dispatch({ jenis: 'ubahSel', kunci, kolom, nilai: teksKetikan(kolom, nilai, periode) })")
   })
-  it('event dari panel kalender tidak sampai ke grid, KECUALI Escape (penutup panel ada di document)', () => {
-    expect(KALENDER).toContain("if (e.key !== 'Escape') henti(e)")
-    expect(KALENDER).toContain('tanggalDariRentang(r, awal)')
+  it('event dari panel kalender (portal) tidak sampai ke react-data-grid', () => {
+    // keydown/mousedown/click: isolasi panel bersama; sisanya di wadah sel.
+    expect(KALENDER).toContain('<DatePicker')
+    for (const ev of ['onDoubleClick', 'onKeyUp', 'onCopy', 'onPaste', 'onContextMenu', 'onFocus']) expect(KALENDER).toContain(`${ev}={henti}`)
+    expect(KALENDER).toContain('if (!e.currentTarget.contains(e.target as Node)) e.stopPropagation()')
+    // Tempelan dari panel yang di-portal tidak masuk ke grid.
+    expect(GRID).toContain('if (!e.currentTarget.contains(target)) return')
   })
 })
 
 describe('Alt+↓ & ikon di sel', () => {
-  it('Alt+↓ di Tanggal membuka kalender; di Nama Akun membuka editor (daftar penuh)', () => {
+  it('Alt+↓ di Tanggal membuka kalender lewat keadaan grid (bukan klik tombol tersembunyi); di Nama Akun membuka editor', () => {
     expect(GRID).toContain("e.altKey && e.key === 'ArrowDown' && args.column?.key === 'tanggal'")
-    expect(GRID).toContain('bukaKalenderDi(selAktif())')
+    // Kedua jalur (sel aktif & sedang menyunting) membuka kalender lewat keadaan grid.
+    const altBawah = GRID.slice(GRID.indexOf("args.column?.key === 'tanggal'"), GRID.indexOf("args.column?.key === 'akunLawan'"))
+    expect(altBawah.split('setKalender(kunci)').length - 1).toBe(2)
+    expect(GRID).toContain('terbuka={kalender === row.kunci}')
+    expect(KALENDER).toContain('open={terbuka}')
+    expect(KALENDER).toContain('onOpenChange={onBuka}')
+    expect(GRID).not.toContain('bukaKalenderDi')
     expect(GRID).toContain("e.altKey && e.key === 'ArrowDown' && args.mode === 'ACTIVE' && args.column?.key === 'akunLawan'")
   })
-  it('kalender = date-range-picker yang SUDAH ADA, dipakai apa adanya', () => {
-    expect(KALENDER).toContain("import { DateRangePicker } from '@/components/date-range-picker'")
-    expect(KALENDER).toContain('<DateRangePicker')
+  it('kalender = DatePicker satu tanggal (PR #6): dikunci ke bulan grid, jangkar & fokus kembali = sel grid', () => {
+    expect(KALENDER).toContain("import { DatePicker } from '@/components/date-picker'")
+    expect(KALENDER).not.toContain('DateRangePicker')
+    expect(KALENDER).toContain('min={batas.min}')
+    expect(KALENDER).toContain('max={batas.max}')
+    expect(KALENDER).toContain('bulanAwal={batas.bulanAwal}')
+    expect(KALENDER).toContain('jangkarRef={selRef}')
+    expect(KALENDER).toContain('fokusKembaliKe={selRef}')
+    expect(KALENDER).toContain(`el?.closest<HTMLElement>('[role="gridcell"]')`)
   })
   it('ikon hanya di baris aktif/hover (CSS), tidak jadi tempat berhenti Tab', () => {
     expect(CSS).toContain(".rdg-row:has(> .rdg-cell[aria-selected='true']) .gm-picu")
     expect(GRID).toContain('tabIndex={-1}')
+    expect(KALENDER).toContain('tabIndex={-1}')
   })
-  it('tombol hapus rentang (PR #5, bisa di-Tab) disingkirkan dari sel — hanya pemicu yang tersisa', () => {
-    const i = CSS.indexOf('.grid-mutasi .gm-kalender button:not([aria-haspopup]) {')
-    expect(i).toBeGreaterThan(-1)
-    expect(CSS.slice(i, CSS.indexOf('}', i))).toContain('display: none !important;')
+  it('penyiasatan date-range-picker sudah dibuang (CSS .gm-kalender, wadah 480px)', () => {
+    expect(CSS).not.toContain('gm-kalender')
+    expect(CSS).not.toContain('480px')
   })
 })
 

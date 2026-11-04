@@ -11,7 +11,7 @@
 // hanya memutuskan sel mana milik baris dan kolom mana. Yang TIDAK diputuskan
 // di sini, dan tidak boleh diputuskan oleh Stream B:
 //   - arah uang (masuk/keluar)  → S3 `tentukanArah` (kotak Arah, §5.G)
-//   - tanggal & tahunnya        → S2 `parseTanggalCell` + `tetapkanTahun`
+//   - tanggal & tahunnya        → `lib/mutasi-tanggal.ts` (`normalisasiTanggal`: bukti blok, lalu bulan grid — D66)
 //   - nominal                   → S2 lewat `bacaNominal` (`lib/nominal.ts`)
 //   - kelas baris (judul berulang, SALDO AWAL, TOTAL, lanjutan) → S2 `kelasBaris`
 // Satu aturan untuk tempelan, CSV, dan PDF — tanpa parser khusus per bank.

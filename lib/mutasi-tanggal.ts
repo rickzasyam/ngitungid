@@ -27,7 +27,7 @@
 // hari/bulan berisi "04/01/2026" (4 Januari) di grid April diam-diam menjadi
 // 1 April — transaksi pindah bulan tanpa satu pun galat.
 
-import { fmtTanggal, localDateToYmd } from '@/lib/ymd'
+import { fmtTanggal } from '@/lib/ymd'
 import { potonganTanggal } from '@/lib/csv/mutasi-kas'
 import type { Periode } from '@/lib/mutasi-draf'
 
@@ -263,15 +263,10 @@ export function tampilTanggalSel(teks: string, g: BulanGrid): string {
 }
 
 /**
- * Tanggal yang dipilih pengguna lewat date-range-picker (pemilih RENTANG) yang
- * dibuka dengan nilai awal `awal` (kalender-sel.tsx): nilai awal sudah menjadi
- * tanggal mulai, jadi satu klik menutup rentang [awal, klik] atau [klik, awal].
- * Yang dipilih = ujung yang BUKAN `awal`; rentang satu hari atau tanpa ujung
- * akhir → tanggal mulainya.
+ * Batas kalender sel Tanggal = bulan grid (DatePicker `bulanAwal` + `min`/`max`):
+ * kalender terbuka di bulan grid dan hanya tanggal bulan itu yang bisa dipilih.
  */
-export function tanggalDariRentang(r: { from?: Date; to?: Date } | undefined, awal: string): string | null {
-  if (!r?.from) return null
-  const mulai = localDateToYmd(r.from)
-  if (r.to && mulai === awal) return localDateToYmd(r.to)
-  return mulai
+export function batasKalenderGrid(g: BulanGrid): { bulanAwal: string; min: string; max: string } {
+  const bulanAwal = `${g.tahun}-${pad2(g.bulan)}`
+  return { bulanAwal, min: `${bulanAwal}-01`, max: `${bulanAwal}-${pad2(hariDalamBulan(g.tahun, g.bulan))}` }
 }

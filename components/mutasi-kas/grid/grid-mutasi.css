@@ -165,6 +165,8 @@
 }
 
 .grid-mutasi .gm-panah {
+  display: inline-flex;
+  align-items: center;
   inline-size: 26px;
   block-size: 26px;
   margin-block: auto;
@@ -180,72 +182,8 @@
   background: color-mix(in srgb, var(--color-accent-primary) 45%, white);
 }
 
-/* Kalender = components/date-range-picker.tsx APA ADANYA, dipersempit jadi
-   ikon dari luar. Gaya pemicunya inline di komponen itu, jadi penimpaannya
-   butuh !important. Label tanggalnya disembunyikan secara VISUAL saja —
-   tombol tetap punya nama yang dibacakan pembaca layar. */
-/* Komponennya meratakan panel ke TEPI KANAN wadahnya (dirancang untuk
-   pemicu di kanan halaman). Kolom Tanggal ada di kiri, jadi panel dua bulan
-   (±470px) akan keluar layar ke kiri. Wadahnya dibuat 480px ke KANAN dari
-   ikon — tak terlihat, terpotong sel, tidak menangkap klik — supaya tepi kanan
-   panel jatuh di sana dan panel terbuka ke kanan ikon. */
-.grid-mutasi .gm-kalender {
-  inline-size: 26px;
-}
-
-.grid-mutasi .gm-kalender > div {
-  position: absolute !important;
-  inset-block: 0;
-  inset-inline-start: 0;
-  inline-size: 480px;
-  min-width: 0 !important;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-}
-
-.grid-mutasi .gm-kalender button[aria-haspopup='dialog'] {
-  pointer-events: auto;
-  inline-size: 26px !important;
-  block-size: 26px;
-  padding: 0 !important;
-  gap: 0 !important;
-  justify-content: center;
-  border: none !important;
-  border-radius: 9999px !important;
-  background: var(--color-muted-bg) !important;
-  box-shadow: none !important;
-}
-
-.grid-mutasi .gm-kalender button[aria-haspopup='dialog']:hover {
-  background: color-mix(in srgb, var(--color-accent-primary) 45%, white) !important;
-}
-
-.grid-mutasi .gm-kalender button[aria-haspopup='dialog'] > span {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* Tombol hapus rentang (date-range-picker sejak PR #5: tombol asli, SAUDARA
-   pemicu, bisa dicapai Tab). Di sel grid ia jatuh di wadah 480px yang tak
-   terlihat — tombol tak terlihat yang bisa di-Tab, di dalam wadah aria-hidden.
-   Di grid, sel tanggal dikosongkan lewat Delete; tombol ini disingkirkan dari
-   tampilan, urutan Tab, dan pohon aksesibilitas sekaligus. */
-.grid-mutasi .gm-kalender button:not([aria-haspopup]) {
-  display: none !important;
-}
-
-.grid-mutasi .gm-kalender button[aria-haspopup='dialog'] svg {
-  color: var(--color-text-primary) !important;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .grid-mutasi .gm-panah,
-  .grid-mutasi .gm-kalender button {
+  .grid-mutasi .gm-panah {
     transition: none !important;
   }
 }

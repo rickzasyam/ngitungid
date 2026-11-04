@@ -56,7 +56,7 @@ export function KomboAkun({ akun, nilai, onNilai, onPilih, selaluTerbuka = false
   const inputRef = useRef<HTMLInputElement>(null)
   // Node daftar di ref + `daftarSiap` sebagai PEMICU: ModalPortal baru
   // memasang isinya di render BERIKUTNYA, jadi efek penempatan harus jalan
-  // ulang begitu node-nya menempel (pola yang sama dengan date-range-picker).
+  // ulang begitu node-nya menempel (pola yang sama dengan components/kalender-panel.tsx).
   const daftarRef = useRef<HTMLDivElement | null>(null)
   const [daftarSiap, setDaftarSiap] = useState(false)
   const pasangDaftar = useCallback((node: HTMLDivElement | null) => {
@@ -92,7 +92,7 @@ export function KomboAkun({ akun, nilai, onNilai, onPilih, selaluTerbuka = false
   const tampil = terbuka || selaluTerbuka
 
   // Posisi daftar: tepat di bawah input (atau di atasnya bila tidak muat),
-  // ditulis langsung ke .style — sama dengan pola date-range-picker.
+  // ditulis langsung ke .style — sama dengan pola components/kalender-panel.tsx.
   useLayoutEffect(() => {
     if (!tampil || !daftarSiap) return
     const tempatkan = () => {
