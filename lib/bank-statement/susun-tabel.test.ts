@@ -6,7 +6,7 @@ import { gabungLintasHalaman, kolomSebelumnyaBerposisi, kolomTerakhir, rangkumDo
 import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenTanpaSaldo } from './fikstur/koleksi'
 import type { DokumenSintetis } from './fikstur/dokumen-sintetis'
 import { jawabanSempurna, penyediaTiruan } from './fikstur/jawaban-ai'
-import { GalatSusun, PROMPT_SISTEM, SISA_MIN_ULANG_MS, SKEMA_SUSUN, periksaJawaban, susunDenganUlang, susunHalaman, type JawabanSusun, type MasukanSusun } from './susun-tabel'
+import { GalatSusun, PROMPT_SISTEM, SISA_MIN_ULANG_MS, SKEMA_SUSUN, memuatNominal, periksaJawaban, susunDenganUlang, susunHalaman, type JawabanSusun, type MasukanSusun } from './susun-tabel'
 
 // X3 — penyusun tabel. AI ditiru dengan jawaban yang dibentuk dari kebenaran
 // fikstur, jadi yang diuji: (1) jawaban yang benar menghasilkan HalamanMentah
@@ -310,6 +310,126 @@ describe('penjaga bentuk menolak jawaban rusak — halaman gagal terlihat', asyn
     expect(tolak({ ...j, baris: [j.baris[0], j.baris[0]] }, g)).toContain('tidak urut/ganda')
     const lepas = { nomorBaris: 2, tanggal: '', uraian: 'LANJUTAN UJI-B', nominalPertama: '', nominalKedua: '', penanda: '', saldo: '', lain: [], barisLanjutan: [] }
     expect(tolak({ ...j, baris: [j.baris[0], lepas] }, g)).toContain('lanjutan uraian tidak digabung')
+  })
+})
+
+// ══ Cakupan baris (keputusan Ricko 2026-11-04, usul a–c log Stream B) ══════
+// Celah lama: cakupan hanya diperiksa di ANTARA entri pertama & terakhir yang
+// dikembalikan AI — entri pertama/terakhir yang dibuang dan jawaban kosong
+// lolos (terjadi dengan Flash sungguhan 2026-10-31, acak-1010 hal. 2).
+
+describe('memuatNominal — angka bernominal vs teks kaki/kop', () => {
+  it.each([
+    '1,500,000.00',
+    '1.500.000,00',
+    '250.000',
+    '250,000',
+    '500.00',
+    '(1.500,00)',
+    '1,500,000.00DB',
+    'Rp1.500.000',
+    '05/10 SETORAN TUNAI 2,000,000.00 1,000,000.00',
+  ])('bernominal: %s', t => expect(memuatNominal(t)).toBe(true))
+  it.each([
+    'Halaman 2 / 4',
+    'PT UJI COBA - 000-UJI-B-0001',
+    'PT Uji Coba / 999-UJI-B-77',
+    'Periode: 01/12/2026 - 31/01/2027',
+    'Tanggal 01.12.2026',
+    'No. Rek 1234567890',
+    'UJI-B REF 366747',
+    '1.5.2026',
+    '',
+  ])('bukan nominal: %s', t => expect(memuatNominal(t)).toBe(false))
+})
+
+describe('penjaga cakupan: entri pertama/terakhir & jawaban kosong ditolak, teks kaki boleh', async () => {
+  const tolak = (j: JawabanSusun, m: MasukanSusun) => {
+    try {
+      periksaJawaban(JSON.stringify(j), m)
+    } catch (e) {
+      expect(e).toBeInstanceOf(GalatSusun)
+      return (e as GalatSusun).masalah.join(' | ')
+    }
+    throw new Error('jawaban rusak LOLOS penjaga')
+  }
+  // Halaman BERJUDUL (satu kolom hal. 1) dan halaman TANPA judul (dua kolom hal. 2).
+  const d1 = dokumenSatuKolom()
+  const [s1] = await barisTeks(d1)
+  const mBerjudul: MasukanSusun = { halaman: 1, sumber: { jenis: 'teks', baris: s1 }, kolomSebelumnya: [] }
+  const d2 = dokumenDuaKolom()
+  const sd = await barisTeks(d2)
+  const mTanpaJudul: MasukanSusun = { halaman: 2, sumber: { jenis: 'teks', baris: sd[1] }, kolomSebelumnya: d2.kebenaranHalaman[0].kolom }
+  const kasus: [string, JawabanSusun, MasukanSusun][] = [
+    ['berjudul', jawabanSempurna(d1, 1, s1), mBerjudul],
+    ['tanpa judul', jawabanSempurna(d2, 2, sd[1]), mTanpaJudul],
+  ]
+
+  for (const [nama, j, m] of kasus) {
+    it(`${nama}: jawaban sempurna lolos, termasuk teks kaki "Halaman n / N" yang tidak tercakup`, () => {
+      const baris = (m.sumber as { baris: string[] }).baris
+      const kaki = baris.findIndex(g => g.trim().startsWith('Halaman '))
+      expect(kaki).toBeGreaterThan(Math.max(...j.baris.flatMap(b => [b.nomorBaris, ...b.barisLanjutan])) - 1)
+      expect(periksaJawaban(JSON.stringify(j), m).baris.length).toBeGreaterThan(0)
+    })
+    it(`${nama}: entri PERTAMA dibuang → ditolak`, () => {
+      expect(tolak({ ...j, baris: j.baris.slice(1) }, m)).toContain(`baris tercetak [${j.baris[0].nomorBaris}]`)
+    })
+    it(`${nama}: entri TERAKHIR dibuang → ditolak`, () => {
+      const akhir = j.baris[j.baris.length - 1]
+      expect(tolak({ ...j, baris: j.baris.slice(0, -1) }, m)).toContain(`baris tercetak [${akhir.nomorBaris}] bernominal tidak tercakup`)
+    })
+    it(`${nama}: jawaban KOSONG di halaman bertransaksi → ditolak`, () => {
+      expect(tolak({ ...j, baris: [] }, m)).toContain('bernominal tidak tercakup')
+    })
+  }
+
+  it('halaman berjudul: cakupan KETAT mulai tepat sesudah baris judul, bukan dari entri pertama AI', () => {
+    const [, j] = kasus[0]
+    const sesudahJudul = j.nomorBarisJudul + 1
+    expect(j.baris[0].nomorBaris).toBe(sesudahJudul)
+    // Entri pertama dibuang DAN entri lain ikut maju: cakupan tetap mulai sesudah judul.
+    expect(tolak({ ...j, baris: j.baris.slice(1) }, mBerjudul)).toContain(`baris tercetak [${sesudahJudul}] terlewat`)
+  })
+
+  it('insiden Flash 2026-10-31 (acak-1010 hal. 2): lanjutan uraian di puncak halaman berjudul dibuang → ditolak', async () => {
+    const d = dokumenAcak(1010)
+    const semua = await barisTeks(d)
+    const kolom1 = d.kebenaranHalaman[0].kolom
+    const m: MasukanSusun = { halaman: 2, sumber: { jenis: 'teks', baris: semua[1] }, kolomSebelumnya: kolom1 }
+    const j = jawabanSempurna(d, 2, semua[1])
+    const pertama = j.baris[0]
+    // Baris pertama = ekor uraian transaksi halaman sebelumnya: TANPA nominal.
+    expect([pertama.nominalPertama, pertama.nominalKedua, pertama.saldo, j.nomorBarisJudul > 0]).toEqual(['', '', '', true])
+    expect(memuatNominal(semua[1][pertama.nomorBaris - 1])).toBe(false)
+    expect(periksaJawaban(JSON.stringify(j), m).baris.length).toBe(j.baris.length + 1) // + judul berulang
+    expect(tolak({ ...j, baris: j.baris.slice(1) }, m)).toContain(`baris tercetak [${pertama.nomorBaris}] terlewat`)
+  })
+
+  it('kop di atas baris judul tidak diperiksa; halaman tanpa transaksi boleh kosong', () => {
+    const baris = ['BANK UJI-B CONTOH  No. Rek 000-UJI-B-0001', 'SALDO PER 30/09  1,000,000.00', 'TANGGAL  KETERANGAN  MUTASI  SALDO', 'Tidak ada transaksi', 'Halaman 1 / 1']
+    const j: JawabanSusun = {
+      ...jawabanKosong(),
+      nomorBarisJudul: 3,
+      kolom: ['TANGGAL', 'KETERANGAN', 'MUTASI', 'SALDO'],
+      peranKolom: { tanggal: 'TANGGAL', uraian: 'KETERANGAN', nominalPertama: 'MUTASI', nominalKedua: '', saldo: 'SALDO' },
+    }
+    const m: MasukanSusun = { halaman: 1, sumber: { jenis: 'teks', baris }, kolomSebelumnya: [] }
+    expect(periksaJawaban(JSON.stringify(j), m).baris).toEqual([])
+    // Angka bernominal SESUDAH judul tetap wajib tercakup.
+    expect(tolak(j, { ...m, sumber: { jenis: 'teks', baris: [...baris.slice(0, 3), 'TOTAL  1,000,000.00', ...baris.slice(4)] } })).toContain('baris tercetak [4] bernominal tidak tercakup')
+  })
+
+  it('halaman yang ditolak aturan ini ikut alur ulang Flash yang sudah ada', async () => {
+    const [, j, m] = kasus[0]
+    const penyedia = (model: string, teks: string) => ({ nama: 'gemini' as const, model, mintaJson: vi.fn(async () => ({ teks, model, pemakaian: { tokenMasuk: 1, tokenKeluar: 1 } })) })
+    const tanpaPertama = JSON.stringify({ ...j, baris: j.baris.slice(1) })
+    const r = await susunDenganUlang(penyedia('lite', tanpaPertama), penyedia('flash', JSON.stringify(j)), { ...m, timeoutMs: 50_000 })
+    expect([r.model, r.diulang]).toEqual(['flash', true])
+    expect(r.halaman).toEqual(d1.kebenaranHalaman[0])
+    const e = await susunDenganUlang(penyedia('lite', tanpaPertama), penyedia('flash', JSON.stringify({ ...j, baris: [] })), { ...m, timeoutMs: 50_000 }).catch(x => x)
+    expect([e instanceof GalatSusun, e.inputManual]).toEqual([true, true])
+    expect(e.masalah.join(' | ')).toContain('bernominal tidak tercakup')
   })
 })
 

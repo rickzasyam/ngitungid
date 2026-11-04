@@ -12,9 +12,17 @@ import type { BarisMentah, HalamanMentah, NominalMentah } from '@/lib/mutasi-kas
 // setengah benar — bila
 //  - JSON rusak atau kolom wajib hilang;
 //  - (halaman berteks) sebuah baris merujuk nomor baris yang tidak ada, urutan
-//    mundur/ganda, ada baris tercetak yang terlewat di tengah tabel, sel tidak
-//    tersalin persis, atau ada teks tercetak di baris itu yang tidak masuk sel
-//    mana pun (nominal/saldo yang hilang tidak pernah lolos diam-diam);
+//    mundur/ganda, sel tidak tersalin persis, atau ada teks tercetak di baris
+//    itu yang tidak masuk sel mana pun (nominal/saldo yang hilang tidak pernah
+//    lolos diam-diam);
+//  - (halaman berteks) ada baris tercetak yang tidak tercakup — aturan cakupan
+//    (keputusan Ricko 2026-11-04, usul a–c log Stream B): halaman yang mencetak
+//    judul diperiksa mulai TEPAT SESUDAH baris judul sampai entri terakhir;
+//    halaman tanpa judul dari entri pertama sampai entri terakhir; di luar
+//    rentang itu (kecuali kop di atas baris judul) baris yang memuat angka
+//    bernominal (`memuatNominal`) wajib tercakup, teks kaki seperti
+//    "Halaman 2 / 4" tetap boleh. Akibatnya entri pertama/terakhir yang
+//    dibuang dan jawaban kosong di halaman bertransaksi ditolak;
 //  - lanjutan uraian yang terlipat dikirim sebagai entri sendiri (bukan
 //    dicatat di `barisLanjutan` transaksinya), atau `uraian` bukan bagian baris
 //    pertama saja maupun gabungan persis dengan baris-baris lanjutannya;
@@ -159,6 +167,49 @@ function token(s: string): string[] {
 const rapat = (s: string) => token(s).join(' ')
 
 type Rentang = [number, number]
+
+const angka = (ch: string) => ch >= '0' && ch <= '9'
+
+/** Potongan berisi angka saja, panjangnya di [min, maks]. */
+const kelompokAngka = (s: string, min: number, maks: number) =>
+  s.length >= min && s.length <= maks && [...s].every(angka)
+
+/** "1500000", "1,500,000", "1.500.000" — bagian bulat dengan pemisah ribuan `pemisah` (atau tanpa pemisah). */
+function bulatBerpemisah(s: string, pemisah: string): boolean {
+  const k = s.split(pemisah)
+  if (k.length === 1) return kelompokAngka(s, 1, 30)
+  return kelompokAngka(k[0], 1, 3) && k.slice(1).every(x => kelompokAngka(x, 3, 3))
+}
+
+/**
+ * Satu potongan teks TAMPAK seperti nominal uang: angka berpemisah ribuan
+ * ("1.500.000", "250,000") atau bersen dua digit ("1,500,000.00",
+ * "1.500.000,00", "500.00"), boleh diapit tanda/huruf ("(1.500,00)",
+ * "1,500.00DB", "Rp1.500.000"). Angka polos tanpa pemisah (nomor rekening,
+ * nomor halaman), tanggal ("01/12/2026", "01.12.2026"), dan nomor berstrip
+ * ("000-UJI-B-0001") BUKAN nominal.
+ */
+function potonganNominal(t: string): boolean {
+  let a = 0
+  let b = t.length
+  while (a < b && !angka(t[a])) a++
+  while (b > a && !angka(t[b - 1])) b--
+  const inti = t.slice(a, b)
+  if (inti === '' || ![...inti].every(ch => angka(ch) || ch === '.' || ch === ',')) return false
+  for (const [sen, ribuan] of [['.', ','], [',', '.']]) {
+    const i = inti.lastIndexOf(sen)
+    if (i > 0 && inti.length - i - 1 === 2 && kelompokAngka(inti.slice(i + 1), 2, 2) && bulatBerpemisah(inti.slice(0, i), ribuan)) return true
+  }
+  for (const pemisah of ['.', ',']) {
+    if (inti.includes(pemisah) && bulatBerpemisah(inti, pemisah)) return true
+  }
+  return false
+}
+
+/** Baris tercetak memuat angka bernominal — baris semacam ini tidak boleh lolos tanpa tercakup. */
+export function memuatNominal(baris: string): boolean {
+  return token(baris).some(potonganNominal)
+}
 
 /** Rentang karakter [awal, akhir) setiap kemunculan `cari` sebagai potongan utuh (dibatasi spasi/tepi) di baris tata. */
 function rentangDi(baris: string, cari: string): Rentang[] {
@@ -349,16 +400,29 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
     if ([...sisa.values()].some(n => n !== 0)) masalah.push(`${ke}: teks tercetak di baris [${b.nomorBaris}] tidak cocok dengan selnya`)
   })
 
-  // Cakupan: setiap baris tercetak di antara baris tabel pertama dan terakhir
-  // harus menjadi baris (atau baris judul). Baris yang terlewat = mutasi hilang.
-  if (berteks && j.baris.length > 0) {
+  // Cakupan (keputusan Ricko 2026-11-04, usul a–c). Baris yang terlewat =
+  // mutasi atau bagian uraian yang hilang diam-diam.
+  //  (a) Rentang KETAT — setiap baris tercetak harus jadi baris (atau baris
+  //      judul): halaman yang mencetak judul mulai TEPAT SESUDAH baris judul
+  //      (bukan dari entri pertama yang dikembalikan AI); halaman tanpa judul
+  //      mulai dari entri pertama. Berakhir di entri terakhir.
+  //  (b) Di luar rentang itu — sesudah entri terakhir, dan sebelum entri
+  //      pertama di halaman tanpa judul — baris yang memuat angka bernominal
+  //      wajib tercakup. Kop di atas baris judul tidak diperiksa; teks kaki
+  //      seperti "Halaman 2 / 4" tidak bernominal, jadi tetap boleh.
+  //  (c) Akibatnya jawaban kosong di halaman bertransaksi ditolak.
+  if (berteks) {
     const dipakai = new Set(j.baris.flatMap(b => [b.nomorBaris, ...b.barisLanjutan]))
-    const awal = j.baris[0].nomorBaris
-    const akhir = Math.max(...dipakai)
+    const pertama = j.baris.length > 0 ? j.baris[0].nomorBaris : garis.length + 1
+    const awal = adaJudul ? Math.min(j.nomorBarisJudul + 1, pertama) : pertama
+    const akhir = dipakai.size > 0 ? Math.max(...dipakai) : 0
+    const lewat = (n: number) => !dipakai.has(n) && n !== j.nomorBarisJudul && garis[n - 1] !== undefined
     for (let n = awal; n <= akhir; n++) {
-      if (!dipakai.has(n) && n !== j.nomorBarisJudul && garis[n - 1] !== undefined && rapat(garis[n - 1]) !== '') {
-        masalah.push(`baris tercetak [${n}] terlewat`)
-      }
+      if (lewat(n) && rapat(garis[n - 1]) !== '') masalah.push(`baris tercetak [${n}] terlewat`)
+    }
+    for (let n = (adaJudul ? j.nomorBarisJudul : 0) + 1; n <= garis.length; n++) {
+      if (n >= awal && n <= akhir) continue
+      if (lewat(n) && memuatNominal(garis[n - 1])) masalah.push(`baris tercetak [${n}] bernominal tidak tercakup`)
     }
   }
   if (masalah.length > 0) throw new GalatSusun(masalah)
