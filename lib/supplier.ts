@@ -157,3 +157,46 @@ export function validateSupplierInput(input: SupplierInput): SupplierCheck {
     },
   }
 }
+
+// ══ RIWAYAT SUPPLIER (audit_events, entity_type 'supplier') ══════════════
+// Nama peristiwa milik lib entitasnya sendiri, bukan lib/audit.ts (R2 §3.3) —
+// pola yang sama dengan JOURNAL_EVENTS. Enum 'supplier' sudah ada sejak 0014;
+// tidak ada migrasi.
+
+export const SUPPLIER_EVENTS = ['created', 'updated', 'deleted'] as const
+export type SupplierEvent = (typeof SUPPLIER_EVENTS)[number]
+
+/** Kolom DATA supplier yang direkam di nilai_sebelum/nilai_sesudah — tanpa id, klien, dan cap waktu. */
+export const KOLOM_DATA_SUPPLIER = [
+  'nama',
+  'kontak',
+  'npwp',
+  'bankNama',
+  'bankRekening',
+  'bankAtasNama',
+  'akunHutangDefaultId',
+] as const satisfies readonly (keyof SupplierValue)[]
+
+/** Isi supplier untuk riwayat: tepat ketujuh kolom data, apa pun yang ikut terbawa di objeknya. */
+export function snapshotSupplier(v: SupplierValue): SupplierValue {
+  return {
+    nama: v.nama,
+    kontak: v.kontak,
+    npwp: v.npwp,
+    bankNama: v.bankNama,
+    bankRekening: v.bankRekening,
+    bankAtasNama: v.bankAtasNama,
+    akunHutangDefaultId: v.akunHutangDefaultId,
+  }
+}
+
+/**
+ * Ada kolom data yang berubah?
+ *
+ * Simpan tanpa perubahan (formulir dibuka lalu disimpan, atau berkas impor yang
+ * sama diunggah ulang) tidak dicatat: ratusan event "updated" yang identik
+ * sebelum-sesudahnya hanya mengubur perubahan yang sungguh terjadi.
+ */
+export function supplierBerubah(sebelum: SupplierValue, sesudah: SupplierValue): boolean {
+  return KOLOM_DATA_SUPPLIER.some(k => sebelum[k] !== sesudah[k])
+}

@@ -57,8 +57,16 @@ const ENTITY_ID_REQUIRED: readonly AuditEntityType[] = ['journal']
  * penghapusan invoice harus tercatat lengkap dengan isinya sebelum dihapus.
  * Konsekuensinya `entity_id`-nya menunjuk baris yang sudah tidak ada — sah,
  * karena CHECK hanya mewajibkan entity_id untuk entitas 'journal'.
+ *
+ * `supplier` pengecualian KEDUA (utang teknis audit supplier, 2026-10-28):
+ * penghapusan supplier diminta tercatat, dan event `deleted` yang ikut dipurge
+ * tidak mencatat apa pun. Alasannya sama dengan invoice, bukan dengan mutasi
+ * kas: data rekanan (kontak, NPWP, rekening bank) tidak punya salinan di luar
+ * aplikasi — beda dengan mutasi, yang buktinya ada di rekening koran dan bisa
+ * diimpor ulang. Supplier hanya bisa dihapus bila tidak dirujuk invoice atau
+ * jurnal mana pun, jadi riwayat inilah satu-satunya jejaknya.
  */
-const RIWAYAT_ABADI: readonly AuditEntityType[] = ['purchase_invoice']
+const RIWAYAT_ABADI: readonly AuditEntityType[] = ['purchase_invoice', 'supplier']
 
 export function riwayatBertahanSetelahDihapus(entityType: AuditEntityType): boolean {
   return RIWAYAT_ABADI.includes(entityType)

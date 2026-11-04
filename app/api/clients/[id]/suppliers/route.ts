@@ -1,12 +1,16 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 import { db } from '@/lib/db'
 import { clients, masterCoa, masterSupplier } from '@/lib/db/schema'
 import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { dbWriteErrorResponse, isUniqueViolation } from '@/lib/api/db-errors'
-import { validateSupplierInput } from '@/lib/supplier'
+import { snapshotSupplier, validateSupplierInput } from '@/lib/supplier'
 import { assertAkunHutangMilikKlien } from '@/lib/api/supplier-queries'
+import { recordSupplierEvent } from '@/lib/api/audit'
+import { resolveUserId } from '@/lib/api/journal-queries'
 
 export const runtime = 'nodejs'
 
@@ -56,6 +60,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 // POST /api/clients/[id]/suppliers — tambah satu supplier.
+//
+// Baris supplier dan riwayat `created`-nya ditulis dalam SATU db.batch (P10):
+// id dibuat di sini supaya event bisa menunjuknya di batch yang sama.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const g = await requireAkunting()
   if ('error' in g) return g.error
@@ -80,12 +87,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const akunGuard = await assertAkunHutangMilikKlien(check.value.akunHutangDefaultId, id)
   if (akunGuard) return akunGuard
 
+  const userId = await resolveUserId(g.user.email)
+  const supplierId = randomUUID()
+  const statements: BatchItem<'pg'>[] = [
+    db.insert(masterSupplier).values({ id: supplierId, clientId: id, ...check.value }),
+    recordSupplierEvent({ clientId: id, supplierId, event: 'created', userId, nilaiSesudah: snapshotSupplier(check.value) }),
+  ]
+
   try {
-    const [row] = await db
-      .insert(masterSupplier)
-      .values({ clientId: id, ...check.value })
-      .returning({ id: masterSupplier.id, nama: masterSupplier.nama })
-    return NextResponse.json({ supplier: row }, { status: 201 })
+    await db.batch(statements as [BatchItem<'pg'>, ...BatchItem<'pg'>[]])
+    return NextResponse.json({ supplier: { id: supplierId, nama: check.value.nama } }, { status: 201 })
   } catch (e) {
     if (isUniqueViolation(e)) {
       return NextResponse.json(

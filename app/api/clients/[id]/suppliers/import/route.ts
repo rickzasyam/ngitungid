@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { asc, eq } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
@@ -6,8 +7,12 @@ import { clients, masterCoa, masterSupplier } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
-import { isHutangAccount, namaSupplierKey } from '@/lib/supplier'
+import { isHutangAccount, namaSupplierKey, snapshotSupplier, supplierBerubah, type SupplierValue } from '@/lib/supplier'
 import { parseSupplierWorkbook } from '@/lib/supplier-import'
+import { KOLOM_SNAPSHOT_SUPPLIER } from '@/lib/api/supplier-queries'
+import { recordSupplierEvents, type SupplierEventInput } from '@/lib/api/audit'
+import { resolveUserId } from '@/lib/api/journal-queries'
+import { CATATAN_MAX } from '@/lib/audit'
 
 export const runtime = 'nodejs'
 
@@ -82,8 +87,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // ── Baca semua yang dibutuhkan SEBELUM menulis ──────────────────────
   const [existing, accounts] = await Promise.all([
+    // Seluruh kolom data: `nilai_sebelum` riwayat supplier yang diperbarui.
     db
-      .select({ id: masterSupplier.id, nama: masterSupplier.nama })
+      .select({ id: masterSupplier.id, ...KOLOM_SNAPSHOT_SUPPLIER })
       .from(masterSupplier)
       .where(eq(masterSupplier.clientId, id)),
     db
@@ -147,25 +153,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const now = new Date()
   const statements: BatchItem<'pg'>[] = []
+  // Riwayat per supplier yang tersentuh — ditulis dalam SATU INSERT di batch
+  // yang sama dengan impornya (P10), jadi impor yang gagal tidak meninggalkan
+  // riwayat, dan riwayat tidak pernah hilang dari impor yang berhasil.
+  const userId = await resolveUserId(g.user.email)
+  const catatanImpor = `Impor berkas "${file.name}"`.slice(0, CATATAN_MAX)
+  const riwayat: SupplierEventInput[] = []
 
   rows.forEach((r, i) => {
     const ada = byNama.get(namaSupplierKey(r.nama))
 
     if (!ada) {
       // Supplier BARU: sel kosong memang jadi null — tidak ada nilai lama yang
-      // bisa dipertahankan.
+      // bisa dipertahankan. Id dibuat di sini supaya riwayatnya bisa menunjuknya.
+      const baru: SupplierValue = {
+        nama: r.nama,
+        kontak: r.kontak,
+        npwp: r.npwp,
+        bankNama: r.bankNama,
+        bankRekening: r.bankRekening,
+        bankAtasNama: r.bankAtasNama,
+        akunHutangDefaultId: nilai[i].akunHutangDefaultId,
+      }
+      const supplierId = randomUUID()
       statements.push(
         db.insert(masterSupplier).values({
+          id: supplierId,
           clientId: id,
-          nama: r.nama,
-          kontak: r.kontak,
-          npwp: r.npwp,
-          bankNama: r.bankNama,
-          bankRekening: r.bankRekening,
-          bankAtasNama: r.bankAtasNama,
-          akunHutangDefaultId: nilai[i].akunHutangDefaultId,
+          nama: baru.nama,
+          kontak: baru.kontak,
+          npwp: baru.npwp,
+          bankNama: baru.bankNama,
+          bankRekening: baru.bankRekening,
+          bankAtasNama: baru.bankAtasNama,
+          akunHutangDefaultId: baru.akunHutangDefaultId,
         })
       )
+      riwayat.push({ clientId: id, supplierId, event: 'created', userId, catatan: catatanImpor, nilaiSesudah: baru })
       return
     }
 
@@ -186,7 +210,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (nilai[i].akunDiputuskan) isi.akunHutangDefaultId = nilai[i].akunHutangDefaultId
 
     statements.push(db.update(masterSupplier).set(isi).where(eq(masterSupplier.id, ada.id)))
+
+    const sebelum = snapshotSupplier(ada)
+    const sesudah = snapshotSupplier({ ...sebelum, ...(isi as Partial<SupplierValue>) })
+    if (supplierBerubah(sebelum, sesudah)) {
+      riwayat.push({ clientId: id, supplierId: ada.id, event: 'updated', userId, catatan: catatanImpor, nilaiSebelum: sebelum, nilaiSesudah: sesudah })
+    }
   })
+
+  const insertRiwayat = recordSupplierEvents(riwayat)
+  if (insertRiwayat) statements.push(insertRiwayat)
 
   if (statements.length === 0) {
     return NextResponse.json({ inserted: 0, updated: 0, warnings: catatan, note: CATATAN_SEL_KOSONG })

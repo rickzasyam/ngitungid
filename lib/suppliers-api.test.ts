@@ -349,3 +349,75 @@ describe('termin supplier sudah tidak dirujuk kode mana pun', () => {
     expect(isi.trim()).toBe('ALTER TABLE "master_supplier" DROP COLUMN "termin_pembayaran";')
   })
 })
+
+// ══ RIWAYAT SUPPLIER di audit_events (utang teknis, 2026-10-28) ══════════
+// Pola modul pembelian: event ditulis di db.batch YANG SAMA dengan perubahannya
+// (P10), nilai sebelum/sesudah = tujuh kolom data, dan event `deleted`
+// bertahan setelah suppliernya dihapus (riwayatBertahanSetelahDihapus).
+describe('riwayat supplier: setiap jalur tulis mencatat audit_events', () => {
+  // Potongan harus berada di antara `const statements` dan `await db.batch(`,
+  // dan di rentang itu tidak boleh ada tulis langsung (`await db.…`) — tulis
+  // di luar batch berarti perubahan dan riwayatnya bisa berpisah nasib.
+  const batchBerisi = (body: string, ...potongan: string[]) => {
+    const awal = body.indexOf('const statements')
+    const akhir = body.indexOf('await db.batch(')
+    expect(awal, 'const statements').toBeGreaterThan(-1)
+    expect(akhir, 'db.batch').toBeGreaterThan(awal)
+    const rentang = body.slice(awal, akhir)
+    expect(rentang, 'tulis langsung di luar batch').not.toContain('await db.')
+    for (const p of potongan) expect(rentang, p).toContain(p)
+  }
+
+  it('tambah: insert dengan id buatan sendiri + event created, satu batch', () => {
+    const body = handler(LIST, 'POST')
+    batchBerisi(body, 'id: supplierId, clientId: id', "event: 'created'", 'nilaiSesudah: snapshotSupplier(check.value)')
+    expect(body).toContain('randomUUID()')
+    expect(body).not.toContain('.returning(')
+  })
+
+  it('ubah: event updated dengan sebelum → sesudah, hanya bila ada yang berubah', () => {
+    const body = handler(ROW, 'PATCH')
+    batchBerisi(body, "event: 'updated'", 'nilaiSebelum: sebelum', 'nilaiSesudah: sesudah')
+    expect(body).toContain('if (supplierBerubah(sebelum, sesudah))')
+    expect(body).toContain('snapshotSupplier(g.row)')
+  })
+
+  // Urutan event vs delete DI DALAM batch tidak penting (satu transaksi, tanpa
+  // FK di antara keduanya); yang dijaga: keduanya di batch yang sama.
+  it('hapus: event deleted (isi sebelum dihapus) di batch yang sama dengan delete, riwayat tidak dipurge', () => {
+    const body = handler(ROW, 'DELETE')
+    batchBerisi(body, "event: 'deleted'", 'nilaiSebelum: snapshotSupplier(g.row)', 'db.delete(masterSupplier)')
+    const event = body.indexOf("event: 'deleted'")
+    expect(body).not.toContain('purgeAuditEvents')
+    // Pemeriksaan "masih dirujuk" tetap mendahului batch — event tidak ditulis untuk penghapusan yang ditolak.
+    expect(body.indexOf('.from(purchaseInvoices)')).toBeLessThan(event)
+  })
+
+  it('guard membaca seluruh kolom data (bahan nilai_sebelum)', () => {
+    expect(ROW.slice(ROW.indexOf('async function guard('))).toContain('...KOLOM_SNAPSHOT_SUPPLIER')
+  })
+
+  it('impor: created & updated untuk setiap supplier yang tersentuh, SATU insert riwayat di batch impor', () => {
+    batchBerisi(IMPORT, 'recordSupplierEvents(riwayat)', 'if (insertRiwayat) statements.push(insertRiwayat)', "event: 'created'", "event: 'updated'")
+    expect(IMPORT).toContain('if (supplierBerubah(sebelum, sesudah))')
+    expect(IMPORT).toContain('id: supplierId,')
+    expect(IMPORT).toContain('...KOLOM_SNAPSHOT_SUPPLIER')
+    // dryRun tetap tidak menulis apa pun, termasuk riwayat.
+    expect(IMPORT.indexOf('if (dryRun)')).toBeLessThan(IMPORT.indexOf('recordSupplierEvents('))
+  })
+
+  it('kolom yang dibaca untuk nilai_sebelum = kolom snapshot di lib/supplier', () => {
+    const LIB = read('lib', 'supplier.ts')
+    const daftar = LIB.slice(LIB.indexOf('export const KOLOM_DATA_SUPPLIER'), LIB.indexOf('] as const satisfies'))
+    const kolom = daftar.split("'").filter((_, i) => i % 2 === 1)
+    expect(kolom).toHaveLength(7)
+    for (const k of kolom) expect(QUERIES, k).toContain(`${k}: masterSupplier.${k},`)
+  })
+
+  it('nama peristiwa bertipe SupplierEvent — wrapper khusus, bukan recordAuditEvent bebas', () => {
+    for (const [src, nama] of [[LIST, 'daftar'], [ROW, 'baris'], [IMPORT, 'impor']] as const) {
+      expect(src, nama).not.toContain('recordAuditEvent(')
+    }
+    expect(read('lib', 'api', 'audit.ts')).toContain('event: SupplierEvent')
+  })
+})

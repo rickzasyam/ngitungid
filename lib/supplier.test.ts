@@ -9,6 +9,11 @@ import {
   BANK_ATAS_NAMA_MAX,
   normalizeNamaSupplier,
   namaSupplierKey,
+  KOLOM_DATA_SUPPLIER,
+  SUPPLIER_EVENTS,
+  snapshotSupplier,
+  supplierBerubah,
+  type SupplierValue,
 } from './supplier'
 
 const AKUN = '11111111-1111-4111-8111-111111111111'
@@ -221,5 +226,37 @@ describe('normalisasi nama supplier', () => {
     // '  A  ' rapi jadi 'A' (1 karakter) → tetap ditolak, bukan lolos karena
     // spasi ikut terhitung.
     expect(validateSupplierInput({ nama: '  A  ' }).ok).toBe(false)
+  })
+})
+
+describe('riwayat supplier (audit_events)', () => {
+  const v: SupplierValue = {
+    nama: 'PT UJI-B Jaya',
+    kontak: null,
+    npwp: '01.234.567.8-901.000',
+    bankNama: 'BANK UJI-B',
+    bankRekening: '0012345678',
+    bankAtasNama: 'PT UJI-B Jaya',
+    akunHutangDefaultId: AKUN,
+  }
+
+  it('nama peristiwa: created, updated, deleted', () => {
+    expect([...SUPPLIER_EVENTS]).toEqual(['created', 'updated', 'deleted'])
+  })
+
+  it('snapshot = tepat tujuh kolom data — id, klien, dan cap waktu tidak ikut', () => {
+    const baris = { ...v, id: 'x', clientId: 'y', updatedAt: new Date() } as SupplierValue
+    expect(snapshotSupplier(baris)).toEqual(v)
+    expect(Object.keys(snapshotSupplier(baris))).toEqual([...KOLOM_DATA_SUPPLIER])
+  })
+
+  it('supplierBerubah: setiap kolom data dihitung, termasuk rekening dan nol di depannya', () => {
+    expect(supplierBerubah(v, { ...v })).toBe(false)
+    for (const k of KOLOM_DATA_SUPPLIER) {
+      const lain = k === 'bankRekening' ? '12345678' : v[k] === null ? 'baru' : null
+      expect(supplierBerubah(v, { ...v, [k]: lain }), k).toBe(true)
+    }
+    // Besar-kecil huruf nama adalah perubahan (tampilannya berubah).
+    expect(supplierBerubah(v, { ...v, nama: 'PT UJI-B JAYA' })).toBe(true)
   })
 })

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { riwayatBertahanSetelahDihapus } from './audit'
 
 // Test STRUKTURAL atas source route mutasi kas — pola sama dengan
 // lib/purchase-api.test.ts dan lib/journals-api.test.ts.
@@ -246,8 +247,7 @@ describe('penghapusan mutasi', () => {
     // lib/audit.ts hanya menyebut 'purchase_invoice' sebagai pengecualian.
     // Menambah pengecualian kedua tanpa menuliskannya di sana membuat aturan
     // umumnya berhenti benar.
-    const AUDIT = read('lib', 'audit.ts')
-    expect(AUDIT).toContain("RIWAYAT_ABADI: readonly AuditEntityType[] = ['purchase_invoice']")
+    expect(riwayatBertahanSetelahDihapus('cash_mutation')).toBe(false)
     expect(body).not.toContain("event: 'deleted'")
   })
 
