@@ -11,7 +11,7 @@
 // hanya memutuskan sel mana milik baris dan kolom mana. Yang TIDAK diputuskan
 // di sini, dan tidak boleh diputuskan oleh Stream B:
 //   - arah uang (masuk/keluar)  → S3 `tentukanArah` (kotak Arah, §5.G)
-//   - tanggal & tahunnya        → S2 `parseTanggalCell` + `tetapkanTahun`
+//   - tanggal & tahunnya        → `lib/mutasi-tanggal.ts` (`normalisasiTanggal`: bukti blok, lalu bulan grid — D66)
 //   - nominal                   → S2 lewat `bacaNominal` (`lib/nominal.ts`)
 //   - kelas baris (judul berulang, SALDO AWAL, TOTAL, lanjutan) → S2 `kelasBaris`
 // Satu aturan untuk tempelan, CSV, dan PDF — tanpa parser khusus per bank.
@@ -41,7 +41,7 @@ export type NominalMentah =
       penanda: string
     }
 
-/** Satu baris tercetak. Sel kosong = '' (bukan null), supaya pembaca tidak bercabang. */
+/** Satu baris transaksi tercetak; uraian yang terlipat sudah digabung (satu spasi). Sel kosong = '' (bukan null), supaya pembaca tidak bercabang. */
 export type BarisMentah = {
   /** Nomor halaman PDF, mulai 1 — ditampilkan di kolom "Hal." (X5). */
   halaman: number
@@ -49,7 +49,7 @@ export type BarisMentah = {
   uraian: string
   nominal: NominalMentah
   saldo: string
-  /** Kolom tercetak lain (No. Ref, Cabang, Teller, …), urut kiri-ke-kanan. Dipetakan S2 lewat alias judul (mis. Reff → catatan). */
+  /** Kolom tercetak lain (No. Ref, Cabang, Teller, …), urut kiri-ke-kanan. Dipetakan S2 lewat alias judul (mis. Ref/Reff → ref). */
   lain: { judul: string; teks: string }[]
 }
 

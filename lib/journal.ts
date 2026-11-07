@@ -561,6 +561,17 @@ const SUMBER_MODUL_PATH: Record<string, (id: string) => string> = {
   mutasi_kas: id => `/mutasi-kas?mutasi=${id}`,
 }
 
+/**
+ * Tautan ke SATU jurnal di /jurnal (CP-20, Ricko 2026-10-29) — dipakai grid
+ * mutasi kas untuk menautkan baris ke jurnal ringkasannya. /jurnal membaca
+ * parameter yang sama (`PARAM_TAUTAN_JURNAL`), jadi bentuk tautannya satu tempat.
+ */
+export const PARAM_TAUTAN_JURNAL = 'jurnal'
+
+export function hrefJurnal(id: string): string {
+  return `/jurnal?${PARAM_TAUTAN_JURNAL}=${encodeURIComponent(id)}`
+}
+
 /** null = sumbernya bukan modul, atau dokumennya tidak ditemukan. */
 export function sumberDokumenHref(
   sumber: string | null | undefined,
