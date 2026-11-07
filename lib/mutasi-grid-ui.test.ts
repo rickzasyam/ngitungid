@@ -6,7 +6,8 @@ import { join } from 'node:path'
 // janji yang mudah hilang dalam satu polish pass. Perilakunya diuji di modul
 // murni (mutasi-grid-state, mutasi-grid-turunan) dan di uji klik dev.
 
-const baca = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
+// CRLF → LF: checkout Windows (core.autocrlf) tidak boleh memerahkan pola multi-baris.
+const baca = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8').split('\r\n').join('\n')
 const PAGE = baca('app', 'mutasi-kas', 'page.tsx')
 const LEMBAR = baca('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
 const GRID = baca('components', 'mutasi-kas', 'grid', 'grid-mutasi.tsx')
@@ -320,5 +321,23 @@ describe('tab rekening kas dari SATU fungsi (D)', () => {
     expect(PAGE).not.toContain('coa?kas=1')
     expect(SETTINGS).not.toContain('coa?kas=1')
     expect(SETTINGS).toContain('muatAkunKas(clientId)')
+  })
+
+  // Uji klik CP-20 (2026-11-07): ganti klien menampilkan tab klien LAMA di bawah
+  // nama klien baru (grid meminta akunKasId klien lama → 400), dan gangguan
+  // jaringan sesaat terbaca "Belum ada akun bertanda kas/bank" tanpa jalan ulang.
+  it('COA termuat diikat ke clientId-nya; memuat & gagal tidak terbaca "belum ada akun kas"', () => {
+    expect(PAGE).toContain('coaDimuat && coaDimuat.clientId === clientId ? coaDimuat : null')
+    expect(PAGE).toContain('const akunKas = coaKlien?.kas ?? TANPA_AKUN')
+    expect(PAGE).toContain("if (!rSemua.ok) throw new Error(")
+    expect(PAGE).toMatch(/catch \(e\) \{\s*if \(!batal\) setCoaDimuat\(\{ clientId, kas: \[\], semua: \[\], galat: e instanceof Error/)
+    const memuat = PAGE.indexOf('{!coaKlien ? (')
+    const gagal = PAGE.indexOf(') : coaKlien.galat ? (')
+    const kosong = PAGE.indexOf(') : akunKas.length === 0 ? (')
+    expect(memuat).toBeGreaterThan(-1)
+    expect(gagal).toBeGreaterThan(memuat)
+    expect(kosong).toBeGreaterThan(gagal)
+    expect(PAGE.slice(gagal, kosong)).toContain('Coba lagi')
+    expect(PAGE).toContain("title={coaKlien && !coaKlien.galat && akunKas.length === 0 ? 'Belum ada akun bertanda")
   })
 })

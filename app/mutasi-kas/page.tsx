@@ -110,6 +110,9 @@ function geserBulan(p: Periode, delta: number): Periode {
 
 // Grid hanya di layar ≥ md (768 px). useSyncExternalStore, bukan efek yang
 // menyetel state: tidak ada render dengan nilai basi, dan server merender daftar.
+// Satu array kosong bersama: dependensi useMemo tetap stabil selama COA belum termuat.
+const TANPA_AKUN: AkunOption[] = []
+
 const MQ_LEBAR = '(min-width: 768px)'
 function langgananLebar(cb: () => void) {
   const mq = window.matchMedia(MQ_LEBAR)
@@ -155,8 +158,11 @@ function MutasiKasContent() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [akunKas, setAkunKas] = useState<AkunOption[]>([])
-  const [akunSemua, setAkunSemua] = useState<AkunOption[]>([])
+  // Hasil muat Master COA BERSAMA clientId pemiliknya: selama klien baru belum
+  // termuat (atau gagal), daftar klien lama tidak boleh tampil di bawah nama klien
+  // baru, dan gagal tidak boleh terbaca sebagai "klien ini tidak punya akun kas".
+  const [coaDimuat, setCoaDimuat] = useState<{ clientId: string; kas: AkunOption[]; semua: AkunOption[]; galat: string | null } | null>(null)
+  const [muatCoaKe, setMuatCoaKe] = useState(0)
 
   // Dibuka dari tombol "Koreksi di Mutasi Kas" di /jurnal (D32). Dipakai
   // sebagai KEADAAN AWAL, bukan efek yang menyetel ulang: bentuk efek melanggar
@@ -199,21 +205,22 @@ function MutasiKasContent() {
     void (async () => {
       try {
         const [kas, rSemua] = await Promise.all([muatAkunKas(clientId), fetch(`/api/clients/${clientId}/coa`)])
-        const semua = (await rSemua.json().catch(() => null)) as { accounts?: AkunOption[] } | null
+        const semua = (await rSemua.json().catch(() => null)) as { accounts?: AkunOption[]; error?: string } | null
+        if (!rSemua.ok) throw new Error(semua?.error ?? 'Gagal memuat Master COA.')
         if (batal) return
-        setAkunKas(kas)
-        setAkunSemua(semua?.accounts ?? [])
-      } catch {
-        if (!batal) {
-          setAkunKas([])
-          setAkunSemua([])
-        }
+        setCoaDimuat({ clientId, kas, semua: semua?.accounts ?? [], galat: null })
+      } catch (e) {
+        if (!batal) setCoaDimuat({ clientId, kas: [], semua: [], galat: e instanceof Error ? e.message : 'Gagal memuat akun kas/bank.' })
       }
     })()
     return () => {
       batal = true
     }
-  }, [clientId])
+  }, [clientId, muatCoaKe])
+
+  const coaKlien = coaDimuat && coaDimuat.clientId === clientId ? coaDimuat : null
+  const akunKas = coaKlien?.kas ?? TANPA_AKUN
+  const akunSemua = coaKlien?.semua ?? TANPA_AKUN
 
   // Akun kas yang dipilih HARUS ada di daftar klien aktif. Diturunkan, bukan
   // dibereskan efek yang memanggil setState (react-hooks/set-state-in-effect):
@@ -569,7 +576,7 @@ function MutasiKasContent() {
                 <button
                   onClick={bukaBuat}
                   disabled={akunKas.length === 0}
-                  title={akunKas.length === 0 ? 'Belum ada akun bertanda kas/bank di Master COA klien ini.' : undefined}
+                  title={coaKlien && !coaKlien.galat && akunKas.length === 0 ? 'Belum ada akun bertanda kas/bank di Master COA klien ini.' : undefined}
                   className="inline-flex items-center gap-2 rounded-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
                   style={{ padding: '8px 16px', fontSize: 12.5, minHeight: 34, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
                 >
@@ -584,7 +591,26 @@ function MutasiKasContent() {
 
         {pakaiGrid && (
           <div className="flex-1 min-h-0 flex flex-col" style={{ background: '#f8f8f8' }}>
-            {akunKas.length === 0 ? (
+            {!coaKlien ? (
+              <p role="status" className="text-sm text-center py-16" style={{ color: 'var(--color-text-muted)' }}>
+                Memuat akun kas/bank…
+              </p>
+            ) : coaKlien.galat ? (
+              <div role="alert" className="text-sm text-center py-16 flex flex-col items-center gap-3" style={{ color: 'var(--color-text-muted)' }}>
+                <p>{coaKlien.galat}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoaDimuat(null)
+                    setMuatCoaKe(n => n + 1)
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                  style={{ padding: '8px 14px', fontSize: 12.5, minHeight: 34, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-primary)' }}
+                >
+                  <RotateCw className="w-3.5 h-3.5" /> Coba lagi
+                </button>
+              </div>
+            ) : akunKas.length === 0 ? (
               <p className="text-sm text-center py-16" style={{ color: 'var(--color-text-muted)' }}>
                 Belum ada akun bertanda kas/bank di Master COA klien ini.
               </p>
