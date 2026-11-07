@@ -599,7 +599,7 @@ Kartu ringkasan umur hutang (belum jatuh tempo · 1–30 · 31–60 · 61–90 �
 
 **S10 — Class CF (D62).** Kosakata baku `Operating Balance` · `Operating` · `Investing` · `Funding` (`lib/coa/class-cf.ts` murni: normalisasi "operasi"/"pendanaan"/huruf kecil → baku; nilai lain → galat di impor/sunting COA, kosong tetap NULL). `classification-health` mengenali "Operating Balance" (bucket `saldo`) — **tanpa mengubah `aggregateCashflow`**, yang memang mengecualikannya dari Operating. Aksi Settings › Master COA **"Tandai akun Operating Balance sebagai akun kas"** (pratinjau daftar → PATCH `is_kas = true`). Test: normalisasi, tak ada peringatan palsu untuk Operating Balance, `cashflowBucketOf` tetap cocok dengan `aggregateCashflow`. **Tanpa migrasi; tidak bergantung pada grid** — boleh dikerjakan lebih dulu bila D62 disetujui.
 
-**S11 — ROADMAP + `graphify update .`.**
+**S11 — ROADMAP + `graphify update .`.** ✅ 2026-11-07 — sesudah uji klik CP-20 (agen menggantikan Ricko: butir 1–16 lolos, NVDA perlu Ricko, satu bug pemuatan akun kas diperbaiki). Rilis grid (0021 + 0022, main 21 → 23) menunggu Ricko — checklist di ROADMAP.
 
 > **D58 — jurnal per baris vs jurnal ringkasan (keputusan baru, butuh persetujuan Ricko).**
 > | Opsi | Jumlah jurnal (Kas Shopee 1, April: 5.187 baris) | Kelebihan | Kekurangan |
@@ -1058,7 +1058,7 @@ Berkas itu memetakan **setiap** task (15 fitur) ke langkah plan ini, dan untuk 9
 | CP-14 | L1 | 9 | **review akuntansi**: aturan tanda, arus kas metode langsung, golden test |
 | CP-15 | L4 | 10 | lencana sumber laporan; angka Dashboard/Analytics dari jurnal vs PDF |
 | **CP-19** 🆕 | **S0** | §5.G | hasil spike library grid (angka keenam kriteria) → **pilih library (D46)** |
-| **CP-20** 🆕 | **S9** | §5.G | uji klik grid: tempel **10.000 baris** dari Excel/Google Sheets/internet banking/sheet template akuntan; **arah ditentukan saldo** (template Debet=masuk vs BCA Debet=keluar) dan **pemilih arah wajib** tanpa saldo; baris dilewati sebagai daftar; sel merah + filter; **saldo putus menahan Simpan**; akun lawan kode/nama; **usulan aturan + Terapkan**; **Pindah Buku** (peringatan & pasangan); **jurnal ringkasan** yang lahir di `/jurnal` + "Koreksi di Mutasi Kas"; duplikat sebagai peringatan; undo; sunting mutasi tersimpan (terposting/beralokasi/periode terkunci terkunci beralasan; jurnal dibalik → terbuka); wizard CSV mengisi grid; form HP; keyboard + pembaca layar |
+| **CP-20** 🆕 | **S9** | §5.G | uji klik grid: tempel **10.000 baris** dari Excel/Google Sheets/internet banking/sheet template akuntan; **arah ditentukan saldo** (template Debet=masuk vs BCA Debet=keluar) dan **pemilih arah wajib** tanpa saldo; baris dilewati sebagai daftar; sel merah + filter; **saldo putus menahan Simpan**; akun lawan kode/nama; **usulan aturan + Terapkan**; **Pindah Buku** (peringatan & pasangan); **jurnal ringkasan** yang lahir di `/jurnal` + "Koreksi di Mutasi Kas"; duplikat sebagai peringatan; undo; sunting mutasi tersimpan (terposting/beralokasi/periode terkunci terkunci beralasan; jurnal dibalik → terbuka); wizard CSV mengisi grid; form HP; keyboard + pembaca layar — **diuji klik agen menggantikan Ricko 2026-11-07** (checklist ROADMAP butir 1–16 lolos; NVDA perlu Ricko, tidak menahan rilis) |
 | **CP-21** 🆕 | **X6** | §5.G | hasil uji banding penyedia (agregat saja) → **pilih penyedia (D54)** |
 | **CP-22** 🆕 | **X5 + X7** | §5.G | PDF → grid di produksi dengan satu rekening koran nyata, hanya sesudah gerbang X0 |
 | — | sebelum tiap migrasi ke main | selalu | **hanya Ricko** |

@@ -19,7 +19,7 @@ plan `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md` **§5.G**
 
 | PR | Branch | Isi | Keadaan |
 |---|---|---|---|
-| #1 | `feat/grid-mutasi` | §5.G Modul A, S0–S9 + masukan uji grid (D63–D66), kolom Ref (D64), sel Tanggal memakai `DatePicker` | Draft · ⏸ **CP-20** (uji klik Ricko di Preview) · migrasi **0021 + 0022** hanya di dev |
+| #1 | `feat/grid-mutasi` | §5.G Modul A, S0–S9 + S11, masukan uji grid (D63–D66), kolom Ref (D64), sel Tanggal memakai `DatePicker` | Draft · CP-20 diuji klik agen 2026-11-07 (1–16 lolos; NVDA perlu Ricko) · S11 ✅ · migrasi **0021 + 0022** hanya di dev · **menunggu rilis Ricko** |
 | #2 | `feat/pdf-rekening-koran` | §5.G Modul B, X1–X4 + harness uji banding sintetis | Draft · aturan cakupan penjaga (a–c) disetujui Ricko 2026-11-04 · langkah 6 (Unggah PDF ke grid) menunggu PR #1 di `main` |
 
 **Keputusan penting** (tabel lengkap di ROADMAP §5.12; alasan di MP §3.6):
@@ -80,8 +80,8 @@ lanjut.
 ## 3. Pekerjaan tersisa
 
 **Antrean Ricko** (urut; jangan dikerjakan sebelum diminta):
-1. **Uji klik CP-20** Ricko di Preview PR #1 → **S11** (ROADMAP + graphify) → **rilis grid 0021 + 0022** oleh Ricko
-   (checklist di ROADMAP § "Checklist rilis Grid Mutasi Kas").
+1. ~~Uji klik CP-20~~ (agen, 2026-11-07; NVDA tetap Ricko) → ~~S11~~ → **rilis grid 0021 + 0022** oleh Ricko, langkah demi
+   langkah (checklist di ROADMAP § "Checklist rilis Grid Mutasi Kas"; prasyaratnya sudah dicocokkan 2026-11-07).
 2. **PR #2 langkah 6 / X5 — "Unggah PDF" ke grid**, sesudah grid ada di `main`. Catatan yang sudah diputuskan (log
    Stream B § "Catatan untuk langkah 6"): label Debet/Kredit/Nama Akun di pratinjau (Debet = uang MASUK; "DB" bank =
    keluar, jadi arah tetap dari kesinambungan saldo, bukan dari judul/penanda); nomor referensi bank → kolom `ref`;
