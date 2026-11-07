@@ -15,7 +15,8 @@ import ts from 'typescript'
 // `{' '}` eksplisit sesudah ekspresi.
 
 const ROOT = join(__dirname, '..')
-const berkas = execSync("git ls-files 'app/*.tsx' 'components/*.tsx'", { cwd: ROOT, encoding: 'utf8' })
+// Kutip GANDA: cmd.exe (Windows) tidak mengenal kutip tunggal, dan daftar berkasnya jadi kosong.
+const berkas = execSync('git ls-files "app/*.tsx" "components/*.tsx"', { cwd: ROOT, encoding: 'utf8' })
   .split('\n')
   .filter(Boolean)
 

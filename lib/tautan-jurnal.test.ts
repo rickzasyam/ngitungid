@@ -9,7 +9,8 @@ import { isPathAllowedForRole } from './route-access'
 // Satu bentuk tautan (`hrefJurnal`), dibaca /jurnal lewat parameter yang sama,
 // dan hanya ditampilkan kepada peran yang memang boleh membuka /jurnal.
 
-const baca = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
+// CRLF → LF: checkout Windows (core.autocrlf) tidak boleh memerahkan pola multi-baris.
+const baca = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8').split('\r\n').join('\n')
 const JURNAL = baca('app', 'jurnal', 'page.tsx')
 const GRID = baca('components', 'mutasi-kas', 'grid', 'grid-mutasi.tsx')
 const LEMBAR = baca('components', 'mutasi-kas', 'grid', 'lembar-mutasi.tsx')
