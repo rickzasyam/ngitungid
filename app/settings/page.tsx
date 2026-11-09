@@ -39,6 +39,7 @@ import {
   Truck,
   BookLock,
   ListChecks,
+  RotateCw,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
@@ -1303,7 +1304,10 @@ function PembukuanTab({
 }) {
   const [akunPpnMasukanId, setAkunPpn] = useState<string>('')
   const [akunPindahBukuId, setAkunPindahBuku] = useState<string>('')
-  const [akunKasIds, setAkunKasIds] = useState<Set<string>>(new Set())
+  // Daftar akun kas dimuat TERPISAH: gagal tidak boleh terbaca "klien ini tidak
+  // punya akun kas" — itu menawarkan akun kas sebagai Pindah Buku (server menolak).
+  const [kasDimuat, setKasDimuat] = useState<{ ids: Set<string> } | { galat: string } | null>(null)
+  const [muatKasKe, setMuatKasKe] = useState(0)
   const [postingBisaDiedit, setPosting] = useState(false)
   const [tersimpan, setTersimpan] = useState(false)
   const [accounts, setAccounts] = useState<CoaAccount[]>([])
@@ -1320,10 +1324,9 @@ function PembukuanTab({
     let batal = false
     void (async () => {
       try {
-        const [rSet, rCoa, kas] = await Promise.all([
+        const [rSet, rCoa] = await Promise.all([
           fetch(`/api/clients/${clientId}/accounting-settings`),
           fetch(`/api/clients/${clientId}/coa`),
-          muatAkunKas(clientId).catch(() => []),
         ])
         const setelan = (await rSet.json().catch(() => null)) as {
           akunPpnMasukanId?: string | null
@@ -1337,7 +1340,6 @@ function PembukuanTab({
         if (batal) return
         setAkunPpn(setelan?.akunPpnMasukanId ?? '')
         setAkunPindahBuku(setelan?.akunPindahBukuId ?? '')
-        setAkunKasIds(new Set(kas.map(a => a.id)))
         // Bentuk `=== true`, bukan `?? true`: ketiadaan baris setelan berarti
         // MATI, sama persis dengan tersimpan false (D42).
         setPosting(setelan?.postingBisaDiedit === true)
@@ -1353,6 +1355,22 @@ function PembukuanTab({
       batal = true
     }
   }, [clientId])
+
+  useEffect(() => {
+    let batal = false
+    muatAkunKas(clientId).then(
+      kas => {
+        if (!batal) setKasDimuat({ ids: new Set(kas.map(a => a.id)) })
+      },
+      (err: unknown) => {
+        if (!batal) setKasDimuat({ galat: err instanceof Error ? err.message : 'Gagal memuat akun kas/bank.' })
+      }
+    )
+    return () => {
+      batal = true
+    }
+  }, [clientId, muatKasKe])
+  const akunKasIds = kasDimuat && 'ids' in kasDimuat ? kasDimuat.ids : null
 
   // Satu jalur simpan untuk kedua setelan. Field yang tidak dikirim tidak
   // diubah di server, jadi menyimpan PPN tidak pernah ikut mematikan sakelar.
@@ -1400,7 +1418,7 @@ function PembukuanTab({
   // Akun Pindah Buku = perantara, BUKAN rekening: akun kas tidak ditawarkan
   // (server menolaknya juga — ini supaya yang pasti ditolak tidak bisa dipilih).
   const opsiAkunPindahBuku: StyledOption[] = useMemo(
-    () => opsiAkun.filter(o => !akunKasIds.has(o.value)),
+    () => opsiAkun.filter(o => !akunKasIds?.has(o.value)),
     [opsiAkun, akunKasIds]
   )
 
@@ -1480,9 +1498,31 @@ function PembukuanTab({
             placeholder="— belum disetel —"
             searchable
             searchPlaceholder="Cari kode atau nama akun…"
-            disabled={readOnly || saving}
+            // Tanpa daftar akun kas, akun kas tidak bisa disaring dari pilihan.
+            disabled={readOnly || saving || !akunKasIds}
             ariaLabel="Akun Pindah Buku klien ini"
           />
+          {kasDimuat === null && (
+            <p role="status" className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+              Memuat daftar akun kas/bank…
+            </p>
+          )}
+          {kasDimuat && 'galat' in kasDimuat && (
+            <div role="alert" className="mt-1.5 flex items-center gap-2 flex-wrap text-[11px]" style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+              <span>{kasDimuat.galat} Akun Pindah Buku belum bisa dipilih.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setKasDimuat(null)
+                  setMuatKasKe(n => n + 1)
+                }}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)', minHeight: 32 }}
+              >
+                <RotateCw className="w-3 h-3" /> Coba lagi
+              </button>
+            </div>
+          )}
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
             Perantara transfer antar rekening klien: keluar di rekening A dan masuk di rekening B
             sama-sama berakun lawan akun ini, jadi saldonya harus nol di akhir periode. Grid Mutasi

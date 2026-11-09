@@ -182,6 +182,11 @@ describe('halaman /mutasi-kas (S9)', () => {
   it('tautan "Koreksi di Mutasi Kas" (?mutasi=) tetap membuka daftar dengan baris terbuka', () => {
     expect(PAGE).toContain("useState<'grid' | 'daftar'>(mutasiDariUrl ? 'daftar' : 'grid')")
   })
+  // Uji klik CP-20: grid di Oktober, Daftar membuka November (rentangnya sendiri).
+  it('pindah ke Daftar membuka bulan grid (keputusan Ricko 2026-11-09)', () => {
+    const cabang = PAGE.slice(PAGE.indexOf("if (id === 'daftar') {"), PAGE.indexOf('setTampilan(id)'))
+    expect(cabang).toContain('setPeriode({ start: bulan.mulai, end: bulan.akhir })')
+  })
 })
 
 // ── Masukan Ricko 2026-10-30 (D63–D66, combobox, Atur kolom) ──
@@ -321,6 +326,18 @@ describe('tab rekening kas dari SATU fungsi (D)', () => {
     expect(PAGE).not.toContain('coa?kas=1')
     expect(SETTINGS).not.toContain('coa?kas=1')
     expect(SETTINGS).toContain('muatAkunKas(clientId)')
+  })
+
+  // Sebelumnya `.catch(() => [])`: gagal muat = "tidak ada akun kas" → akun kas
+  // ditawarkan sebagai Pindah Buku dan baru ditolak server (keputusan Ricko 2026-11-09).
+  it('Settings › Akun Pindah Buku: gagal muat akun kas tampil + "Coba lagi", pemilih ditahan', () => {
+    expect(SETTINGS).not.toContain('muatAkunKas(clientId).catch(')
+    expect(SETTINGS).toContain("const akunKasIds = kasDimuat && 'ids' in kasDimuat ? kasDimuat.ids : null")
+    expect(SETTINGS).toContain('disabled={readOnly || saving || !akunKasIds}')
+    const galat = SETTINGS.slice(SETTINGS.indexOf("{kasDimuat && 'galat' in kasDimuat && ("), SETTINGS.indexOf('Coba lagi', SETTINGS.indexOf("'galat' in kasDimuat")) + 9)
+    expect(galat).toContain('role="alert"')
+    expect(galat).toContain('setMuatKasKe(n => n + 1)')
+    expect(galat).toContain('Coba lagi')
   })
 
   // Uji klik CP-20 (2026-11-07): ganti klien menampilkan tab klien LAMA di bawah

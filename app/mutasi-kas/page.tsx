@@ -483,7 +483,11 @@ function MutasiKasContent() {
                     onClick={() => {
                       if (id === tampilan) return
                       if (gridKotor && !window.confirm('Ada perubahan grid yang belum disimpan. Pindah ke daftar? Draf tetap ada di cadangan browser ini.')) return
-                      if (id === 'daftar') setLoading(true)
+                      if (id === 'daftar') {
+                        // Daftar membuka bulan yang sedang dilihat di grid (keputusan Ricko 2026-11-09).
+                        setLoading(true)
+                        setPeriode({ start: bulan.mulai, end: bulan.akhir })
+                      }
                       setTampilan(id)
                     }}
                     className="inline-flex items-center gap-1.5 rounded-full font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"

@@ -27,7 +27,7 @@
 // hari/bulan berisi "04/01/2026" (4 Januari) di grid April diam-diam menjadi
 // 1 April — transaksi pindah bulan tanpa satu pun galat.
 
-import { fmtTanggal } from '@/lib/ymd'
+import { fmtTanggal, NAMA_BULAN } from '@/lib/ymd'
 import { potonganTanggal } from '@/lib/csv/mutasi-kas'
 import type { Periode } from '@/lib/mutasi-draf'
 
@@ -42,10 +42,6 @@ export type BacaTanggal =
   | { status: 'ok'; ymd: string }
   | { status: 'galat'; pesan: string }
 
-export const NAMA_BULAN = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-] as const
 
 // Nama bulan → nomornya. Indonesia & Inggris, singkat & panjang, plus ejaan
 // lama yang masih tercetak di sebagian rekening koran (Pebruari, Nopember).
