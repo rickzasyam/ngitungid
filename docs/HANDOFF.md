@@ -68,7 +68,13 @@ sampai Ricko mengaktifkannya lagi.
 - **Bekerja di branch lain:** pakai `git worktree` di luar folder kerja (`CLAUDE.md` gotcha #10 — jangan pindah branch di
   folder yang dev server-nya jalan). Worktree di folder Temp tidak bisa menjalankan dev server; untuk menjalankan
   aplikasi, kerjakan di folder kerja utama atau minta Ricko mematikan dev server-nya dulu.
-- Tidak ada yang push atau merge ke `main` kecuali Ricko lewat proses rilis (**main = produksi**).
+- **Merge ke `main` (main = produksi; aturan Ricko 2026-11-09):** tidak ada push langsung ke `main`, semuanya lewat PR.
+  - **PR TANPA migrasi:** Claude Code boleh merge (keluar dari Draft bila perlu, lalu merge commit) setelah CI hijau di
+    head terakhir **dan** Ricko membalas "ya" untuk PR tersebut. "Ya" berlaku untuk satu PR itu saja, bukan PR
+    berikutnya. Sesudah merge: pastikan deploy Vercel READY dan `ngid.vercel.app` terbuka normal.
+  - **PR DENGAN migrasi** (berkas baru di `lib/db/migrations/` atau perubahan `lib/db/schema.ts`): tetap lewat
+    checklist rilis langkah demi langkah di ROADMAP — migrasi ke main dulu (`pnpm db:migrate:main` lewat
+    `.env.main`), baru merge kode; setiap langkah yang menyentuh produksi menunggu "ya" Ricko.
 - Data uji diberi awalan: grid `UJI-A-`, PDF `UJI-B-`. Dibersihkan sesudah uji klik, kecuali yang sengaja ditinggal
   untuk uji Ricko (disebut di checklist-nya).
 - Log progres tetap per area: `docs/progress/stream-a-grid.md` (grid, di `main`) dan `docs/progress/stream-b-pdf.md`
