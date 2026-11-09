@@ -4,7 +4,7 @@ import { bukaPdf } from '../baca-pdf'
 import { gabungLintasHalaman, kolomSebelumnyaBerposisi, type JudulTercetak } from '../dokumen'
 import type { DokumenSintetis } from '../fikstur/dokumen-sintetis'
 import { GalatSusun, susunDenganUlang, type PercobaanSusun } from '../susun-tabel'
-import type { HasilKesinambungan, PemeriksaKesinambungan } from './kesinambungan-sementara'
+import type { HasilKesinambungan, PemeriksaKesinambungan } from './kesinambungan-s3'
 
 // Harness uji banding penyedia (X4) — HANYA dokumen SINTETIS (`DokumenSintetis`
 // dari lib/bank-statement/fikstur). Tidak ada jalan memasukkan PDF dari berkas:

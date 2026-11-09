@@ -7,7 +7,7 @@ import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatu
 import { penyediaSempurna } from '../fikstur/jawaban-ai'
 import type { JawabanSusun } from '../susun-tabel'
 import { laporanMarkdown, rangkumUji, ujiDokumen, type HasilDokumen } from './harness'
-import { kesinambunganSementara } from './kesinambungan-sementara'
+import { kesinambunganS3 } from './kesinambungan-s3'
 import { uraiStatus } from './status-uji'
 
 // X4 — harness uji banding. Yang diuji: ukurannya PEKA terhadap kesalahan yang
@@ -16,10 +16,10 @@ import { uraiStatus } from './status-uji'
 
 const salin = <T>(x: T): T => JSON.parse(JSON.stringify(x))
 
-describe('kesinambunganSementara (pengganti S3 di harness)', () => {
+describe('kesinambunganS3 — pemeriksa harness lewat jalur grid (S2 + S3)', () => {
   it('kebenaran semua fikstur bersaldo → lolos; tanpa kolom saldo → tanpa-saldo', () => {
-    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenLanjutanLintasHalaman(), dokumenAcak(3), dokumenAcak(4, 70)]) expect(kesinambunganSementara(d.kebenaran), d.nama).toBe('lolos')
-    expect(kesinambunganSementara(dokumenTanpaSaldo().kebenaran)).toBe('tanpa-saldo')
+    for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenLanjutanLintasHalaman(), dokumenAcak(3), dokumenAcak(4, 70)]) expect(kesinambunganS3(d.kebenaran), d.nama).toBe('lolos')
+    expect(kesinambunganS3(dokumenTanpaSaldo().kebenaran)).toBe('tanpa-saldo')
   })
 
   it('arah tidak diputuskan dari judul: seluruh kolom ditukar tetap lolos (orientasi lain)', () => {
@@ -27,13 +27,13 @@ describe('kesinambunganSementara (pengganti S3 di harness)', () => {
     for (const b of k.flatMap(h => h.baris)) {
       if (b.nominal.bentuk === 'dua-kolom') [b.nominal.pertama.teks, b.nominal.kedua.teks] = [b.nominal.kedua.teks, b.nominal.pertama.teks]
     }
-    expect(kesinambunganSementara(k)).toBe('lolos')
+    expect(kesinambunganS3(k)).toBe('lolos')
   })
 
   const rusakSatu = (k: HalamanMentah[], ubah: (b: HalamanMentah['baris'][number]) => void, uraian: string) => {
     const b = k.flatMap(h => h.baris).find(x => x.uraian === uraian)!
     ubah(b)
-    return kesinambunganSementara(k)
+    return kesinambunganS3(k)
   }
 
   it('SATU baris kolomnya tertukar → putus', () => {
@@ -53,14 +53,14 @@ describe('kesinambunganSementara (pengganti S3 di harness)', () => {
     expect(rusakSatu(salin(dokumenSatuKolom().kebenaran), b => (b.saldo = '10.735.OOO,OO'), 'BIAYA ADM UJI-B')).toBe('putus')
     const k = salin(dokumenSatuKolom().kebenaran)
     k[0].baris = k[0].baris.filter(b => b.uraian !== 'SETORAN TUNAI UJI-B-002')
-    expect(kesinambunganSementara(k)).toBe('putus')
+    expect(kesinambunganS3(k)).toBe('putus')
   })
 })
 
 describe('ujiDokumen', () => {
   it('penyedia sempurna → lolos tanpa koreksi, identik, tanpa baris hilang/lebih', async () => {
     for (const d of [dokumenSatuKolom(), dokumenDuaKolom(), dokumenLanjutanLintasHalaman(), dokumenAcak(11, 50)]) {
-      const r = await ujiDokumen(await penyediaSempurna(d), d, kesinambunganSementara)
+      const r = await ujiDokumen(await penyediaSempurna(d), d, kesinambunganS3)
       expect(r, d.nama).toMatchObject({ halamanGagal: [], kesinambungan: 'lolos', lolosTanpaKoreksi: true, identik: true, barisHilang: 0, barisLebih: 0 })
     }
   })
@@ -73,14 +73,14 @@ describe('ujiDokumen', () => {
     const d = dokumenDuaKolom()
     const tukar = (j: JawabanSusun, h: number) =>
       h !== 2 ? j : { ...j, baris: j.baris.map((b, i) => (i === 0 ? { ...b, nominalPertama: b.nominalKedua, nominalKedua: b.nominalPertama } : b)) }
-    const r = await ujiDokumen(await penyediaSempurna(d, tukar), d, kesinambunganSementara)
+    const r = await ujiDokumen(await penyediaSempurna(d, tukar), d, kesinambunganS3)
     expect(r).toMatchObject({ halamanGagal: [{ halaman: 2, jenis: 'ditolak-penjaga' }], lolosTanpaKoreksi: false, identik: false })
   })
 
   it('baris terlewat → halaman ditolak penjaga, baris halaman itu dihitung hilang', async () => {
     const d = dokumenSatuKolom()
     const buang = (j: JawabanSusun, h: number) => (h !== 1 ? j : { ...j, baris: j.baris.filter((_, i) => i !== 2) })
-    const r = await ujiDokumen(await penyediaSempurna(d, buang), d, kesinambunganSementara)
+    const r = await ujiDokumen(await penyediaSempurna(d, buang), d, kesinambunganS3)
     expect(r.halamanGagal).toEqual([{ halaman: 1, jenis: 'ditolak-penjaga' }])
     expect(r.lolosTanpaKoreksi).toBe(false)
     expect(r.barisHilang).toBe(d.kebenaran[0].baris.length)
@@ -89,7 +89,7 @@ describe('ujiDokumen', () => {
   it('galat penyedia (kuota) dan halaman scan tercatat per halaman, tanpa isi baris', async () => {
     const d = dokumenSatuKolom()
     const kuota: AiProvider = { nama: 'gemini', model: 'm', mintaJson: async () => { throw Object.assign(new Error('x'), { status: 429 }) } }
-    const r = await ujiDokumen(kuota, d, kesinambunganSementara)
+    const r = await ujiDokumen(kuota, d, kesinambunganS3)
     expect(r.halamanGagal).toEqual([{ halaman: 1, jenis: 'penyedia-kuota' }, { halaman: 2, jenis: 'penyedia-kuota' }])
     // Semua halaman gagal ≠ "tanpa saldo": dokumen bersaldo tetap masuk penyebut % lolos.
     expect(r.kesinambungan).toBe('putus')
@@ -97,11 +97,11 @@ describe('ujiDokumen', () => {
     // Kuota HARIAN: dokumen dibatalkan utuh (bukan dicatat gagal) supaya CLI bisa melanjutkannya besok.
     let n = 0
     const harian: AiProvider = { nama: 'gemini', model: 'm', mintaJson: async a => (++n === 1 ? (await penyediaSempurna(d)).mintaJson(a) : Promise.reject(new GalatAi('kuotaHarian', 'x'))) }
-    await expect(ujiDokumen(harian, d, kesinambunganSementara)).rejects.toMatchObject({ jenis: 'kuotaHarian' })
+    await expect(ujiDokumen(harian, d, kesinambunganS3)).rejects.toMatchObject({ jenis: 'kuotaHarian' })
     const ts = dokumenTanpaSaldo()
-    expect((await ujiDokumen(kuota, ts, kesinambunganSementara)).kesinambungan).toBe('tanpa-saldo')
+    expect((await ujiDokumen(kuota, ts, kesinambunganS3)).kesinambungan).toBe('tanpa-saldo')
     const s = dokumenSebagianScan()
-    const r2 = await ujiDokumen(await penyediaSempurna(s), s, kesinambunganSementara)
+    const r2 = await ujiDokumen(await penyediaSempurna(s), s, kesinambunganS3)
     expect(r2.halamanGagal).toEqual([{ halaman: 2, jenis: 'gambar-tidak-didukung-harness' }])
   })
 
@@ -115,17 +115,17 @@ describe('ujiDokumen', () => {
       mintaJson: async a => ({ ...(await p.mintaJson(a)), pemakaian: { tokenMasuk: token, tokenKeluar: 1 } }),
     })
     const lite = bertoken('lite', await penyediaSempurna(d, buang), 100)
-    const r = await ujiDokumen(lite, d, kesinambunganSementara, { aiUlang: bertoken('flash', await penyediaSempurna(d), 1000) })
+    const r = await ujiDokumen(lite, d, kesinambunganS3, { aiUlang: bertoken('flash', await penyediaSempurna(d), 1000) })
     expect(r).toMatchObject({ halamanGagal: [], lolosTanpaKoreksi: true, identik: true, halamanDiulang: [1] })
     // Lite: 2 halaman (termasuk yang ditolak); Flash: 1 halaman ulang.
     expect([r.tokenMasuk, r.tokenUlangMasuk]).toEqual([200, 1000])
 
-    const r2 = await ujiDokumen(lite, d, kesinambunganSementara, { aiUlang: bertoken('flash', await penyediaSempurna(d, buang), 1000) })
+    const r2 = await ujiDokumen(lite, d, kesinambunganS3, { aiUlang: bertoken('flash', await penyediaSempurna(d, buang), 1000) })
     expect(r2).toMatchObject({ halamanGagal: [{ halaman: 1, jenis: 'input-manual' }], lolosTanpaKoreksi: false, halamanDiulang: [1] })
     // Halaman yang akhirnya gagal tetap dibayar — kedua percobaannya.
     expect([r2.tokenMasuk, r2.tokenUlangMasuk]).toEqual([200, 1000])
     // Tanpa pengulang: bentuk hasil lama (tanpa kunci ulang) — status lama tetap sebanding.
-    const r3 = await ujiDokumen(lite, d, kesinambunganSementara)
+    const r3 = await ujiDokumen(lite, d, kesinambunganS3)
     expect(Object.keys(r3)).not.toContain('halamanDiulang')
     expect(r3.tokenMasuk).toBe(200)
   })
@@ -168,7 +168,7 @@ describe('rangkumUji & laporan', () => {
 
   it('laporan hanya agregat — tanpa isi baris', async () => {
     const d = dokumenSatuKolom()
-    const r = rangkumUji({ nama: 'gemini', model: 'tiruan' }, [await ujiDokumen(await penyediaSempurna(d), d, kesinambunganSementara)])
+    const r = rangkumUji({ nama: 'gemini', model: 'tiruan' }, [await ujiDokumen(await penyediaSempurna(d), d, kesinambunganS3)])
     const md = laporanMarkdown([r], { tanggal: '2026-10-27', pemeriksa: 'p', dokumen: '1' })
     expect(md).toContain('| gemini · tiruan | 100% (1 dok. bersaldo) | 100% | 0 | 0 / 0 |')
     for (const b of d.kebenaran.flatMap(x => x.baris)) for (const s of [b.uraian, b.saldo]) if (s.length > 3) expect(md).not.toContain(s)
@@ -209,10 +209,13 @@ describe('batas harness', () => {
       e.name === 'node_modules' || e.name.startsWith('.') ? [] : e.isDirectory() ? semua(join(dir, e.name)) : e.name.endsWith('.ts') || e.name.endsWith('.tsx') ? [join(dir, e.name)] : []
     )
 
-  // Pemeriksa sementara bukan jalur aplikasi: arah & rantai di grid milik S3.
-  it('kesinambunganSementara hanya dipakai harness', () => {
-    const pemakai = ['app', 'components', 'lib'].flatMap(semua).filter(f => !f.includes(join('bank-statement', 'uji-banding')) && read(f).includes('kesinambungan-sementara'))
+  // Keputusan Ricko 2026-10-27 #2: pemeriksa sementara Stream B diganti S3 lewat port, lalu dihapus.
+  it('pemeriksa sementara sudah dihapus dan tidak dirujuk; harness memakai S3 (jalur grid)', () => {
+    const pemakai = ['app', 'components', 'lib'].flatMap(semua).filter(f => read(f).includes('kesinambungan-sementara') && !f.endsWith('uji-banding.test.ts'))
     expect(pemakai).toEqual([])
+    const s3 = read('lib', 'bank-statement', 'uji-banding', 'kesinambungan-s3.ts')
+    expect(s3).toContain('rencanaPdf(halaman, PERIODE_NETRAL)')
+    expect(s3).toContain('periksaKesinambungan(rantai, null, titik)')
   })
 
   it('CLI tidak membaca berkas PDF — hanya dokumen sintetis', () => {
