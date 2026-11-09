@@ -17,12 +17,15 @@ plan `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md` **§5.G**
 - **Grid Mutasi Kas** (§5.14 Modul A, PR #1: S0–S9 + S11, D63–D66, kolom Ref) — migrasi **0021 + 0022**. Dirilis
   2026-11-09 (`66c4d72`); rincian per langkah di ROADMAP § "Checklist rilis Grid Mutasi Kas". NVDA (CP-20 butir 17)
   masih menunggu Ricko, tidak menahan rilis.
+- **Ekstraksi PDF rekening koran** (§5.14 Modul B, PR #2: X1–X5 + harness uji banding) — kode di `main` 2026-11-09
+  (`1341f8b`), tanpa migrasi. **Sakelar `AI_EKSTRAKSI_REKENING_KORAN` tidak ada di Production maupun Preview**, jadi
+  tombol "Unggah PDF rekening koran" tidak tampil dan route menjawab 503. Menyala hanya lewat X0 → X6/D54 → X7.
 
 **Pull request terbuka:**
 
 | PR | Branch | Isi | Keadaan |
 |---|---|---|---|
-| #2 | `feat/pdf-rekening-koran` | §5.G Modul B, X1–X4 + harness uji banding sintetis | Draft · aturan cakupan penjaga (a–c) disetujui Ricko 2026-11-04 · langkah 6 (Unggah PDF ke grid) **terbuka** — grid sudah di `main`; branch perlu `git merge origin/main` dulu |
+| — | — | Tidak ada PR terbuka per 2026-11-09 (PR #1–#9 sudah di `main`) | — |
 
 **Keputusan penting** (tabel lengkap di ROADMAP §5.12; alasan di MP §3.6):
 
@@ -92,21 +95,18 @@ lanjut.
    sesudah rilis (keputusan Ricko 2026-11-09), satu PR kecil dari `main`: kalender diindonesiakan, Daftar mengikuti
    bulan grid, galat muat + "Coba lagi" di Settings › Pembukuan › Akun Pindah Buku~~ (PR #8). Backlog: "terapkan ulang di atas
    versi server" untuk draf tertimpa (ROADMAP §5.14).
-2. **PR #2 langkah 6 / X5 — "Unggah PDF" ke grid** — **dibangun & diuji klik 2026-11-09** (agen; hasil di log Stream B) → merge PR #2 menunggu "ya" Ricko. Catatan yang sudah diputuskan (log
+2. ~~**PR #2 langkah 6 / X5 — "Unggah PDF" ke grid**~~ — dibangun, diuji klik (agen; log Stream B), dan di-merge 2026-11-09 (`1341f8b`); sakelar tetap mati sampai X7. Catatan yang sudah diputuskan (log
    Stream B § "Catatan untuk langkah 6"): label Debet/Kredit/Nama Akun di pratinjau (Debet = uang MASUK; "DB" bank =
    keluar, jadi arah tetap dari kesinambungan saldo, bukan dari judul/penanda); nomor referensi bank → kolom `ref`;
    model per halaman dari header `X-Model-Ekstraksi` (+ `X-Ekstraksi-Diulang`); 422 `inputManual: true` tampil sebagai
    "isi manual", bukan tombol ulangi; `gabungLintasHalaman` dipanggil sebelum blok diserahkan ke grid.
 3. **Modul Data Induk** (Bagan Akun, Kas & Bank, Dimensi) — brief menyusul dari Ricko.
 
-**Sisa Stream B yang ikut dipegang sesi ini:**
-- Aturan cakupan penjaga X3 (usul a–c, disetujui 2026-11-04) — dikerjakan di PR #2; lihat log Stream B.
-- Sesudah pemeriksa saldo S3 ada di `main`: ganti `lib/bank-statement/uji-banding/kesinambungan-sementara.ts` lewat port
-  `PemeriksaKesinambungan`, lalu hapus berkasnya (keputusan Ricko 2026-10-27 #2).
-- **Saat PR #2 di-merge** (dokumen yang baru benar sesudah kodenya ada di `main`): ROADMAP A5 (±baris 263 & 675) — path
-  `lib/gemini/suggest-journal-account.ts` menjadi `lib/ai/saran-akun-jurnal.ts`; `CLAUDE.md` — aturan fitur AI baru:
-  "anggota `FiturBaru` dengan sakelar sendiri di `SAKELAR_SENDIRI` (`lib/ai-features.ts`), bawaan mati, pasangan env
-  sendiri `AI_PROVIDER_<FITUR>`/`AI_MODEL_<FITUR>`; fitur lama tidak berubah".
+**Sisa Stream B — ✅ selesai 2026-11-09:**
+- ~~Aturan cakupan penjaga X3 (usul a–c)~~ — di PR #2.
+- ~~Ganti `kesinambungan-sementara.ts` lewat port `PemeriksaKesinambungan`~~ — harness kini memakai S3
+  (`lib/bank-statement/uji-banding/kesinambungan-s3.ts`: `rencanaPdf` + `periksaKesinambungan`), berkas sementara dihapus.
+- ~~ROADMAP A5 & aturan fitur AI di `CLAUDE.md`~~ — diperbarui (CLAUDE.md § "Fitur AI").
 - **Bukan pekerjaan sesi cloud:** X0 (gerbang akun berbayar), X6 (uji banding rekening koran nyata, skrip lokal di luar
   repo), X7 (aktivasi Production) — semuanya Ricko, sesudah X0 dan D54.
 

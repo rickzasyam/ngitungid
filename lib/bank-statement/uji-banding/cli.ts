@@ -6,7 +6,7 @@ import type { DokumenSintetis } from '../fikstur/dokumen-sintetis'
 import { penyediaSempurna } from '../fikstur/jawaban-ai'
 import { dokumenAcak, dokumenDuaKolom, dokumenLanjutanLintasHalaman, dokumenSatuKolom, dokumenTanpaSaldo } from '../fikstur/koleksi'
 import { laporanMarkdown, rangkumUji, ujiDokumen, type Harga, type HasilDokumen, type Ringkasan } from './harness'
-import { kesinambunganSementara } from './kesinambungan-sementara'
+import { kesinambunganS3 } from './kesinambungan-s3'
 import { bacaStatus, tulisStatus, type StatusUji } from './status-uji'
 
 // Uji banding penyedia dengan DOKUMEN SINTETIS saja (X4).
@@ -83,7 +83,7 @@ async function main() {
       }
       const ai = p === 'tiruan' ? await penyediaSempurna(d) : p
       try {
-        hasil.push(await ujiDokumen(ai, d, kesinambunganSementara, { timeoutMs: 120_000, aiUlang: ulang ?? undefined }))
+        hasil.push(await ujiDokumen(ai, d, kesinambunganS3, { timeoutMs: 120_000, aiUlang: ulang ?? undefined }))
       } catch (e) {
         if (jenisGalatAi(e) !== 'kuotaHarian') throw e
         const sisa = dokumen.slice(i).map(x => x.nama)
@@ -108,7 +108,7 @@ async function main() {
   const md =
     laporanMarkdown(ringkasan, {
       tanggal: hariIniJakarta(),
-      pemeriksa: 'kesinambunganSementara (pengganti S3 sampai grid masuk main)',
+      pemeriksa: 'kesinambunganS3 (S2 rencanaPdf + S3 periksaKesinambungan, jalur grid)',
       dokumen: `${dokumen.length} sintetis (4 tetap + ${jumlahAcak} acak deterministik)`,
     }) +
     (belumDiuji.length > 0

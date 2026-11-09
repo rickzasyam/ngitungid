@@ -245,6 +245,17 @@ Reference implementations that are already correct: `app/dashboard/page.tsx` and
     dijalankan sebagai dev server (Turbopack tidak menemukan root proyek) — untuk commit
     dokumen saja ia cukup, untuk menjalankan aplikasi tidak.
 
+## Fitur AI (aturan Ricko)
+
+- **Setiap fitur AI baru = anggota `FiturBaru` dengan sakelar sendiri di `SAKELAR_SENDIRI` (`lib/ai-features.ts`),
+  bawaan MATI.** `AI_FEATURES_ENABLED="true"` saja tidak menyalakannya; yang menyalakan adalah env sakelarnya sendiri
+  bernilai `"true"` (contoh: `AI_EKSTRAKSI_REKENING_KORAN`). Penyedia & model dipilih per fitur lewat pasangan env
+  sendiri `AI_PROVIDER_<FITUR>` / `AI_MODEL_<FITUR>` (contoh: `AI_PROVIDER_EKSTRAKSI`, `AI_MODEL_EKSTRAKSI`). Fitur lama
+  (`saranAkunJurnal`, `saranCoa`, `ekstraksiLaporan`) tidak berubah.
+- **Data klien nyata hanya diproses AI di Production** (kunci berbayar). Dev & Preview memakai kunci free tier — hanya
+  data karangan; di dev fitur AI hanya dipakai pada klien dummy **PT Uji Coba**. Ekstraksi rekening koran: hanya PDF
+  SINTETIS (`UJI-B-`) sampai gerbang X0.
+
 ## Working Conventions
 
 - **Only Ricko approves. Never write "Approved", "Decisions recorded", or any equivalent
