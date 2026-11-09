@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  FINANCE_VISIBLE_TABS,
   SETTINGS_TABS,
   USER_VISIBLE_TABS,
   isSettingsTabVisible,
@@ -26,7 +27,7 @@ describe('visibleSettingsTabs', () => {
 
   it('akunting melihat semua kecuali tab ownerOnly', () => {
     expect(visibleSettingsTabs('akunting')).toEqual([
-      'general', 'coa', 'supplier', 'pembukuan', 'analytics', 'account', 'notifications',
+      'general', 'coa', 'supplier', 'pembukuan', 'aturan-mutasi', 'analytics', 'account', 'notifications',
     ])
   })
 
@@ -86,7 +87,7 @@ describe('finance — General + Layanan + Account', () => {
   it('melihat PERSIS ketiganya', () => {
     // 'layanan' masuk sejak 2026-08-07 lewat flag commercialOnly, BUKAN lewat
     // FINANCE_VISIBLE_TABS — tab commercialOnly diperiksa lebih dulu.
-    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'layanan', 'account'])
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'aturan-mutasi', 'layanan', 'account'])
   })
 
   it('TIDAK melihat Master COA, Analytics Display, Kelola Akun, Notifications', () => {
@@ -99,7 +100,7 @@ describe('finance — General + Layanan + Account', () => {
 
   it('daftar role lain tidak bergeser', () => {
     expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
-    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'pembukuan', 'analytics', 'account', 'notifications'])
+    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'pembukuan', 'aturan-mutasi', 'analytics', 'account', 'notifications'])
     expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
   })
 })
@@ -124,8 +125,8 @@ describe('tab Layanan — komersial, bukan akunting', () => {
 
   it('daftar lengkap per role', () => {
     expect(visibleSettingsTabs('owner')).toEqual(SETTINGS_TABS.map(t => t.id))
-    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'layanan', 'account'])
-    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'pembukuan', 'analytics', 'account', 'notifications'])
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'aturan-mutasi', 'layanan', 'account'])
+    expect(visibleSettingsTabs('akunting')).toEqual(['general', 'coa', 'supplier', 'pembukuan', 'aturan-mutasi', 'analytics', 'account', 'notifications'])
     expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
   })
 
@@ -195,10 +196,10 @@ describe('tab Pembukuan', () => {
     expect(isSettingsTabVisible(undefined, 'pembukuan')).toBe(false)
   })
 
-  it('duduk tepat sesudah Supplier, sebelum Analytics Display', () => {
+  it('duduk tepat sesudah Supplier, sebelum Aturan Mutasi', () => {
     const ids = SETTINGS_TABS.map(t => t.id)
     expect(ids.indexOf('pembukuan')).toBe(ids.indexOf('supplier') + 1)
-    expect(ids.indexOf('pembukuan')).toBe(ids.indexOf('analytics') - 1)
+    expect(ids.indexOf('pembukuan')).toBe(ids.indexOf('aturan-mutasi') - 1)
   })
 
   it('bukan ownerOnly maupun commercialOnly', () => {
@@ -209,6 +210,35 @@ describe('tab Pembukuan', () => {
 
   it('daftar role lain tidak ikut bergeser karena penambahannya', () => {
     expect(visibleSettingsTabs('user')).toEqual(['general', 'coa', 'account'])
-    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'layanan', 'account'])
+    expect(visibleSettingsTabs('finance')).toEqual(['general', 'supplier', 'aturan-mutasi', 'layanan', 'account'])
+  })
+})
+
+describe('tab Aturan Mutasi (S4, D57)', () => {
+  it('terlihat oleh owner dan akunting', () => {
+    expect(isSettingsTabVisible('owner', 'aturan-mutasi')).toBe(true)
+    expect(isSettingsTabVisible('akunting', 'aturan-mutasi')).toBe(true)
+  })
+
+  it('TERLIHAT oleh finance (baca saja) — pola Supplier, API baca requireInternal', () => {
+    expect(isSettingsTabVisible('finance', 'aturan-mutasi')).toBe(true)
+    expect(FINANCE_VISIBLE_TABS).toContain('aturan-mutasi')
+  })
+
+  it('TIDAK terlihat oleh klien maupun role kosong', () => {
+    expect(isSettingsTabVisible('user', 'aturan-mutasi')).toBe(false)
+    expect(isSettingsTabVisible(null, 'aturan-mutasi')).toBe(false)
+  })
+
+  it('duduk tepat sesudah Pembukuan, sebelum Analytics Display', () => {
+    const ids = SETTINGS_TABS.map(t => t.id)
+    expect(ids.indexOf('aturan-mutasi')).toBe(ids.indexOf('pembukuan') + 1)
+    expect(ids.indexOf('aturan-mutasi')).toBe(ids.indexOf('analytics') - 1)
+  })
+
+  it('bukan ownerOnly maupun commercialOnly', () => {
+    const tab = SETTINGS_TABS.find(t => t.id === 'aturan-mutasi')!
+    expect(tab.ownerOnly).toBeUndefined()
+    expect(tab.commercialOnly).toBeUndefined()
   })
 })

@@ -14,6 +14,17 @@ const SRC = readFileSync(join(process.cwd(), 'components', 'date-range-picker.ts
 // yang sama, dibaca di tempat kodenya sekarang tinggal.
 const PANEL = readFileSync(join(process.cwd(), 'components', 'kalender-panel.tsx'), 'utf8').replace(/\r\n/g, '\n')
 
+// Keputusan Ricko 2026-11-09: kalender warisan berbahasa Inggris ("Mo/Tu",
+// "Tuesday, 21 April 2026") diindonesiakan; format pendeknya = sel grid & pesan server.
+describe('kalender berbahasa Indonesia', () => {
+  it('nama hari, bulan, dan label tanggal dari lib/ymd — tanpa en-GB', () => {
+    expect(PANEL).toContain("const DAYS_SHORT = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']")
+    expect(PANEL).toContain('{NAMA_BULAN[month]} {year}')
+    expect(PANEL).toContain('export const formatDate = (date: Date) => fmtTanggal(localDateToYmd(date))')
+    expect(PANEL).not.toMatch(/en-GB|'January'|'Mo'/)
+  })
+})
+
 describe('sel tanggal bisa dipakai keyboard', () => {
   it('sel tanggal adalah TOMBOL ASLI — peran, fokus, dan Enter/Spasi dari browser', () => {
     expect(PANEL).toMatch(/<button\s+type="button"\s+key=\{colIdx\}\s+data-hari=""/)
@@ -25,7 +36,7 @@ describe('sel tanggal bisa dipakai keyboard', () => {
 
   it('tiap sel punya nama tanggal lengkap, status terpilih, dan penanda hari ini', () => {
     expect(PANEL).toContain('aria-label={formatDayLabel(date)}')
-    expect(PANEL).toContain("weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'")
+    expect(PANEL).toContain('const formatDayLabel = (date: Date) => fmtTanggalPanjang(localDateToYmd(date))')
     expect(PANEL).toContain('aria-pressed={isSelected}')
     expect(PANEL).toContain("aria-current={isToday ? 'date' : undefined}")
   })

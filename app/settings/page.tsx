@@ -5,6 +5,7 @@ import { CoaReplaceDialog, type CoaImpact } from '@/components/settings/coa-repl
 import { CoaRowForm, CoaDeleteDialog } from '@/components/settings/coa-row-editor'
 import { CoaTypesDialog, type CoaTypesPreview } from '@/components/settings/coa-types-dialog'
 import { SupplierTab } from '@/components/settings/supplier-manager'
+import { AturanMutasiTab } from '@/components/settings/aturan-mutasi-manager'
 import { KunciPeriodeCard } from '@/components/settings/kunci-periode-card'
 import { StyledSelect, type StyledOption } from '@/components/ui/styled-select'
 import {
@@ -37,6 +38,8 @@ import {
   Package,
   Truck,
   BookLock,
+  ListChecks,
+  RotateCw,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useClient } from '@/lib/client-context'
@@ -48,6 +51,7 @@ import { NAMA_MIN, NAMA_MAX, DESKRIPSI_MAX, type LayananRow } from '@/lib/layana
 import { defaultMetricVisibility, type MetricId } from '@/lib/analytics/metric-visibility'
 import { usePreferences } from '@/lib/preferences-context'
 import type { Preferences, Language, CurrencyFormat } from '@/lib/api/preferences'
+import { muatAkunKas } from '@/lib/akun-kas-klien'
 
 // ── Master COA — data asli dari GET /api/clients/[id]/coa ─────
 type CoaAccount = {
@@ -179,6 +183,7 @@ const TAB_META: Record<TabId, { label: string; desc: string; Icon: typeof Globe;
   coa:           { label: 'Master COA',        desc: 'Struktur akun klien',         Icon: FileSpreadsheet,   scoped: true },
   supplier:      { label: 'Supplier',          desc: 'Master data rekanan klien',   Icon: Truck,             scoped: true },
   pembukuan:     { label: 'Pembukuan',         desc: 'Akun PPN, posting & kunci periode', Icon: BookLock,          scoped: true },
+  'aturan-mutasi': { label: 'Aturan Mutasi',   desc: 'Usulan akun lawan mutasi kas', Icon: ListChecks,      scoped: true },
   analytics:     { label: 'Analytics Display', desc: 'Metrik yang tampil ke klien', Icon: SlidersHorizontal, scoped: true },
   users:         { label: 'Kelola Akun',       desc: 'Buat akun tim (Owner)',       Icon: Users,             scoped: false },
   layanan:       { label: 'Layanan',           desc: 'Master jasa yang dijual',     Icon: Package,           scoped: false },
@@ -1278,6 +1283,8 @@ function AnalyticsDisplayTab({ clientId, clientName }: {
 //   1. Akun PPN Masukan (D33) — dipakai route pembelian saat invoice ber-PPN.
 //   2. "Posting bisa diedit" (D42) — bawaan MATI.
 //   3. Kunci Periode (§7.B, K4) — mengunci = akunting/owner, membuka = owner.
+//   4. Akun Pindah Buku (D59) — perantara transfer antar akun kas; dipakai
+//      panel Pindah Buku di grid /mutasi-kas.
 //
 // ══ KENAPA SAKELARNYA MINTA KONFIRMASI SAAT DINYALAKAN ═══════════════════
 // Menyalakannya berarti angka yang sudah diserahkan ke klien bisa berubah tanpa
@@ -1296,6 +1303,11 @@ function PembukuanTab({
   bolehBuka?: boolean
 }) {
   const [akunPpnMasukanId, setAkunPpn] = useState<string>('')
+  const [akunPindahBukuId, setAkunPindahBuku] = useState<string>('')
+  // Daftar akun kas dimuat TERPISAH: gagal tidak boleh terbaca "klien ini tidak
+  // punya akun kas" — itu menawarkan akun kas sebagai Pindah Buku (server menolak).
+  const [kasDimuat, setKasDimuat] = useState<{ ids: Set<string> } | { galat: string } | null>(null)
+  const [muatKasKe, setMuatKasKe] = useState(0)
   const [postingBisaDiedit, setPosting] = useState(false)
   const [tersimpan, setTersimpan] = useState(false)
   const [accounts, setAccounts] = useState<CoaAccount[]>([])
@@ -1318,6 +1330,7 @@ function PembukuanTab({
         ])
         const setelan = (await rSet.json().catch(() => null)) as {
           akunPpnMasukanId?: string | null
+          akunPindahBukuId?: string | null
           postingBisaDiedit?: boolean
           tersimpan?: boolean
           error?: string
@@ -1326,6 +1339,7 @@ function PembukuanTab({
         const coa = (await rCoa.json().catch(() => null)) as { accounts?: CoaAccount[] } | null
         if (batal) return
         setAkunPpn(setelan?.akunPpnMasukanId ?? '')
+        setAkunPindahBuku(setelan?.akunPindahBukuId ?? '')
         // Bentuk `=== true`, bukan `?? true`: ketiadaan baris setelan berarti
         // MATI, sama persis dengan tersimpan false (D42).
         setPosting(setelan?.postingBisaDiedit === true)
@@ -1342,11 +1356,32 @@ function PembukuanTab({
     }
   }, [clientId])
 
+  useEffect(() => {
+    let batal = false
+    muatAkunKas(clientId).then(
+      kas => {
+        if (!batal) setKasDimuat({ ids: new Set(kas.map(a => a.id)) })
+      },
+      (err: unknown) => {
+        if (!batal) setKasDimuat({ galat: err instanceof Error ? err.message : 'Gagal memuat akun kas/bank.' })
+      }
+    )
+    return () => {
+      batal = true
+    }
+  }, [clientId, muatKasKe])
+  const akunKasIds = kasDimuat && 'ids' in kasDimuat ? kasDimuat.ids : null
+
   // Satu jalur simpan untuk kedua setelan. Field yang tidak dikirim tidak
   // diubah di server, jadi menyimpan PPN tidak pernah ikut mematikan sakelar.
-  async function simpan(patch: { akunPpnMasukanId?: string | null; postingBisaDiedit?: boolean }) {
-    const sebelum = { akunPpnMasukanId, postingBisaDiedit }
+  async function simpan(patch: {
+    akunPpnMasukanId?: string | null
+    akunPindahBukuId?: string | null
+    postingBisaDiedit?: boolean
+  }) {
+    const sebelum = { akunPpnMasukanId, akunPindahBukuId, postingBisaDiedit }
     if ('akunPpnMasukanId' in patch) setAkunPpn(patch.akunPpnMasukanId ?? '')
+    if ('akunPindahBukuId' in patch) setAkunPindahBuku(patch.akunPindahBukuId ?? '')
     if (typeof patch.postingBisaDiedit === 'boolean') setPosting(patch.postingBisaDiedit)
     setSaving(true)
     setError(null)
@@ -1362,6 +1397,7 @@ function PembukuanTab({
     } catch (err) {
       // Rollback supaya layar tidak menampilkan setelan yang tidak tersimpan.
       setAkunPpn(sebelum.akunPpnMasukanId)
+      setAkunPindahBuku(sebelum.akunPindahBukuId)
       setPosting(sebelum.postingBisaDiedit)
       setError(err instanceof Error ? err.message : 'Gagal menyimpan.')
     } finally {
@@ -1378,6 +1414,12 @@ function PembukuanTab({
         group: a.kelompok,
       })),
     [accounts]
+  )
+  // Akun Pindah Buku = perantara, BUKAN rekening: akun kas tidak ditawarkan
+  // (server menolaknya juga — ini supaya yang pasti ditolak tidak bisa dipilih).
+  const opsiAkunPindahBuku: StyledOption[] = useMemo(
+    () => opsiAkun.filter(o => !akunKasIds?.has(o.value)),
+    [opsiAkun, akunKasIds]
   )
 
   if (loading) {
@@ -1435,6 +1477,61 @@ function PembukuanTab({
             <button
               type="button"
               onClick={() => simpan({ akunPpnMasukanId: null })}
+              disabled={saving}
+              className="mt-2 text-[11px] rounded-full px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+              style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)', minHeight: 32 }}
+            >
+              Kosongkan
+            </button>
+          )}
+        </div>
+
+        {/* ── Akun Pindah Buku (D59) ── */}
+        <div className="mt-5">
+          <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+            Akun Pindah Buku
+          </label>
+          <StyledSelect
+            options={opsiAkunPindahBuku}
+            value={akunPindahBukuId}
+            onChange={v => simpan({ akunPindahBukuId: v })}
+            placeholder="— belum disetel —"
+            searchable
+            searchPlaceholder="Cari kode atau nama akun…"
+            // Tanpa daftar akun kas, akun kas tidak bisa disaring dari pilihan.
+            disabled={readOnly || saving || !akunKasIds}
+            ariaLabel="Akun Pindah Buku klien ini"
+          />
+          {kasDimuat === null && (
+            <p role="status" className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+              Memuat daftar akun kas/bank…
+            </p>
+          )}
+          {kasDimuat && 'galat' in kasDimuat && (
+            <div role="alert" className="mt-1.5 flex items-center gap-2 flex-wrap text-[11px]" style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+              <span>{kasDimuat.galat} Akun Pindah Buku belum bisa dipilih.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setKasDimuat(null)
+                  setMuatKasKe(n => n + 1)
+                }}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
+                style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-primary)', minHeight: 32 }}
+              >
+                <RotateCw className="w-3 h-3" /> Coba lagi
+              </button>
+            </div>
+          )}
+          <p className="text-[11px] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+            Perantara transfer antar rekening klien: keluar di rekening A dan masuk di rekening B
+            sama-sama berakun lawan akun ini, jadi saldonya harus nol di akhir periode. Grid Mutasi
+            Kas memperingatkan bila tidak nol dan mengusulkan pasangan transfernya.
+          </p>
+          {akunPindahBukuId !== '' && !readOnly && (
+            <button
+              type="button"
+              onClick={() => simpan({ akunPindahBukuId: null })}
               disabled={saving}
               className="mt-2 text-[11px] rounded-full px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)"
               style={{ background: 'var(--color-muted-bg)', color: 'var(--color-text-muted)', minHeight: 32 }}
@@ -2315,6 +2412,10 @@ export default function SettingsPage() {
                   readOnly={!canDoAccounting}
                   bolehBuka={isOwner}
                 />
+              )}
+
+              {activeTab === 'aturan-mutasi' && activeClient && (
+                <AturanMutasiTab key={activeClient.id} clientId={activeClient.id} readOnly={!canDoAccounting} />
               )}
 
               {activeTab === 'analytics' && activeClient && (

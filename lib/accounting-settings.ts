@@ -23,6 +23,7 @@
 export type AccountingSettingsLike = {
   postingBisaDiedit?: boolean | null
   akunPpnMasukanId?: string | null
+  akunPindahBukuId?: string | null
 } | null | undefined
 
 /**
@@ -45,6 +46,14 @@ export function bolehEditPosting(settings: AccountingSettingsLike): boolean {
  */
 export function akunPpnMasukan(settings: AccountingSettingsLike): string | null {
   return settings?.akunPpnMasukanId ?? null
+}
+
+/**
+ * Akun Pindah Buku yang berlaku (D59), atau `null` bila belum disetel — panel
+ * Pindah Buku di grid lalu meminta setelannya diisi, bukan menebak akun.
+ */
+export function akunPindahBuku(settings: AccountingSettingsLike): string | null {
+  return settings?.akunPindahBukuId ?? null
 }
 
 /**

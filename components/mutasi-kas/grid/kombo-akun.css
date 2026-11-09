@@ -1,0 +1,67 @@
+/* Combobox Nama Akun. Daftar di-portal ke <body>, jadi pemilihnya tidak
+   bersarang di .grid-mutasi. Warna hanya dari token globals.css (gotcha #6);
+   bayangan = bayangan kartu melayang design system. */
+
+.kombo-akun {
+  position: fixed;
+  z-index: 80;
+  visibility: hidden;
+  min-inline-size: 280px;
+  max-inline-size: min(420px, calc(100vw - 16px));
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 1rem;
+  background: white;
+  border: 1px solid var(--color-muted-bg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07), 0 1px 4px rgba(0, 0, 0, 0.04);
+  font-size: 12.5px;
+  color: var(--color-text-primary);
+}
+
+.kombo-akun-grup {
+  padding: 8px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.kombo-akun-opsi {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-block-size: 32px;
+  padding: 6px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.kombo-akun-opsi:hover {
+  background: color-mix(in srgb, var(--color-accent-primary) 30%, white);
+}
+
+/* Sorotan keyboard: latar lime, teks hitam (pasangan token lime). */
+.kombo-akun-opsi.kombo-akun-aktif {
+  background: var(--color-accent-primary);
+  color: var(--color-accent-primary-fg);
+}
+
+.kombo-akun-kode {
+  flex: none;
+  min-inline-size: 64px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kombo-akun-nama {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kombo-akun-kosong {
+  padding: 10px;
+  color: var(--color-text-muted);
+}

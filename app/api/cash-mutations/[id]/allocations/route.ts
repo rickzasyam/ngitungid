@@ -15,8 +15,8 @@ import {
   loadMutationDetail,
   loadMutationForWrite,
   recordMutationEvent,
-  syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
+import { rencanakanJurnalMutasi } from '@/lib/api/cash-mutation-journal'
 import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
@@ -141,19 +141,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const userId = await resolveUserId(g.user.email)
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const allocId = randomUUID()
   const nominal = fromMinorUnits(nominalMinor)
 
-  // Jurnal dibangun ULANG dari seluruh alokasi — yang lama ditambah yang baru.
-  // Menambal jurnal lama dengan satu baris akan menyimpang begitu ada alokasi
-  // yang dihapus di antaranya.
-  const jurnal = await syncMutationJournal({
-    mutation,
-    alokasi: [
-      ...alokasiLama,
-      { akunHutangId: invoice.akunHutangId, nominal, noInvoice: invoice.noInvoice },
-    ],
+  // Jurnal dibangun ULANG dari seluruh alokasi — yang lama ditambah yang baru —
+  // oleh perencana yang SAMA dengan route batch (S7). Kalau mutasi ini tadinya
+  // anggota jurnal RINGKASAN (D58), ia keluar dari ringkasan kuncinya (yang
+  // dibangun ulang tanpanya) dan mendapat jurnal per mutasi; jurnal terposting
+  // yang belum dibalik ditolak 409 (kunciMutasi).
+  const jurnal = await rencanakanJurnalMutasi({
+    clientId: mutation.clientId,
     userId,
+    akhir: [
+      {
+        ...mutation,
+        alokasi: [...alokasiLama, { akunHutangId: invoice.akunHutangId, nominal, noInvoice: invoice.noInvoice }],
+      },
+    ],
+    awal: [{ ...mutation, jumlahAlokasi: alokasiLama.length }],
+    dihapus: [],
   })
   if ('error' in jurnal) return jurnal.error
 
@@ -164,7 +171,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       invoiceId,
       nominal,
       terminUrutan,
-      createdBy: userId as string,
+      createdBy: userId,
     }),
     ...jurnal.statements,
     recordMutationEvent({

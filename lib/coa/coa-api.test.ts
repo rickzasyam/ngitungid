@@ -322,7 +322,8 @@ describe('replace-all sadar invoice pembelian & setelan klien', () => {
   it('jalur hapus-langsung hanya dipakai bila TIDAK ada jurnal DAN tidak ada invoice', () => {
     // Keempat kolom akun invoice juga FK RESTRICT, jadi DELETE master_coa
     // ditolak selama sebuah invoice masih menunjuk ke sana.
-    expect(body).toContain('journalRows.length === 0 && invoiceAccounts.length === 0')
+    expect(body).toContain('journalRows.length === 0 &&')
+    expect(body).toContain('invoiceAccounts.length === 0 &&')
   })
 
   it('relink invoice dieksekusi per KOLOM, di dalam batch', () => {
@@ -333,7 +334,46 @@ describe('replace-all sadar invoice pembelian & setelan klien', () => {
 
   it('setelan klien DIPUTUS jadi null, bukan memblokir', () => {
     expect(body).toContain('for (const r of settingRelinks)')
-    expect(body).toContain('akunPpnMasukanId: r.newAkunPpnMasukanId')
+    expect(body).toContain('akunPpnMasukanId: r.newMasterCoaId')
+  })
+
+  it('akun Pindah Buku (0021) ikut dibaca, dioper, dan disambung', () => {
+    expect(body).toContain('akunPindahBukuId: clientAccountingSettings.akunPindahBukuId')
+    expect(body).toContain('akunPindahBukuId: r.newMasterCoaId')
+  })
+
+  it('setelan yang punya relink memaksa jalur ganti-nama — FK SET NULL memutusnya di jalur hapus-langsung', () => {
+    expect(body).toContain('settingRelinks.length === 0')
+  })
+})
+
+// ══ PENJAGA BERDIRI: PERUJUK master_coa DARI ATURAN MUTASI (S1, D57) ═══════
+describe('replace-all sadar aturan mutasi', () => {
+  const body = handler(REPLACE, 'POST')
+
+  it('kedua kolom perujuk dibaca dan MASUK ke daftar yang dioper', () => {
+    // Diperiksa di titik penyusunan daftar, bukan di SELECT (alasan sama dengan
+    // penjaga mutasi di bawah).
+    expect(body).toContain("['lawan', r.akunLawanId]")
+    expect(body).toContain("['kas', r.akunKasId]")
+    expect(body).toContain('ruleAccounts,')
+  })
+
+  it('aturan yang terblokir menolak 409 SEBELUM satu statement pun dikirim, dengan polanya', () => {
+    const blokir = body.indexOf('plan.ruleBlocked.length > 0')
+    const batch = body.indexOf('await db.batch(')
+    expect(blokir).toBeGreaterThan(-1)
+    expect(blokir).toBeLessThan(batch)
+    expect(body).toContain('b.pola')
+  })
+
+  it('jalur hapus-langsung ikut memperhitungkan aturan (FK restrict)', () => {
+    expect(body).toContain('ruleAccounts.length === 0')
+  })
+
+  it('relink aturan dieksekusi per kolom, di dalam batch', () => {
+    expect(body).toContain('ruleRelinks.filter(r => r.kolom === kolom)')
+    expect(body).toContain('update ${cashMutationRules} as cr')
   })
 })
 

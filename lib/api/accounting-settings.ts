@@ -13,6 +13,8 @@ import { clientAccountingSettings } from '@/lib/db/schema'
 
 export type AccountingSettingsRow = {
   akunPpnMasukanId: string | null
+  /** D59 (0021) — perantara transfer antar akun kas. */
+  akunPindahBukuId: string | null
   postingBisaDiedit: boolean
 }
 
@@ -23,6 +25,7 @@ export async function loadAccountingSettings(
   const [row] = await db
     .select({
       akunPpnMasukanId: clientAccountingSettings.akunPpnMasukanId,
+      akunPindahBukuId: clientAccountingSettings.akunPindahBukuId,
       postingBisaDiedit: clientAccountingSettings.postingBisaDiedit,
     })
     .from(clientAccountingSettings)

@@ -65,3 +65,17 @@ export function fmtTanggal(ymd: string): string {
   const [y, m, d] = ymd.split('-').map(Number)
   return `${d} ${BULAN_PENDEK[m - 1] ?? '?'} ${y}`
 }
+
+export const NAMA_BULAN = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+] as const
+
+const NAMA_HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+
+/** 'YYYY-MM-DD' → 'Selasa, 21 April 2026' — nama lengkap untuk pembaca layar.
+ *  Harinya dari Date LOKAL tengah malam, jadi zona waktu tidak bisa menggesernya. */
+export function fmtTanggalPanjang(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return `${NAMA_HARI[new Date(y, m - 1, d).getDay()]}, ${d} ${NAMA_BULAN[m - 1] ?? '?'} ${y}`
+}

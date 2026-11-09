@@ -17,6 +17,7 @@ export type SettingsTabId =
   | 'coa'
   | 'supplier'
   | 'pembukuan'
+  | 'aturan-mutasi'
   | 'analytics'
   | 'users'
   | 'layanan'
@@ -36,6 +37,10 @@ export const SETTINGS_TABS: { id: SettingsTabId; ownerOnly?: boolean; commercial
   // dikerjakan, bukan melihat hasilnya. Tidak ada di FINANCE_VISIBLE_TABS, jadi
   // ia tersaring di cabang finance sebelum sampai ke isInternal.
   { id: 'pembukuan' },
+  // Aturan Mutasi (D57): "uraian mengandung X → akun lawan Y" per klien. Tulis
+  // = akunting/owner; finance MELIHAT read-only (FINANCE_VISIBLE_TABS), sama
+  // pembelahannya dengan Supplier. Klien tidak melihatnya.
+  { id: 'aturan-mutasi' },
   { id: 'analytics' },
   { id: 'users', ownerOnly: true },
   // Master Layanan: katalog jasa yang dijual. owner + finance, TANPA akunting —
@@ -70,7 +75,9 @@ export const USER_VISIBLE_TABS: SettingsTabId[] = ['general', 'coa', 'account']
 // lewat prop readOnly, dan API-nya menegakkan pembelahan yang sama — baca
 // requireInternal, tulis requireAkunting. Menyembunyikan tombol saja bukan
 // kontrol keamanan; yang menegakkan tetap penjaga di route.
-export const FINANCE_VISIBLE_TABS: SettingsTabId[] = ['general', 'supplier', 'account']
+// 'aturan-mutasi' ADA di sini (S4, D57): pola yang sama dengan Supplier — baca
+// requireInternal, tulis requireAkunting, tab dirender read-only.
+export const FINANCE_VISIBLE_TABS: SettingsTabId[] = ['general', 'supplier', 'aturan-mutasi', 'account']
 
 /** Boleh-kah `role` melihat tab `id`? */
 export function isSettingsTabVisible(role: Role | null | undefined, id: SettingsTabId): boolean {

@@ -12,8 +12,8 @@ import {
   loadMutationDetail,
   loadMutationForWrite,
   recordMutationEvent,
-  syncMutationJournal,
 } from '@/lib/api/cash-mutation-queries'
+import { rencanakanJurnalMutasi } from '@/lib/api/cash-mutation-journal'
 import { tolakBilaPeriodeTerkunci } from '@/lib/api/period-lock'
 
 export const runtime = 'nodejs'
@@ -60,11 +60,17 @@ export async function DELETE(
   }
 
   const userId = await resolveUserId(g.user.email)
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const jurnal = await syncMutationJournal({
-    mutation,
-    alokasi: alokasiLama.filter(a => a.id !== allocId),
+  // Perencana yang SAMA dengan route batch (S7): alokasi terakhir dihapus dan
+  // mutasinya berakun lawan → ia bergabung ke jurnal RINGKASAN kuncinya (D58);
+  // tanpa akun lawan → jurnalnya dihapus beserta riwayatnya.
+  const jurnal = await rencanakanJurnalMutasi({
+    clientId: mutation.clientId,
     userId,
+    akhir: [{ ...mutation, alokasi: alokasiLama.filter(a => a.id !== allocId) }],
+    awal: [{ ...mutation, jumlahAlokasi: alokasiLama.length }],
+    dihapus: [],
   })
   if ('error' in jurnal) return jurnal.error
 
