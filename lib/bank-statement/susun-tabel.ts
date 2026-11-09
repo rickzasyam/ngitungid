@@ -1,5 +1,6 @@
 import type { AiProvider, JawabanJson, SkemaJson } from '@/lib/ai/penyedia'
 import type { BarisMentah, HalamanMentah, NominalMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
+import { labelRingkasan } from './ringkasan-bank'
 
 // Penyusun tabel rekening koran (X3). AI HANYA menyusun struktur satu halaman:
 // baris tercetak mana, sel mana masuk kolom mana, judul kolom apa adanya.
@@ -275,6 +276,23 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
   const j = bentukJawaban(mentah, masalah)
   if (!j) throw new GalatSusun(masalah)
 
+  // Blok ringkasan bank (`labelRingkasan`) yang IKUT dikirim AI sebagai entri di
+  // UJUNG jawaban — aturan 2 prompt meminta SALDO AWAL/AKHIR & TOTAL dikirim, dan
+  // AI tidak konsisten soal blok ringkasan sesudah tabel (uji X6, 2026-11-09) —
+  // bukan transaksi: dibuang di sini, tidak menolak halaman. Angkanya dibaca KODE
+  // dari teks halaman (X5, ringkasan-bank.ts); barisnya lalu jatuh ke
+  // pengecualian aturan (b) di bawah. Hanya di ujung: transaksi yang dibuang AI
+  // di antaranya tetap tertangkap aturan (b).
+  if (m.sumber.jenis === 'teks') {
+    const g = m.sumber.baris
+    while (j.baris.length > 0) {
+      const b = j.baris[j.baris.length - 1]
+      const t = g[b.nomorBaris - 1]
+      if (t === undefined || b.barisLanjutan.length > 0 || labelRingkasan(t) === null) break
+      j.baris.pop()
+    }
+  }
+
   const berteks = m.sumber.jenis === 'teks'
   const garis = m.sumber.jenis === 'teks' ? m.sumber.baris : []
   const adaJudul = j.nomorBarisJudul > 0
@@ -297,7 +315,9 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
     if (g === undefined) masalah.push(`baris judul [${j.nomorBarisJudul}] tidak ada`)
     else if (!kolom.every(k => rapat(g).includes(rapat(k)))) masalah.push(`judul kolom tidak tersalin persis dari baris [${j.nomorBarisJudul}]`)
   }
-  if (berteks && j.periodeTeks !== '' && !garis.some(g => rapat(g).includes(rapat(j.periodeTeks)))) masalah.push('periodeTeks tidak tercetak di halaman')
+  // Tanpa spasi: huruf berspasi aneh ("JANU ARI 2026") yang dirapikan AI tetap tercetak.
+  const tanpaSpasi = (s: string) => s.split(' ').join('')
+  if (berteks && j.periodeTeks !== '' && !garis.some(g => tanpaSpasi(g).includes(tanpaSpasi(j.periodeTeks)))) masalah.push('periodeTeks tidak tercetak di halaman')
 
   // Posisi judul untuk pemeriksaan "angka sejajar dengan judulnya": dari baris
   // judul halaman ini, atau — halaman lanjutan tanpa judul (keputusan Ricko
@@ -355,7 +375,8 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
     const lanjut: string[] = []
     for (const n of b.barisLanjutan) {
       const gl = garis[n - 1]
-      if (gl === undefined || n === j.nomorBarisJudul || rapat(gl) === '') return void masalah.push(`${ke}: baris lanjutan [${n}] tidak sah`)
+      // Baris ringkasan bank tidak boleh menyusup ke uraian transaksi lewat barisLanjutan.
+      if (gl === undefined || n === j.nomorBarisJudul || rapat(gl) === '' || labelRingkasan(gl) !== null) return void masalah.push(`${ke}: baris lanjutan [${n}] tidak sah`)
       lanjut.push(rapat(gl))
     }
     let bagianPertama = b.uraian
@@ -411,6 +432,10 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
   //      wajib tercakup. Kop di atas baris judul tidak diperiksa; teks kaki
   //      seperti "Halaman 2 / 4" tidak bernominal, jadi tetap boleh.
   //  (c) Akibatnya jawaban kosong di halaman bertransaksi ditolak.
+  // Pengecualian (uji X6 BCA, 2026-11-09): BLOK RINGKASAN bank SESUDAH entri
+  // terakhir (SALDO AWAL / MUTASI CR/DB / SALDO AKHIR / TOTAL MUTASI / OPENING-
+  // CLOSING BALANCE, `labelRingkasan`) bukan transaksi — dikecualikan dari (b).
+  // Transaksi yang dibuang tetap tertangkap: barisnya tidak berlabel ringkasan.
   if (berteks) {
     const dipakai = new Set(j.baris.flatMap(b => [b.nomorBaris, ...b.barisLanjutan]))
     const pertama = j.baris.length > 0 ? j.baris[0].nomorBaris : garis.length + 1
@@ -422,6 +447,7 @@ export function periksaJawaban(teksJson: string, m: MasukanSusun): HalamanMentah
     }
     for (let n = (adaJudul ? j.nomorBarisJudul : 0) + 1; n <= garis.length; n++) {
       if (n >= awal && n <= akhir) continue
+      if (n > akhir && labelRingkasan(garis[n - 1]) !== null) continue
       if (lewat(n) && memuatNominal(garis[n - 1])) masalah.push(`baris tercetak [${n}] bernominal tidak tercakup`)
     }
   }

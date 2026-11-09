@@ -14,6 +14,9 @@ import { halamanTersusun, peringatanHalaman, tafsirJawaban, type HasilHalaman, t
 import type { DokumenPdf } from '@/lib/bank-statement/baca-pdf'
 import { rencanaPdf } from '@/lib/mutasi-grid-turunan'
 import type { HasilBacaBlok, Periode } from '@/lib/mutasi-draf'
+import { bacaRingkasanBank, bandingkanRingkasan, type BarisBanding, type RingkasanBank } from '@/lib/bank-statement/ringkasan-bank'
+import { fromMinorUnits } from '@/lib/journal'
+import { useRupiah } from '@/lib/preferences-context'
 
 const URL_EKSTRAK = '/api/cash-mutations/ekstrak-halaman'
 // Body route dibatasi 4 MB; PNG halaman scan dikecilkan sampai muat.
@@ -36,7 +39,8 @@ function judulSebelum(judul: Map<number, JudulTercetak>, n: number): JudulTercet
   return judul.get(k) ?? null
 }
 
-async function ekstrakSatu(n: number, k: Konteks): Promise<TafsiranJawaban> {
+/** Hasil route + ringkasan bank di halaman itu, dibaca KODE dari teksnya (null untuk halaman gambar). */
+async function ekstrakSatu(n: number, k: Konteks): Promise<TafsiranJawaban & { ringkasan: RingkasanBank | null }> {
   const t = await k.doc.bacaHalaman(n)
   const asal = judulSebelum(k.judul, n)
   const baris = t.baris.map(b => b.teks)
@@ -56,14 +60,14 @@ async function ekstrakSatu(n: number, k: Konteks): Promise<TafsiranJawaban> {
     res = await fetch(URL_EKSTRAK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: k.sinyal })
   } catch (e) {
     if (k.sinyal.aborted) throw e
-    return { hasil: { halaman: n, status: 'gagal', pesan: `Halaman ${n}: koneksi terputus — ulangi halaman ini.`, bisaUlang: true }, henti: null }
+    return { hasil: { halaman: n, status: 'gagal', pesan: `Halaman ${n}: koneksi terputus — ulangi halaman ini.`, bisaUlang: true }, henti: null, ringkasan: null }
   }
   const json: unknown = await res.json().catch(() => null)
   const r = tafsirJawaban(n, res.status, json, h => res.headers.get(h), t.perluGambar)
   if (r.hasil.status === 'ok' && !t.perluGambar && r.hasil.data.kolom.length > 0) {
     k.judul.set(n, { kolom: r.hasil.data.kolom, baris, grid: t.grid })
   }
-  return r
+  return { ...r, ringkasan: t.perluGambar ? null : bacaRingkasanBank(baris) }
 }
 
 type Props = {
@@ -73,9 +77,14 @@ type Props = {
   periode: Periode
   onMasukkan: (hasil: Extract<HasilBacaBlok, { ok: true }>, catatan: string[]) => void
   onTutup: () => void
+  /** Grid belum punya jangkar saldo (tanpa saldo tersimpan): SALDO AWAL ringkasan bank boleh ditawarkan. */
+  tawarkanJangkar?: boolean
+  /** Isi "Saldo awal rekening koran" grid dengan teks ini. */
+  onSaldoAwal?: (teks: string) => void
 }
 
-export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan, onTutup }: Props) {
+export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan, onTutup, tawarkanJangkar = false, onSaldoAwal }: Props) {
+  const { rupiahPersis } = useRupiah()
   const docRef = useRef<DokumenPdf | null>(null)
   const judulRef = useRef(new Map<number, JudulTercetak>())
   const abortRef = useRef<AbortController | null>(null)
@@ -84,6 +93,9 @@ export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan,
   const [sedang, setSedang] = useState<number | null>(null)
   const [henti, setHenti] = useState<string | null>(null)
   const [galat, setGalat] = useState<string | null>(null)
+  // Ringkasan bank dari halaman BERNOMOR TERBESAR yang mencetaknya (biasanya halaman terakhir).
+  const [ringkasan, setRingkasan] = useState<{ halaman: number; data: RingkasanBank } | null>(null)
+  const [jangkarDipakai, setJangkarDipakai] = useState(false)
 
   // Satu jalur untuk proses awal, "Lanjutkan", dan "Ulangi" per halaman.
   async function jalankan(daftar: number[]) {
@@ -98,6 +110,8 @@ export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan,
         setSedang(n)
         const r = await ekstrakSatu(n, { doc, judul: judulRef.current, clientId, akunKasId, sinyal: ac.signal })
         setHasil(h => ({ ...h, [n]: r.hasil }))
+        const rb = r.ringkasan
+        if (rb) setRingkasan(lama => (lama && lama.halaman > n ? lama : { halaman: n, data: rb }))
         if (r.henti) {
           setHenti(r.henti)
           break
@@ -150,12 +164,23 @@ export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan,
     return { tersusun: t, rencana: rencanaPdf(t, periode), rangkuman: rangkumDokumen(t, jumlah) }
   }, [hasil, berjalan, jumlah, periode])
   const transaksi = rencana?.jenis === 'blok' ? rencana.hasil.baris.length : 0
+  // Pemeriksa kedua: angka ringkasan bank (dibaca kode) vs blok yang akan masuk grid.
+  const banding: BarisBanding[] = useMemo(
+    () => (ringkasan && rencana?.jenis === 'blok' ? bandingkanRingkasan(ringkasan.data, rencana.hasil) : []),
+    [ringkasan, rencana]
+  )
+  const tidakCocok = banding.filter(b => !b.cocok)
+  const tanpaSaldoAwalBlok = rencana?.jenis === 'blok' && !rencana.hasil.titikSaldo.some(t => t.setelah === 0)
+  const teksJangkar = tawarkanJangkar && tanpaSaldoAwalBlok ? (ringkasan?.data.saldoAwalTeks ?? null) : null
+  const tampil = (b: BarisBanding, v: number | null) =>
+    v === null ? '—' : b.jenis === 'jumlah' ? v.toLocaleString('id-ID') : rupiahPersis(fromMinorUnits(v))
 
   function masukkan() {
     if (rencana?.jenis !== 'blok') return
     const catatan = [
       ...(manual.length > 0 ? [`Isi manual halaman ${manual.join(', ')} — AI tidak bisa menyusunnya dengan yakin.`] : []),
       ...daftarHasil.flatMap(h => peringatanHalaman(h) ?? []),
+      ...(tidakCocok.length > 0 ? [`Tidak cocok dengan ringkasan bank: ${tidakCocok.map(b => b.label.toLowerCase()).join(', ')}.`] : []),
       ...(rangkuman?.peringatan ?? []),
     ]
     onMasukkan(rencana.hasil, catatan)
@@ -267,6 +292,59 @@ export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan,
             )
           })}
         </ol>
+      )}
+
+      {banding.length > 0 && ringkasan && (
+        <div className="flex flex-col gap-1" aria-label="Ringkasan bank dibanding hasil ekstraksi">
+          <p
+            role={tidakCocok.length > 0 ? 'alert' : 'status'}
+            className="font-semibold"
+            style={{ color: tidakCocok.length > 0 ? 'var(--color-accent-critical-fg, #be185d)' : 'var(--color-accent-primary-text)' }}
+          >
+            {tidakCocok.length > 0
+              ? `✗ Tidak cocok dengan ringkasan bank (hal. ${ringkasan.halaman}) — periksa halaman yang gagal/isi manual atau baris yang hilang sebelum Simpan.`
+              : `✓ Cocok dengan ringkasan bank (hal. ${ringkasan.halaman}): jumlah transaksi, total, dan saldo sama.`}
+          </p>
+          <table className="text-[11px]" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ color: 'var(--color-text-muted)' }}>
+                <th className="text-left font-medium pr-3">Ringkasan bank</th>
+                <th className="text-right font-medium pr-3">Bank</th>
+                <th className="text-right font-medium pr-3">Hasil ekstraksi</th>
+                <th className="text-left font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {banding.map(b => (
+                <tr key={b.label}>
+                  <td className="pr-3">{b.label}</td>
+                  <td className="text-right pr-3 font-mono">{tampil(b, b.bank)}</td>
+                  <td className="text-right pr-3 font-mono">{tampil(b, b.ekstraksi)}</td>
+                  <td style={{ color: b.cocok ? 'var(--color-accent-primary-text)' : 'var(--color-accent-critical-fg, #be185d)' }}>
+                    {b.cocok ? '✓ cocok' : '✗ tidak cocok'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {teksJangkar && onSaldoAwal && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>Grid belum punya jangkar saldo dan PDF ini tanpa baris SALDO AWAL.</span>
+              <button
+                type="button"
+                className={tombol}
+                style={{ ...gayaTombol, minHeight: 32, padding: '4px 10px' }}
+                disabled={jangkarDipakai}
+                onClick={() => {
+                  onSaldoAwal(teksJangkar)
+                  setJangkarDipakai(true)
+                }}
+              >
+                {jangkarDipakai ? '✓ Dipakai' : `Pakai SALDO AWAL ringkasan (${teksJangkar}) sebagai "Saldo awal rekening koran"`}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {rangkuman && rangkuman.peringatan.length > 0 && (
