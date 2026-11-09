@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { localDateToYmd, ymdToLocalDate, hariIniJakarta, fmtTanggal } from './ymd'
+import { localDateToYmd, ymdToLocalDate, hariIniJakarta, fmtTanggal, fmtTanggalPanjang } from './ymd'
 
 // ══ ROUND-TRIP ADALAH IDENTITAS ══════════════════════════════════
 // Seluruh nilai modul ini ada di sini. Kalau salah satu arah diam-diam lewat
@@ -166,5 +166,13 @@ describe('hariIniJakarta — tanggal WIB, bukan jam server', () => {
   it('pergantian tahun & format selalu YYYY-MM-DD', () => {
     expect(hariIniJakarta(new Date(Date.UTC(2025, 11, 31, 17, 30)))).toBe('2026-01-01')
     expect(hariIniJakarta()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('fmtTanggalPanjang — label kalender untuk pembaca layar', () => {
+  it('hari & bulan Indonesia, hari dihitung benar', () => {
+    expect(fmtTanggalPanjang('2026-04-21')).toBe('Selasa, 21 April 2026')
+    expect(fmtTanggalPanjang('2026-11-08')).toBe('Minggu, 8 November 2026')
+    expect(fmtTanggalPanjang('2024-02-29')).toBe('Kamis, 29 Februari 2024')
   })
 })

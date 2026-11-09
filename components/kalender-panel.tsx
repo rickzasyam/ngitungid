@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { ModalPortal } from '@/components/ui/modal-portal'
 import { bulanDalamBatas, dalamBatas, jepitTanggal, type BatasKalender } from '@/lib/kalender-batas'
 import { hariAktif, tujuanTombol } from '@/lib/kalender-keyboard'
-import { hariIniJakarta, localDateToYmd, ymdToLocalDate } from '@/lib/ymd'
+import { fmtTanggal, fmtTanggalPanjang, hariIniJakarta, localDateToYmd, NAMA_BULAN, ymdToLocalDate } from '@/lib/ymd'
 
 // Panel kalender BERSAMA DateRangePicker dan DatePicker (keputusan Ricko
 // 2026-10-30: date picker satu tanggal memakai panel yang SAMA). Isinya
@@ -28,11 +28,8 @@ export interface RentangKalender {
   to: Date | undefined
 }
 
-const DAYS_SHORT = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-]
+// Minggu mulai Senin (getFirstDayOfWeek).
+const DAYS_SHORT = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']
 
 // Tanggal kalender WIB sebagai Date tengah malam lokal (lib/ymd.ts).
 export const TODAY = ymdToLocalDate(hariIniJakarta())
@@ -49,12 +46,11 @@ const getFirstDayOfWeek = (year: number, month: number) => {
   return day === 0 ? 6 : day - 1
 }
 
-export const formatDate = (date: Date) =>
-  date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+/** '15 Okt 2026' — format yang sama dengan sel Tanggal grid dan pesan server. */
+export const formatDate = (date: Date) => fmtTanggal(localDateToYmd(date))
 
 /** Nama tanggal lengkap untuk pembaca layar — sel kalender hanya berisi angka. */
-const formatDayLabel = (date: Date) =>
-  date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const formatDayLabel = (date: Date) => fmtTanggalPanjang(localDateToYmd(date))
 
 function CalendarMonth({
   year,
@@ -100,7 +96,7 @@ function CalendarMonth({
       {/* Month title */}
       <div className="text-center mb-3">
         <span className="text-sm font-semibold" style={{ color: 'white' }}>
-          {MONTH_NAMES[month]} {year}
+          {NAMA_BULAN[month]} {year}
         </span>
       </div>
 
