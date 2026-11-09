@@ -1,4 +1,4 @@
-# Serah terima — satu sesi (diperbarui 2026-11-04)
+# Serah terima — satu sesi (diperbarui 2026-11-09)
 
 Sejak 2026-11-04 sesi **Stream B** (ekstraksi PDF rekening koran) berhenti permanen. **Satu sesi memegang semua
 pekerjaan, satu per satu.** Dokumen ini menggantikan versi 2026-10-27 untuk dua stream paralel. Baca juga, sebelum
@@ -7,20 +7,22 @@ plan `docs/plans/2026-09-15-master-plan-mesin-akuntansi-semua-fase.md` **§5.G**
 
 ## 1. Status proyek
 
-**Di produksi** (`ngid.vercel.app`, Neon main **21 migrasi**, `main` = rilis terakhir):
+**Di produksi** (`ngid.vercel.app`, Neon main **23 migrasi**, `main` = rilis terakhir):
 - Phase 1–3 (frontend, backend, AI laporan) dan Kontrak.
 - **Phase 5 Fase 1 + Fase 2** — jurnal manual & posting, buku besar, Master COA bertipe, supplier, pembelian,
   mutasi kas/bank + alokasi ke invoice, monitoring hutang & rekonsiliasi. Dirilis 2026-10-23.
 - **Kunci Periode** (§5.9, D17/D26). Dirilis 2026-10-27.
-- Sudah di `main` tanpa rilis tersendiri: PR #3 (riwayat supplier), PR #5 (a11y `date-range-picker`), PR #6
-  (`components/date-picker.tsx` satu tanggal + `components/kalender-panel.tsx` bersama).
+- PR #3 (riwayat supplier), PR #5 (a11y `date-range-picker`), PR #6 (`components/date-picker.tsx` satu tanggal +
+  `components/kalender-panel.tsx` bersama).
+- **Grid Mutasi Kas** (§5.14 Modul A, PR #1: S0–S9 + S11, D63–D66, kolom Ref) — migrasi **0021 + 0022**. Dirilis
+  2026-11-09 (`66c4d72`); rincian per langkah di ROADMAP § "Checklist rilis Grid Mutasi Kas". NVDA (CP-20 butir 17)
+  masih menunggu Ricko, tidak menahan rilis.
 
 **Pull request terbuka:**
 
 | PR | Branch | Isi | Keadaan |
 |---|---|---|---|
-| #1 | `feat/grid-mutasi` | §5.G Modul A, S0–S9 + S11, masukan uji grid (D63–D66), kolom Ref (D64), sel Tanggal memakai `DatePicker` | Draft · CP-20 diuji klik agen 2026-11-07 (1–16 lolos; NVDA perlu Ricko) · S11 ✅ · migrasi **0021 + 0022** hanya di dev · **menunggu rilis Ricko** |
-| #2 | `feat/pdf-rekening-koran` | §5.G Modul B, X1–X4 + harness uji banding sintetis | Draft · aturan cakupan penjaga (a–c) disetujui Ricko 2026-11-04 · langkah 6 (Unggah PDF ke grid) menunggu PR #1 di `main` |
+| #2 | `feat/pdf-rekening-koran` | §5.G Modul B, X1–X4 + harness uji banding sintetis | Draft · aturan cakupan penjaga (a–c) disetujui Ricko 2026-11-04 · langkah 6 (Unggah PDF ke grid) **terbuka** — grid sudah di `main`; branch perlu `git merge origin/main` dulu |
 
 **Keputusan penting** (tabel lengkap di ROADMAP §5.12; alasan di MP §3.6):
 
@@ -69,7 +71,7 @@ sampai Ricko mengaktifkannya lagi.
 - Tidak ada yang push atau merge ke `main` kecuali Ricko lewat proses rilis (**main = produksi**).
 - Data uji diberi awalan: grid `UJI-A-`, PDF `UJI-B-`. Dibersihkan sesudah uji klik, kecuali yang sengaja ditinggal
   untuk uji Ricko (disebut di checklist-nya).
-- Log progres tetap per area: `docs/progress/stream-a-grid.md` (grid, di PR #1) dan `docs/progress/stream-b-pdf.md`
+- Log progres tetap per area: `docs/progress/stream-a-grid.md` (grid, di `main`) dan `docs/progress/stream-b-pdf.md`
   (PDF, di PR #2).
 
 **Kadens kerja:** satu langkah = gerbang hijau (`tsc --noEmit`, `vitest run`, `eslint .` tanpa error baru, `pnpm build`
@@ -80,9 +82,11 @@ lanjut.
 ## 3. Pekerjaan tersisa
 
 **Antrean Ricko** (urut; jangan dikerjakan sebelum diminta):
-1. ~~Uji klik CP-20~~ (agen, 2026-11-07; NVDA tetap Ricko) → ~~S11~~ → **rilis grid 0021 + 0022** oleh Ricko, langkah demi
-   langkah (checklist di ROADMAP § "Checklist rilis Grid Mutasi Kas"; prasyaratnya sudah dicocokkan 2026-11-07).
-2. **PR #2 langkah 6 / X5 — "Unggah PDF" ke grid**, sesudah grid ada di `main`. Catatan yang sudah diputuskan (log
+1. ~~Uji klik CP-20~~ (agen, 2026-11-07; NVDA tetap Ricko) → ~~S11~~ → ~~rilis grid 0021 + 0022~~ (2026-11-09). Susulan
+   sesudah rilis (keputusan Ricko 2026-11-09), satu PR kecil dari `main`: kalender diindonesiakan, Daftar mengikuti
+   bulan grid, galat muat + "Coba lagi" di Settings › Pembukuan › Akun Pindah Buku. Backlog: "terapkan ulang di atas
+   versi server" untuk draf tertimpa (ROADMAP §5.14).
+2. **PR #2 langkah 6 / X5 — "Unggah PDF" ke grid** (grid sudah di `main`). Catatan yang sudah diputuskan (log
    Stream B § "Catatan untuk langkah 6"): label Debet/Kredit/Nama Akun di pratinjau (Debet = uang MASUK; "DB" bank =
    keluar, jadi arah tetap dari kesinambungan saldo, bukan dari judul/penanda); nomor referensi bank → kolom `ref`;
    model per halaman dari header `X-Model-Ekstraksi` (+ `X-Ekstraksi-Diulang`); 422 `inputManual: true` tampil sebagai
