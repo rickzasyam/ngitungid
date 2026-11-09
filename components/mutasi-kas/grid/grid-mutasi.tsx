@@ -26,7 +26,7 @@
 import 'react-data-grid/lib/styles.css'
 import './grid-mutasi.css'
 
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   Cell,
   DataGrid,
@@ -274,6 +274,7 @@ function SelStatus({ b, kt }: { b: BarisGrid; kt: KonteksTampilan }) {
     return (
       <>
         <span className="gm-status gm-status-netral">baru</span>
+        {b.belumDisentuh && <span className="gm-penanda gm-penanda-lilac">dari PDF (AI)</span>}
         {tanda}
       </>
     )
@@ -306,6 +307,20 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
   const aktif = useRef<PosisiAktif>({ kunci: null, kolom: null })
   // Kunci baris yang kalendernya terbuka (Alt+↓ atau ikon), null = tertutup.
   const [kalender, setKalender] = useState<string | null>(null)
+  const adaHalaman = baris.some(b => b.halaman !== null)
+  const indeksAktif = useRef(-1)
+
+  // Baris di posisi aktif HILANG (Hapus baris, urungkan) dan baris berikutnya
+  // naik ke posisi itu: grid tidak mengirim onActivePositionChange karena
+  // posisinya sama, jadi klik di sel yang sama tidak mengaktifkan baris baru itu
+  // (uji klik 2026-11-09: "Hapus baris" mati sesudah satu hapus). Sinkronkan ke
+  // baris yang kini ada di indeks itu; di luar jangkauan → tidak ada yang aktif.
+  useEffect(() => {
+    const k = aktif.current.kunci
+    if (k === null || baris.some(b => b.kunci === k)) return
+    aktif.current = { kunci: baris[indeksAktif.current]?.kunci ?? null, kolom: aktif.current.kolom }
+    onAktif(aktif.current)
+  }, [baris, onAktif])
 
   const kolom = useMemo((): readonly Column<BarisGrid>[] => {
     const kt = konteks
@@ -396,8 +411,17 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
       resizable: true,
       renderCell: ({ row }) => <SelStatus b={row} kt={kt} />,
     }
-    return [nomor, ...data, status]
-  }, [konteks, sembunyi, gridRef, onUbahSel, kalender])
+    // Halaman PDF asal baris (X5) — baca-saja, hanya bila ada baris dari PDF.
+    const hal: Column<BarisGrid> = {
+      key: 'halaman',
+      name: 'Hal.',
+      width: 56,
+      resizable: false,
+      cellClass: () => 'gm-nomor',
+      renderCell: ({ row }) => row.halaman ?? '',
+    }
+    return adaHalaman ? [nomor, ...data, hal, status] : [nomor, ...data, status]
+  }, [konteks, sembunyi, gridRef, onUbahSel, kalender, adaHalaman])
 
   const jumlahBaris = baris.length
   const konteksEditor = useMemo(
@@ -471,7 +495,7 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
         // Panel kalender mengikuti selnya; sel yang digulir keluar dibuang
         // react-data-grid, jadi kalendernya ditutup saat grid digulir.
         onScroll={kalender === null ? undefined : () => setKalender(null)}
-        rowClass={r => (r.id === null ? 'gm-baris-baru' : undefined)}
+        rowClass={r => (r.id !== null ? undefined : r.belumDisentuh ? 'gm-baris-baru gm-baris-ai' : 'gm-baris-baru')}
         onRowsChange={(rows, data) => {
           const k = data.column.key as KolomGrid
           for (const i of data.indexes) onUbahSel(rows[i].kunci, k, rows[i].sel[k])
@@ -482,9 +506,10 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
           e.clipboardData.setData('text/plain', row.sel[column.key as KolomGrid])
           e.preventDefault()
         }}
-        onActivePositionChange={({ row, column }) => {
+        onActivePositionChange={({ row, rowIdx, column }) => {
           const k = column && (KOLOM_GRID as readonly string[]).includes(column.key) ? (column.key as KolomGrid) : null
           aktif.current = { kunci: row?.kunci ?? null, kolom: k }
+          indeksAktif.current = rowIdx
           onAktif(aktif.current)
         }}
         onCellKeyDown={(args, e) => {

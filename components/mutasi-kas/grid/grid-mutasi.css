@@ -77,6 +77,15 @@
   box-shadow: inset 3px 0 0 var(--color-accent-primary);
 }
 
+/* Baris hasil AI (PDF, X5) yang belum disentuh: lilac sampai satu selnya diubah. */
+/* Lewat variabel rdg: sel melukis latarnya sendiri, latar baris tertutup. */
+.grid-mutasi .gm-baris-ai {
+  --rdg-background-color: color-mix(in srgb, var(--color-accent-secondary) 16%, white);
+}
+.grid-mutasi .gm-baris-ai > .gm-nomor {
+  box-shadow: inset 3px 0 0 var(--color-accent-secondary);
+}
+
 .grid-mutasi .gm-status {
   display: inline-block;
   border-radius: 9999px;

@@ -24,6 +24,7 @@ import {
   CalendarCheck,
   BookOpen,
   Eraser,
+  FileText,
   FileUp,
   Filter,
   Info,
@@ -78,6 +79,12 @@ import type { InfoServerBaris, KonteksTampilan, PosisiAktif } from './grid-mutas
 import { bacaCadangan, hapusCadangan, tulisCadangan, type RekamanCadangan } from './cadangan-draf'
 import { kirimSimpan, type HasilKirim } from './kirim-simpan'
 import { PanelPindahBuku, type UsulanPindahBuku } from './panel-pindah-buku'
+import { PanelUnggahPdf } from './panel-unggah-pdf'
+import { aiFeaturesEnabled } from '@/lib/ai-features'
+
+// Sakelar sendiri, bawaan MATI (`AI_EKSTRAKSI_REKENING_KORAN`, diteruskan ke
+// browser lewat next.config.mjs). Mati → tombolnya tidak ada sama sekali (X5).
+const EKSTRAKSI_PDF = aiFeaturesEnabled('ekstraksiRekeningKoran')
 import { KomboAkun, type AkunPilihan } from './kombo-akun'
 
 const GridMutasi = dynamic(() => import('./grid-mutasi'), {
@@ -197,6 +204,9 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
   const idMuatUlang = useId()
   const gridRef = useRef<DataGridHandle | null>(null)
   const berkasRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
+  // PDF yang sedang diekstrak (panel X5); null = tidak ada.
+  const [pdf, setPdf] = useState<File | null>(null)
 
   const [s, dispatch] = useReducer(reducerGrid, undefined, () => keadaanAwal())
   const [muat, setMuat] = useState<{ status: 'memuat' | 'siap' | 'galat'; pesan?: string }>({ status: 'memuat' })
@@ -519,6 +529,11 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
 
   async function simpan(lewatiCekDuplikat: boolean) {
     if (!gerbang.boleh) return
+    // X5: baris hasil AI disebut sebelum menulis (ditanya sekali, bukan lagi sesudah konfirmasi duplikat).
+    const dariAi = diff.baru.filter(b => b.asal === 'pdf').length
+    if (!lewatiCekDuplikat && dariAi > 0) {
+      if (!window.confirm(`${dariAi.toLocaleString('id-ID')} baris berasal dari AI (PDF rekening koran). Sudah diperiksa? Simpan sekarang?`)) return
+    }
     setMenyimpan(true)
     setBanner(null)
     setKonfirmasiDuplikat(null)
@@ -707,6 +722,30 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
                 if (f) void bukaBerkas(f)
               }}
             />
+            {EKSTRAKSI_PDF && (
+              <>
+                <button type="button" className={tombol} style={gayaTombol} disabled={!tulisAktif || pdf !== null} onClick={() => pdfRef.current?.click()}>
+                  <FileText className="w-3.5 h-3.5" /> Unggah PDF rekening koran
+                </button>
+                <input
+                  ref={pdfRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  hidden
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!f) return
+                    if (f.size > 25 * 1024 * 1024) {
+                      setPesanLokal('PDF melewati 25 MB.')
+                      return
+                    }
+                    setBanner(null)
+                    setPdf(f)
+                  }}
+                />
+              </>
+            )}
           </>
         )}
         <button
@@ -972,7 +1011,7 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
         <span>
           Jangkar saldo:{' '}
           {jangkar.sumber === 'blok'
-            ? `baris SALDO AWAL tempelan (${jangkar.teks})`
+            ? `baris SALDO AWAL dokumen (${jangkar.teks})`
             : jangkar.sumber === 'server' && meta.saldoJangkar
               ? `saldo tersimpan ${fmtTanggal(meta.saldoJangkar.dariTanggal)} ${rupiahPersis(meta.saldoJangkar.saldoTercetak)}${meta.saldoJangkar.barisSesudah > 0 ? ` + ${meta.saldoJangkar.barisSesudah} mutasi tanpa saldo` : ''} = ${rupiahPersis(meta.saldoJangkar.saldo)}`
               : jangkar.sumber === 'manual'
@@ -1027,6 +1066,25 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
             Batal
           </button>
         </div>
+      )}
+
+      {pdf && (
+        <PanelUnggahPdf
+          file={pdf}
+          clientId={clientId}
+          akunKasId={akunKas.id}
+          periode={periode}
+          onTutup={() => setPdf(null)}
+          onMasukkan={(hasil, catatan) => {
+            dispatch({ jenis: 'tempelBlok', indeks: s.baris.length, hasil, sumber: 'pdf', namaBerkas: pdf.name })
+            setPdf(null)
+            setBanner({
+              jenis: catatan.length > 0 ? 'galat' : 'ok',
+              pesan: `PDF "${pdf.name}": ${hasil.baris.length.toLocaleString('id-ID')} baris masuk grid sebagai DRAF berpenanda lilac — periksa, lalu Simpan.`,
+              detail: catatan,
+            })
+          }}
+        />
       )}
 
       <PanelPindahBuku clientId={clientId} periode={periode} versi={versi + versiLuar} onUsulan={setUsulanPB} />

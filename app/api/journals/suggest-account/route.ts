@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { masterCoa } from '@/lib/db/schema'
 import { requireAkunting } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
-import { suggestJournalAccounts } from '@/lib/gemini/suggest-journal-account'
+import { suggestJournalAccounts } from '@/lib/ai/saran-akun-jurnal'
 import { AI_NONAKTIF, aiFeaturesEnabled } from '@/lib/ai-features'
 
 export const runtime = 'nodejs'

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { BATAS_SIMPAN, gerbangSimpan, hitungUsulan, labelAkun, petaGalatServer, rantaiGrid, rencanaBerkas, rencanaTempel, ringkasGrid, teksKetikan } from './mutasi-grid-turunan'
+import { BATAS_SIMPAN, gerbangSimpan, hitungUsulan, labelAkun, petaGalatServer, rantaiGrid, rencanaBerkas, rencanaPdf, rencanaTempel, ringkasGrid, teksKetikan } from './mutasi-grid-turunan'
+import type { HalamanMentah } from './mutasi-kas/kontrak-baris-mentah'
 import { buatValidator, diffKeBatch, keadaanAwal, potretCadangan, reducerGrid, TANPA_KUNCI, type BarisGrid, type BarisServer } from './mutasi-grid-state'
 import { indeksAkun, selKosong, type SelDraf } from './mutasi-draf'
 import { siapkanAturan, type AturanMutasi } from './aturan-mutasi'
@@ -208,6 +209,50 @@ describe('rencanaBerkas — CSV masuk grid lewat jalur tempelan (D47)', () => {
   it('berkas kosong / tanpa transaksi → galat', () => {
     expect(rencanaBerkas('', OKT).jenis).toBe('galat')
     expect(rencanaBerkas('Tanggal;Keterangan;Debet\n', OKT).jenis).toBe('galat')
+  })
+})
+
+describe('rencanaPdf — halaman PDF jadi SATU blok lewat jalur yang sama (X5)', () => {
+  const kolom = ['Tanggal', 'Keterangan', 'Mutasi Debet', 'Mutasi Kredit', 'Saldo']
+  const dua = (pertama: string, kedua: string) => ({
+    bentuk: 'dua-kolom' as const,
+    pertama: { judul: 'Mutasi Debet', teks: pertama },
+    kedua: { judul: 'Mutasi Kredit', teks: kedua },
+  })
+  const hal1: HalamanMentah = {
+    halaman: 1,
+    kolom,
+    periodeTeks: 'PERIODE : OKTOBER 2026',
+    baris: [
+      { halaman: 1, tanggal: '', uraian: 'SALDO AWAL', nominal: dua('', ''), saldo: '1.000.000,00', lain: [] },
+      { halaman: 1, tanggal: '02/10', uraian: 'TRF KE PT A', nominal: dua('250.000,00', ''), saldo: '750.000,00', lain: [] },
+    ],
+  }
+  const hal2: HalamanMentah = {
+    halaman: 2,
+    kolom,
+    periodeTeks: null,
+    baris: [
+      { halaman: 2, tanggal: 'Tanggal', uraian: 'Keterangan', nominal: dua('Mutasi Debet', 'Mutasi Kredit'), saldo: 'Saldo', lain: [] },
+      // Lanjutan uraian TRF yang terpotong halaman.
+      { halaman: 2, tanggal: '', uraian: 'INV 123', nominal: dua('', ''), saldo: '', lain: [] },
+      { halaman: 2, tanggal: '03/10', uraian: 'SETORAN', nominal: dua('', '100.000,00'), saldo: '850.000,00', lain: [] },
+    ],
+  }
+
+  it('urut halaman, lanjutan lintas halaman digabung, nomor halaman ikut, sumber pdf', () => {
+    const t = rencanaPdf([hal2, hal1], OKT)
+    expect(t.jenis).toBe('blok')
+    if (t.jenis !== 'blok') return
+    expect(t.hasil.baris.map(b => [b.halaman, b.sel.tanggal, b.sel.uraian])).toEqual([
+      [1, '2026-10-02', 'TRF KE PT A INV 123'],
+      [2, '2026-10-03', 'SETORAN'],
+    ])
+  })
+
+  it('tanpa halaman tersusun / tanpa transaksi → galat, bukan blok kosong', () => {
+    expect(rencanaPdf([], OKT).jenis).toBe('galat')
+    expect(rencanaPdf([{ ...hal1, baris: hal1.baris.slice(0, 1) }], OKT).jenis).toBe('galat')
   })
 })
 

@@ -22,6 +22,57 @@ const AKUN_KAS = baca('lib', 'akun-kas-klien.ts')
 const SETTINGS = baca('app', 'settings', 'page.tsx')
 const FORM = baca('components', 'mutasi-kas', 'mutation-form-modal.tsx')
 const PKG = JSON.parse(baca('package.json')) as { dependencies: Record<string, string> }
+const PANEL_PDF = baca('components', 'mutasi-kas', 'grid', 'panel-unggah-pdf.tsx')
+
+// X5 — Unggah PDF rekening koran ke grid (PR #2 langkah 6).
+describe('Unggah PDF rekening koran (X5)', () => {
+  it('tombol hanya ada bila sakelar sendiri menyala (bawaan mati)', () => {
+    expect(LEMBAR).toContain("const EKSTRAKSI_PDF = aiFeaturesEnabled('ekstraksiRekeningKoran')")
+    expect(LEMBAR).toContain('{EKSTRAKSI_PDF && (')
+  })
+  it('PDF dibaca di browser (D56): pdf.js dimuat malas, berkasnya tidak pernah dikirim', () => {
+    expect(PANEL_PDF).toContain("await import('@/lib/bank-statement/baca-pdf')")
+    expect(PANEL_PDF).not.toContain('FormData')
+    expect(PANEL_PDF).toContain("body = { clientId: k.clientId, akunKasId: k.akunKasId, halaman: n, baris, kolomSebelumnya: kolomSebelumnyaBerposisi(asal, t.grid) }")
+  })
+  it('halaman diproses BERURUTAN, bisa dibatalkan, galat yang pasti berulang menghentikan dokumen', () => {
+    expect(PANEL_PDF).toContain('for (const n of daftar) {')
+    expect(PANEL_PDF).toContain('const r = await ekstrakSatu(n, { doc, judul: judulRef.current, clientId, akunKasId, sinyal: ac.signal })')
+    expect(PANEL_PDF).toContain('if (r.henti) {')
+    expect(PANEL_PDF).toContain('abortRef.current?.abort()')
+  })
+  it('halaman gambar tanpa baris tampil sebagai peringatan + Ulangi, dan ikut ke catatan saat dimasukkan', () => {
+    expect(PANEL_PDF).toContain("h.status === 'ok' && peringatanHalaman(h) ? (")
+    expect(PANEL_PDF).toContain('...daftarHasil.flatMap(h => peringatanHalaman(h) ?? []),')
+  })
+  it('isi manual (422 inputManual) tidak menawarkan tombol ulangi', () => {
+    const manual = PANEL_PDF.slice(PANEL_PDF.indexOf("h.status === 'manual' ? ("), PANEL_PDF.indexOf(') : (', PANEL_PDF.indexOf("h.status === 'manual' ? (")))
+    expect(manual).toContain('isi manual')
+    expect(manual).not.toContain('Ulangi')
+  })
+  it('hasil masuk sebagai SATU blok DRAF sumber pdf lewat rencanaPdf; Simpan menyebut baris dari AI', () => {
+    expect(PANEL_PDF).toContain('rencana: rencanaPdf(t, periode)')
+    expect(PANEL_PDF).toContain('onMasukkan(rencana.hasil, catatan)')
+    expect(LEMBAR).toContain("dispatch({ jenis: 'tempelBlok', indeks: s.baris.length, hasil, sumber: 'pdf', namaBerkas: pdf.name })")
+    expect(LEMBAR).toContain("const dariAi = diff.baru.filter(b => b.asal === 'pdf').length")
+    expect(LEMBAR).toContain('baris berasal dari AI')
+  })
+  // Uji klik langkah 6 (2026-11-09): sesudah satu "Hapus baris", baris berikutnya
+  // naik ke posisi aktif tanpa event dari grid → klik sel yang sama tidak mengaktifkannya.
+  it('baris di posisi aktif hilang → posisi aktif disinkronkan ke baris yang kini di indeks itu', () => {
+    expect(GRID).toContain('indeksAktif.current = rowIdx')
+    const efek = GRID.slice(GRID.indexOf('useEffect(() => {\n    const k = aktif.current.kunci'), GRID.indexOf('}, [baris, onAktif])'))
+    expect(efek).toContain('if (k === null || baris.some(b => b.kunci === k)) return')
+    expect(efek).toContain('baris[indeksAktif.current]?.kunci ?? null')
+    expect(efek).toContain('onAktif(aktif.current)')
+  })
+  it('kolom Hal. baca-saja & penanda lilac berteks (bukan warna saja)', () => {
+    expect(GRID).toContain("name: 'Hal.',")
+    expect(GRID).toContain("r.belumDisentuh ? 'gm-baris-baru gm-baris-ai' : 'gm-baris-baru'")
+    expect(GRID).toContain('dari PDF (AI)')
+    expect(CSS).toContain('.grid-mutasi .gm-baris-ai {')
+  })
+})
 
 describe('grid tidak menghitung angka buku sendiri (pola CP-18)', () => {
   it.each([
