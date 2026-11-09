@@ -45,6 +45,18 @@ describe('Unggah PDF rekening koran (X5)', () => {
     expect(PANEL_PDF).toContain("h.status === 'ok' && peringatanHalaman(h) ? (")
     expect(PANEL_PDF).toContain('...daftarHasil.flatMap(h => peringatanHalaman(h) ?? []),')
   })
+  // Uji X6 (2026-11-09): ringkasan bank dibaca KODE dari teks halaman, dibandingkan dengan blok yang akan masuk grid.
+  it('ringkasan bank sebagai pemeriksa: dibaca kode, dibandingkan, tidak cocok ikut ke catatan', () => {
+    expect(PANEL_PDF).toContain('return { ...r, ringkasan: t.perluGambar ? null : bacaRingkasanBank(baris) }')
+    expect(PANEL_PDF).toContain('bandingkanRingkasan(ringkasan.data, rencana.hasil)')
+    expect(PANEL_PDF).toContain("role={tidakCocok.length > 0 ? 'alert' : 'status'}")
+    expect(PANEL_PDF).toContain('`Tidak cocok dengan ringkasan bank: ${tidakCocok.map(b => b.label.toLowerCase()).join(\', \')}.`')
+  })
+  it('SALDO AWAL ringkasan ditawarkan sebagai "Saldo awal rekening koran" hanya bila grid & blok tanpa jangkar', () => {
+    expect(PANEL_PDF).toContain('const teksJangkar = tawarkanJangkar && tanpaSaldoAwalBlok ? (ringkasan?.data.saldoAwalTeks ?? null) : null')
+    expect(LEMBAR).toContain("tawarkanJangkar={jangkar.sumber === null || jangkar.sumber === 'manual'}")
+    expect(LEMBAR).toContain('onSaldoAwal={setSaldoManual}')
+  })
   it('isi manual (422 inputManual) tidak menawarkan tombol ulangi', () => {
     const manual = PANEL_PDF.slice(PANEL_PDF.indexOf("h.status === 'manual' ? ("), PANEL_PDF.indexOf(') : (', PANEL_PDF.indexOf("h.status === 'manual' ? (")))
     expect(manual).toContain('isi manual')

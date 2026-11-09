@@ -97,7 +97,12 @@ export function rangkumDokumen(halaman: HalamanMentah[], jumlahHalamanPdf: numbe
 
   const periode = halaman.map(h => h.periodeTeks).filter((p): p is string => p !== null && p.trim() !== '')
   const periodeTeks = periode[0] ?? null
-  if (periode.some(p => p.trim() !== periode[0].trim())) {
+  // Spasi & huruf besar/kecil tidak dihitung ("PE RIOD E : JANU ARI 2026" =
+  // "PERIODE : JANUARI 2026"), dan teks yang memuat yang lain dianggap sama
+  // ("JANUARI 2026" ⊂ "PERIODE : JANUARI 2026"). Halaman yang gagal tidak ikut.
+  const kunci = (p: string) => p.split(' ').join('').toUpperCase()
+  const sama = (a: string, b: string) => kunci(a).includes(kunci(b)) || kunci(b).includes(kunci(a))
+  if (periode.some(p => !sama(p, periode[0]))) {
     peringatan.push('Teks periode berbeda antar halaman — pastikan semua halaman dari rekening koran yang sama.')
   }
   if (periodeTeks === null) peringatan.push('Teks periode tidak ditemukan — tahun tanggal mengikuti periode yang dipilih di grid.')

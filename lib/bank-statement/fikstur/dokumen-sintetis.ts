@@ -113,12 +113,25 @@ export function barisJudul(tata: TataLetak): BarisData {
 /**
  * Susun PDF + kebenaran. `judulTercetak[i]` = apakah halaman i+1 mencetak baris
  * judul kolom; `gambar` = nomor halaman yang dijadikan tiruan scan.
+ * Untuk meniru tata letak bank tertentu (bawaan: tidak dipakai):
+ *  - `atas`: teks tambahan di atas tabel (kop kanan, catatan) — bukan baris tabel;
+ *  - `bawah`: teks SESUDAH baris terakhir tabel (mulai `y`) — kaki "Bersambung…",
+ *    blok ringkasan bank — bukan baris tabel;
+ *  - `periodeTiapHalaman`: periode tercetak (dan dikembalikan AI) di setiap halaman;
+ *  - `tanpaNomorHalaman`: tanpa kaki "Halaman n / N" bawaan.
  */
 export function susunDokumen(
   nama: string,
   tata: TataLetak,
   halamanCetak: BarisCetak[][],
-  opsi: { judulTercetak?: boolean[]; gambar?: number[] } = {}
+  opsi: {
+    judulTercetak?: boolean[]
+    gambar?: number[]
+    atas?: (halaman: number, total: number) => TeksPdf[]
+    bawah?: (halaman: number, total: number, y: number) => TeksPdf[]
+    periodeTiapHalaman?: boolean
+    tanpaNomorHalaman?: boolean
+  } = {}
 ): DokumenSintetis {
   const total = halamanCetak.length
   const pdf: HalamanPdf[] = []
@@ -132,7 +145,9 @@ export function susunDokumen(
     const adaJudul = opsi.judulTercetak?.[i] ?? true
     const teks: TeksPdf[] = []
     tata.kop.forEach((k, j) => teks.push({ x: 40, y: 800 - j * 11, teks: k, ukuran: 9 }))
-    if (halaman === 1 && tata.periodeTeks) teks.push({ x: 360, y: 800, teks: tata.periodeTeks, ukuran: 9 })
+    const cetakPeriode = halaman === 1 || opsi.periodeTiapHalaman === true
+    if (cetakPeriode && tata.periodeTeks) teks.push({ x: 360, y: 800, teks: tata.periodeTeks, ukuran: 9 })
+    teks.push(...(opsi.atas?.(halaman, total) ?? []))
     let y = BARIS_ATAS
     if (adaJudul) {
       teks.push(...teksBaris(k => k.judul, tata.kolom, y))
@@ -143,7 +158,8 @@ export function susunDokumen(
       else teks.push(...teksBaris(k => selUntuk(b, k), tata.kolom, y))
       y -= JARAK
     }
-    teks.push({ x: 270, y: 40, teks: `Halaman ${halaman} / ${total}`, ukuran: 7 })
+    teks.push(...(opsi.bawah?.(halaman, total, y - JARAK) ?? []))
+    if (!opsi.tanpaNomorHalaman) teks.push({ x: 270, y: 40, teks: `Halaman ${halaman} / ${total}`, ukuran: 7 })
     const gambarSaja = opsi.gambar?.includes(halaman) ?? false
     pdf.push({ teks, gambarSaja })
 
@@ -166,7 +182,7 @@ export function susunDokumen(
       else dokumen.push((terakhirDokumen = sendiri()))
     }
     const kolom = adaJudul ? tata.kolom.map(k => k.judul) : []
-    const periodeTeks = halaman === 1 ? tata.periodeTeks : null
+    const periodeTeks = cetakPeriode ? tata.periodeTeks : null
     kebenaranHalaman.push({ halaman, kolom, baris: perHalaman, periodeTeks })
     kebenaran.push({ halaman, kolom, baris: dokumen, periodeTeks })
   })

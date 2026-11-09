@@ -1,4 +1,5 @@
 import { acak, cetakSen, nominalKosong, susunDokumen, type BarisCetak, type BarisData, type DokumenSintetis, type TataLetak } from './dokumen-sintetis'
+import { lebarTeks, type TeksPdf } from './pdf-sintetis'
 
 // Koleksi rekening koran KARANGAN untuk test & harness (UJI-B-). Bentuknya
 // meniru tata letak umum, bukan salinan dokumen bank mana pun.
@@ -198,4 +199,124 @@ export function dokumenLanjutanLintasHalaman(): DokumenSintetis {
   return susunDokumen('UJI-B-lanjutan-lintas-halaman', TATA_DUA_KOLOM, [[awal, ...a.slice(0, 3)], [a[3], ...b.slice(0, 2)], [b[2], ...c]], {
     judulTercetak: [true, false, true],
   })
+}
+
+// ── e-statement BCA (uji X6, 2026-11-09) ─────────────────────────────────────
+// Struktur & spasi meniru e-statement BCA asli yang ditolak di halaman TERAKHIR:
+// kop kanan, judul berhuruf renggang, kolom CBG kosong, uraian 2–4 baris
+// lanjutan, saldo hanya di transaksi terakhir per hari, penanda "DB", tanggal
+// DD/MM, kaki "Bersambung ke halaman berikut", dan BLOK RINGKASAN sesudah
+// transaksi terakhir. Nama, nomor, dan angka semuanya KARANGAN (UJI-B-).
+
+const TATA_BCA: TataLetak = {
+  bentuk: 'satu-kolom',
+  kop: ['KCP CONTOH', 'C V  C O N T OH  UJI-B', 'J L  C O N T OH'],
+  periodeTeks: 'PE RIOD E : JANU ARI 2026',
+  kolom: [
+    { judul: 'T ANG G A L', x: 40, rata: 'kiri', peran: 'tanggal' },
+    { judul: 'KET ER A N GA N', x: 95, rata: 'kiri', peran: 'uraian' },
+    { judul: 'C BG', x: 335, rata: 'kiri', peran: 'lain' },
+    { judul: 'MU TASI', x: 470, rata: 'kanan', peran: 'nominal1' },
+    { judul: 'SALD O', x: 565, rata: 'kanan', peran: 'saldo' },
+  ],
+}
+
+/** Angka blok ringkasan bank yang dicetak di halaman terakhir (sen; jumlah transaksi). */
+export type RingkasanFikstur = {
+  saldoAwal: number
+  saldoAkhir: number
+  masuk: { total: number; jumlah: number }
+  keluar: { total: number; jumlah: number }
+}
+
+const kanan = (x: number, y: number, teks: string, ukuran = 8): TeksPdf => ({ x: x - lebarTeks(teks, ukuran), y, teks, ukuran })
+
+/** `tanpaBarisSaldoAwal`: halaman 1 tanpa baris "01/01 SALDO AWAL" — jangkar hanya dari blok ringkasan. */
+export function dokumenBcaAsli(opsi: { tanpaBarisSaldoAwal?: boolean } = {}): DokumenSintetis & { ringkasan: RingkasanFikstur } {
+  const r = acak(2026)
+  const g = 'koma'
+  const saldoAwal = 25_000_000_00
+  const N = 49
+  const masukDi = new Set([2, 7, 12, 17, 22, 27, 32, 37, 42, 46]) // 10 masuk, 39 keluar
+  const hari = (i: number) => (i === N - 1 ? 31 : 2 + Math.floor((i * 29) / N))
+  let saldo = saldoAwal
+  const tx: { data: BarisData; lanjut: string[]; hari: number; saldoSesudah: number }[] = []
+  const ringkasan: RingkasanFikstur = { saldoAwal, saldoAkhir: 0, masuk: { total: 0, jumlah: 0 }, keluar: { total: 0, jumlah: 0 } }
+  for (let i = 0; i < N; i++) {
+    const keluar = !masukDi.has(i)
+    let sen = keluar ? (50_000 + Math.floor(r() * 1_200_000)) * 100 + Math.floor(r() * 100) : (1_000_000 + Math.floor(r() * 4_000_000)) * 100
+    if (keluar && sen > saldo) sen = Math.floor(saldo / 2)
+    saldo += keluar ? -sen : sen
+    const bucket = keluar ? ringkasan.keluar : ringkasan.masuk
+    bucket.total += sen
+    bucket.jumlah++
+    const dd = String(hari(i)).padStart(2, '0')
+    const ref = `${dd}01/FTSCY/WS9${String(5000 + i)}`
+    const mentah = `${Math.floor(sen / 100)}.${String(sen % 100).padStart(2, '0')}`
+    let uraian: string
+    let lanjut: string[] = []
+    if (i === N - 1) uraian = 'BIAYA ADM'
+    else if (!keluar) {
+      uraian = `TRSF E-BANKING CR ${ref}`
+      lanjut = [mentah, `UJI-B PEMBAYAR ${i}`, ...(i % 3 === 0 ? [`UJI-B INV-${i}`] : [])]
+    } else if (i % 6 === 5) uraian = `KARTU DEBIT UJI-B-${i}`
+    else {
+      uraian = `TRSF E-BANKING DB ${ref}`
+      lanjut = [mentah, `UJI-B PENERIMA ${i}`, ...(i % 4 === 1 ? [`UJI-B BERITA ${i}`, `UJI-B CATATAN ${i}`] : i % 4 === 3 ? [`UJI-B BERITA ${i}`] : [])]
+    }
+    const data: BarisData = {
+      tanggal: `${dd}/01`,
+      uraian,
+      nominal: { bentuk: 'satu-kolom', judul: 'MU TASI', teks: cetakSen(sen, g), penanda: keluar ? 'DB' : '' },
+      saldo: '',
+      lain: [],
+    }
+    tx.push({ data, lanjut, hari: hari(i), saldoSesudah: saldo })
+  }
+  ringkasan.saldoAkhir = saldo
+  // SALDO hanya dicetak di transaksi TERAKHIR per hari.
+  tx.forEach((t, i) => {
+    if (i === N - 1 || tx[i + 1].hari !== t.hari) t.data.saldo = cetakSen(t.saldoSesudah, g)
+  })
+  const cetak = tx.map(t => [t.data, ...t.lanjut.map(u => ({ lanjutan: u }))] as BarisCetak[])
+  const ukuran = [9, 8, 8, 8, 8, 8]
+  const halaman: BarisCetak[][] = []
+  let k = 0
+  for (const u of ukuran) {
+    halaman.push(cetak.slice(k, k + u).flat())
+    k += u
+  }
+  if (!opsi.tanpaBarisSaldoAwal) halaman[0].unshift(barisSaldoAwal(TATA_BCA, '01/01', saldoAwal, g))
+
+  const atas = (h: number, total: number): TeksPdf[] => [
+    { x: 300, y: 822, teks: 'REKENING GIRO', ukuran: 9 },
+    { x: 360, y: 789, teks: 'NO. RE KE NING             :    0000000000', ukuran: 8 },
+    { x: 360, y: 778, teks: `HALAMAN                    :    ${h}/${total}`, ukuran: 8 },
+    { x: 360, y: 767, teks: 'MATA U ANG                 :    ID R', ukuran: 8 },
+    { x: 40, y: 748, teks: 'CATATAN:', ukuran: 7 },
+    { x: 40, y: 738, teks: '•    Apabila nasabah tidak melakukan sanggahan atas Laporan Mutasi', ukuran: 7 },
+    { x: 300, y: 738, teks: '•   BCA berhak setiap saat melakukan koreksi apabila ada kesalahan pada', ukuran: 7 },
+    { x: 40, y: 728, teks: '     Rekening ini sampai dengan akhir bulan berikutnya, ...', ukuran: 7 },
+    { x: 300, y: 728, teks: '     Laporan Mutasi Rekening.', ukuran: 7 },
+  ]
+  const bawah = (h: number, total: number, y: number): TeksPdf[] => {
+    if (h < total) return [{ x: 40, y: y - 6, teks: 'Bersambung ke halaman berikut', ukuran: 8 }]
+    const blok: [string, number, number | null][] = [
+      ['SALDO AWAL', ringkasan.saldoAwal, null],
+      ['MUTASI CR', ringkasan.masuk.total, ringkasan.masuk.jumlah],
+      ['MUTASI DB', ringkasan.keluar.total, ringkasan.keluar.jumlah],
+      ['SALDO AKHIR', ringkasan.saldoAkhir, null],
+    ]
+    return blok.flatMap(([label, sen, jumlah], i) => {
+      const yy = y - 14 - i * 12
+      return [
+        { x: 250, y: yy, teks: label },
+        { x: 330, y: yy, teks: ':' },
+        kanan(440, yy, cetakSen(sen, g)),
+        ...(jumlah === null ? [] : [{ x: 470, y: yy, teks: String(jumlah) }]),
+      ]
+    })
+  }
+  const d = susunDokumen(opsi.tanpaBarisSaldoAwal ? 'UJI-B-bca-tanpa-saldo-awal' : 'UJI-B-bca-asli', TATA_BCA, halaman, { atas, bawah, periodeTiapHalaman: true, tanpaNomorHalaman: true })
+  return { ...d, ringkasan }
 }

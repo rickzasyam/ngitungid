@@ -1075,6 +1075,8 @@ export function LembarMutasi({ clientId, akunKas, coa, periode, bolehTulis, bole
           akunKasId={akunKas.id}
           periode={periode}
           onTutup={() => setPdf(null)}
+          tawarkanJangkar={jangkar.sumber === null || jangkar.sumber === 'manual'}
+          onSaldoAwal={setSaldoManual}
           onMasukkan={(hasil, catatan) => {
             dispatch({ jenis: 'tempelBlok', indeks: s.baris.length, hasil, sumber: 'pdf', namaBerkas: pdf.name })
             setPdf(null)
