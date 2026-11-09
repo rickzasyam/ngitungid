@@ -507,7 +507,7 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 - ⏳ S10 Class CF (D62). Kosakata baku Operating Balance/Operating/Investing/Funding tanpa migrasi. `classification-health` berhenti menandai Operating Balance, dan ada aksi **"Tandai akun Operating Balance sebagai akun kas"**
 - ✅ S11 ROADMAP + graphify — **(2026-11-07)** status S9/S11, hasil CP-20 per butir, prasyarat checklist rilis dicocokkan dengan dev (23 migrasi; kueri verifikasi langkah 6 dijalankan baca-saja di dev, hasil persis seperti tertulis) dan main (baca-saja: 21 migrasi, `cash_mutation_rules` belum ada); `graphify update .`; deskripsi PR #1 diperbarui. 🚀 **Dirilis 2026-11-09** (checklist di bawah, hasil per langkah di kepalanya)
 - 💡 **Backlog (keputusan Ricko 2026-11-09, belum dijadwalkan):** draf "tertimpa" yang dipulihkan sesudah konflik 409 **tetap 409** saat disimpan — sesuai desain S6 (snapshot server lama dipertahankan supaya perubahan orang lain tidak tertimpa diam-diam), jadi pengguna mengetik ulang di atas versi server. Usulan untuk nanti: alur **"terapkan ulang di atas versi server"** (perubahan draf dipasang ulang ke baris terbaru, bentrok per sel ditampilkan)
-- ⏳ **Sesudah rilis, PR kecil dari `main` (keputusan Ricko 2026-11-09):** kalender diindonesiakan, tampilan Daftar mengikuti bulan grid, Settings › Pembukuan › Akun Pindah Buku menampilkan galat muat + "Coba lagi"
+- ✅ **Sesudah rilis, PR kecil dari `main` (keputusan Ricko 2026-11-09) — PR #8, rincian di sub-butir S9:** kalender diindonesiakan, tampilan Daftar mengikuti bulan grid, Settings › Pembukuan › Akun Pindah Buku menampilkan galat muat + "Coba lagi"
 
 **Modul B — PDF rekening koran**
 
