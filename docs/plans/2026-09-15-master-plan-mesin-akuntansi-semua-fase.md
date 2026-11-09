@@ -599,7 +599,7 @@ Kartu ringkasan umur hutang (belum jatuh tempo · 1–30 · 31–60 · 61–90 �
 
 **S10 — Class CF (D62).** Kosakata baku `Operating Balance` · `Operating` · `Investing` · `Funding` (`lib/coa/class-cf.ts` murni: normalisasi "operasi"/"pendanaan"/huruf kecil → baku; nilai lain → galat di impor/sunting COA, kosong tetap NULL). `classification-health` mengenali "Operating Balance" (bucket `saldo`) — **tanpa mengubah `aggregateCashflow`**, yang memang mengecualikannya dari Operating. Aksi Settings › Master COA **"Tandai akun Operating Balance sebagai akun kas"** (pratinjau daftar → PATCH `is_kas = true`). Test: normalisasi, tak ada peringatan palsu untuk Operating Balance, `cashflowBucketOf` tetap cocok dengan `aggregateCashflow`. **Tanpa migrasi; tidak bergantung pada grid** — boleh dikerjakan lebih dulu bila D62 disetujui.
 
-**S11 — ROADMAP + `graphify update .`.** ✅ 2026-11-07 — sesudah uji klik CP-20 (agen menggantikan Ricko: butir 1–16 lolos, NVDA perlu Ricko, satu bug pemuatan akun kas diperbaiki). Rilis grid (0021 + 0022, main 21 → 23) menunggu Ricko — checklist di ROADMAP.
+**S11 — ROADMAP + `graphify update .`.** ✅ 2026-11-07 — sesudah uji klik CP-20 (agen menggantikan Ricko: butir 1–16 lolos, NVDA perlu Ricko, satu bug pemuatan akun kas diperbaiki). 🚀 Rilis grid (0021 + 0022, main 21 → 23) **dijalankan 2026-11-09** (`66c4d72`) — rincian di kepala checklist ROADMAP.
 
 > **D58 — jurnal per baris vs jurnal ringkasan (keputusan baru, butuh persetujuan Ricko).**
 > | Opsi | Jumlah jurnal (Kas Shopee 1, April: 5.187 baris) | Kelebihan | Kekurangan |
