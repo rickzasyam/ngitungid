@@ -17,6 +17,7 @@ import {
   bacaUangSel,
   belahTempelan,
   cocokkanAkun,
+  dariHalamanMentah,
   kenaliJudul,
   nominalKeSel,
   type HasilBacaBlok,
@@ -27,6 +28,8 @@ import {
 import { usulkanAkunLawan, type AturanSiap } from '@/lib/aturan-mutasi'
 import { blokWajibPilih, type BarisGrid, type HasilDiff, type KeadaanGrid } from '@/lib/mutasi-grid-state'
 import { fromMinorUnits } from '@/lib/journal'
+import { gabungLintasHalaman } from '@/lib/bank-statement/dokumen'
+import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 import { bulanGridDari, normalisasiTanggal, urutanBlok } from '@/lib/mutasi-tanggal'
 
 // ── Rantai saldo per baris ───────────────────────────────────
@@ -311,6 +314,21 @@ export function rencanaBerkas(teks: string, periode: Periode): RencanaTempel {
   })
   if (!hasil.ok) return { jenis: 'galat', pesan: hasil.pesan }
   if (hasil.baris.length === 0) return { jenis: 'galat', pesan: 'Tidak ada baris transaksi yang terbaca di berkas ini.' }
+  return { jenis: 'blok', hasil }
+}
+
+/**
+ * PDF rekening koran (X5) → SATU blok transaksi. Jalurnya sama dengan berkas
+ * CSV — `bacaBlok`, rantai saldo, arah — sumbernya 'pdf'. Lanjutan uraian yang
+ * terpotong halaman digabung lebih dulu (`gabungLintasHalaman`, wajib sebelum
+ * blok diserahkan ke grid). Halaman yang gagal/isi manual tidak ikut.
+ */
+export function rencanaPdf(halaman: readonly HalamanMentah[], periode: Periode): RencanaTempel {
+  if (halaman.length === 0) return { jenis: 'galat', pesan: 'Belum ada halaman yang tersusun.' }
+  const urut = [...halaman].sort((a, b) => a.halaman - b.halaman)
+  const hasil = bacaBlok({ ...dariHalamanMentah(gabungLintasHalaman(urut)), sumber: 'pdf', periode })
+  if (!hasil.ok) return { jenis: 'galat', pesan: hasil.pesan }
+  if (hasil.baris.length === 0) return { jenis: 'galat', pesan: 'Tidak ada baris transaksi yang terbaca di PDF ini.' }
   return { jenis: 'blok', hasil }
 }
 

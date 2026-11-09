@@ -274,6 +274,7 @@ function SelStatus({ b, kt }: { b: BarisGrid; kt: KonteksTampilan }) {
     return (
       <>
         <span className="gm-status gm-status-netral">baru</span>
+        {b.belumDisentuh && <span className="gm-penanda gm-penanda-lilac">dari PDF (AI)</span>}
         {tanda}
       </>
     )
@@ -306,6 +307,7 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
   const aktif = useRef<PosisiAktif>({ kunci: null, kolom: null })
   // Kunci baris yang kalendernya terbuka (Alt+↓ atau ikon), null = tertutup.
   const [kalender, setKalender] = useState<string | null>(null)
+  const adaHalaman = baris.some(b => b.halaman !== null)
 
   const kolom = useMemo((): readonly Column<BarisGrid>[] => {
     const kt = konteks
@@ -396,8 +398,17 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
       resizable: true,
       renderCell: ({ row }) => <SelStatus b={row} kt={kt} />,
     }
-    return [nomor, ...data, status]
-  }, [konteks, sembunyi, gridRef, onUbahSel, kalender])
+    // Halaman PDF asal baris (X5) — baca-saja, hanya bila ada baris dari PDF.
+    const hal: Column<BarisGrid> = {
+      key: 'halaman',
+      name: 'Hal.',
+      width: 56,
+      resizable: false,
+      cellClass: () => 'gm-nomor',
+      renderCell: ({ row }) => row.halaman ?? '',
+    }
+    return adaHalaman ? [nomor, ...data, hal, status] : [nomor, ...data, status]
+  }, [konteks, sembunyi, gridRef, onUbahSel, kalender, adaHalaman])
 
   const jumlahBaris = baris.length
   const konteksEditor = useMemo(
@@ -471,7 +482,7 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
         // Panel kalender mengikuti selnya; sel yang digulir keluar dibuang
         // react-data-grid, jadi kalendernya ditutup saat grid digulir.
         onScroll={kalender === null ? undefined : () => setKalender(null)}
-        rowClass={r => (r.id === null ? 'gm-baris-baru' : undefined)}
+        rowClass={r => (r.id !== null ? undefined : r.belumDisentuh ? 'gm-baris-baru gm-baris-ai' : 'gm-baris-baru')}
         onRowsChange={(rows, data) => {
           const k = data.column.key as KolomGrid
           for (const i of data.indexes) onUbahSel(rows[i].kunci, k, rows[i].sel[k])

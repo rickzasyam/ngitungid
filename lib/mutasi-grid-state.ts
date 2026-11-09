@@ -69,6 +69,8 @@ export type BarisGrid = {
   /** D50: teks saldo ASLI yang dikosongkan — tetap tampil dicoret & tercatat. null = tidak dikosongkan. */
   saldoDikosongkan: string | null
   terkunci: KunciBaris
+  /** Baris hasil AI (PDF, X5) yang belum satu sel pun diubah pengguna — penanda lilac. Memilih arah blok bukan menyentuh. */
+  belumDisentuh?: boolean
 }
 
 /** Satu mutasi tersimpan, sebagaimana dikirim S8 — pembanding diff & titik "Batalkan semua". */
@@ -256,7 +258,7 @@ function tulisSel(b: BarisGrid, kolom: KolomGrid, nilai: string): BarisGrid {
     if (nilai.trim() !== '') saldoDikosongkan = null
     else if (b.asal !== 'ketik' && b.sel.saldo.trim() !== '') saldoDikosongkan = b.saldoDikosongkan ?? b.sel.saldo
   }
-  return { ...b, sel, saldoDikosongkan }
+  return { ...b, sel, saldoDikosongkan, belumDisentuh: false }
 }
 
 const tukarMasukKeluar = (b: BarisGrid): BarisGrid => ({
@@ -360,6 +362,7 @@ export function reducerGrid(s: KeadaanGrid, a: AksiGrid): KeadaanGrid {
         blok: blokId,
         halaman: bb.halaman,
         penanda: bb.penanda,
+        belumDisentuh: a.sumber === 'pdf',
       }))
       const jangkarTeks = h.titikSaldo.find(t => t.setelah === 0)?.saldo ?? null
       const titik = h.titikSaldo.flatMap(t => {

@@ -164,6 +164,30 @@ describe('diffKeBatch — atas NILAI, Masuk/Keluar → debit/kredit hanya di sin
   })
 })
 
+describe('penanda "dari PDF (AI)" sampai disentuh (X5)', () => {
+  const pdf = () =>
+    jalankan(keadaanAwal(), {
+      jenis: 'tempelBlok',
+      indeks: 0,
+      hasil: blok('Tanggal\tUraian\tMasuk\tKeluar\n05/10/2026\tA\t100\t\n06/10/2026\tB\t\t50\n', 'pdf'),
+      sumber: 'pdf',
+      namaBerkas: 'okt.pdf',
+    })
+
+  it('baris blok PDF lahir belum disentuh; blok tempelan/berkas tidak', () => {
+    expect(pdf().baris.map(b => b.belumDisentuh)).toEqual([true, true])
+    const t = jalankan(keadaanAwal(), { jenis: 'tempelBlok', indeks: 0, hasil: blok('Tanggal\tUraian\tMasuk\n05/10/2026\tA\t100\n'), sumber: 'tempel', namaBerkas: null })
+    expect(t.baris[0].belumDisentuh).toBeFalsy()
+  })
+
+  it('mengubah satu sel menghapus penanda baris itu saja; memilih arah blok bukan menyentuh', () => {
+    const s = reducerGrid(pdf(), { jenis: 'ubahSel', kunci: 'baru-2', kolom: 'akunLawan', nilai: '6-2000' })
+    expect(s.baris.map(b => b.belumDisentuh)).toEqual([false, true])
+    const arah = reducerGrid(pdf(), { jenis: 'pilihArah', blok: 'blok-1', orientasi: 'tukar' })
+    expect(arah.baris.map(b => b.belumDisentuh)).toEqual([true, true])
+  })
+})
+
 describe('tempel', () => {
   it('tempelSel menimpa persegi dari sel aktif, menambah baris di luar akhir grid', () => {
     const s = jalankan(keadaanAwal([server('m1')]), { jenis: 'tempelSel', indeks: 0, kolom: 'akunLawan', isi: [['6-2000'], ['4-1000']] })

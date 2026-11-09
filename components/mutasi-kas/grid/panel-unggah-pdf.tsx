@@ -1,0 +1,272 @@
+'use client'
+
+// Panel "Unggah PDF rekening koran" (MP §5.G X5). PDF dibaca DI BROWSER (D56 —
+// berkasnya tidak pernah dikirim atau disimpan); tiap halaman dikirim sebagai
+// teks bertata letak, atau gambar PNG bila tanpa lapisan teks, ke route X4
+// SATU PER SATU, berurutan: progres per halaman, bisa dibatalkan, halaman yang
+// gagal bisa diulang sendiri. Hasilnya masuk grid sebagai SATU blok DRAF
+// (`rencanaPdf` → `tempelBlok` sumber 'pdf') — tidak pernah tersimpan tanpa Simpan.
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FileText, Loader2, RotateCw, X } from 'lucide-react'
+import { kolomSebelumnyaBerposisi, rangkumDokumen, type JudulTercetak } from '@/lib/bank-statement/dokumen'
+import { halamanTersusun, tafsirJawaban, type HasilHalaman, type TafsiranJawaban } from '@/lib/bank-statement/hasil-halaman'
+import type { DokumenPdf } from '@/lib/bank-statement/baca-pdf'
+import { rencanaPdf } from '@/lib/mutasi-grid-turunan'
+import type { HasilBacaBlok, Periode } from '@/lib/mutasi-draf'
+
+const URL_EKSTRAK = '/api/cash-mutations/ekstrak-halaman'
+// Body route dibatasi 4 MB; PNG halaman scan dikecilkan sampai muat.
+const BATAS_PNG = 3_500_000
+const SKALA_GAMBAR = [2, 1.5, 1]
+
+type Konteks = {
+  doc: DokumenPdf
+  /** Judul tercetak per halaman yang sudah tersusun — `kolomSebelumnya` halaman sesudahnya. */
+  judul: Map<number, JudulTercetak>
+  clientId: string
+  akunKasId: string
+  sinyal: AbortSignal
+}
+
+/** Judul tercetak terakhir SEBELUM halaman `n` (halaman lanjutan tanpa judul memakainya). */
+function judulSebelum(judul: Map<number, JudulTercetak>, n: number): JudulTercetak | null {
+  let k = 0
+  for (const h of judul.keys()) if (h < n && h > k) k = h
+  return judul.get(k) ?? null
+}
+
+async function ekstrakSatu(n: number, k: Konteks): Promise<TafsiranJawaban> {
+  const t = await k.doc.bacaHalaman(n)
+  const asal = judulSebelum(k.judul, n)
+  const baris = t.baris.map(b => b.teks)
+  let body: Record<string, unknown>
+  if (t.perluGambar) {
+    let png = ''
+    for (const skala of SKALA_GAMBAR) {
+      png = await k.doc.gambarHalaman(n, skala)
+      if (png.length <= BATAS_PNG) break
+    }
+    body = { clientId: k.clientId, akunKasId: k.akunKasId, halaman: n, gambarPng: png, kolomSebelumnya: asal?.kolom ?? [] }
+  } else {
+    body = { clientId: k.clientId, akunKasId: k.akunKasId, halaman: n, baris, kolomSebelumnya: kolomSebelumnyaBerposisi(asal, t.grid) }
+  }
+  let res: Response
+  try {
+    res = await fetch(URL_EKSTRAK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: k.sinyal })
+  } catch (e) {
+    if (k.sinyal.aborted) throw e
+    return { hasil: { halaman: n, status: 'gagal', pesan: `Halaman ${n}: koneksi terputus — ulangi halaman ini.`, bisaUlang: true }, henti: null }
+  }
+  const json: unknown = await res.json().catch(() => null)
+  const r = tafsirJawaban(n, res.status, json, h => res.headers.get(h), t.perluGambar)
+  if (r.hasil.status === 'ok' && !t.perluGambar && r.hasil.data.kolom.length > 0) {
+    k.judul.set(n, { kolom: r.hasil.data.kolom, baris, grid: t.grid })
+  }
+  return r
+}
+
+type Props = {
+  file: File
+  clientId: string
+  akunKasId: string
+  periode: Periode
+  onMasukkan: (hasil: Extract<HasilBacaBlok, { ok: true }>, catatan: string[]) => void
+  onTutup: () => void
+}
+
+export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan, onTutup }: Props) {
+  const docRef = useRef<DokumenPdf | null>(null)
+  const judulRef = useRef(new Map<number, JudulTercetak>())
+  const abortRef = useRef<AbortController | null>(null)
+  const [jumlah, setJumlah] = useState<number | null>(null)
+  const [hasil, setHasil] = useState<Record<number, HasilHalaman>>({})
+  const [sedang, setSedang] = useState<number | null>(null)
+  const [henti, setHenti] = useState<string | null>(null)
+  const [galat, setGalat] = useState<string | null>(null)
+
+  // Satu jalur untuk proses awal, "Lanjutkan", dan "Ulangi" per halaman.
+  async function jalankan(daftar: number[]) {
+    const doc = docRef.current
+    if (!doc || abortRef.current) return
+    const ac = new AbortController()
+    abortRef.current = ac
+    setHenti(null)
+    setGalat(null)
+    try {
+      for (const n of daftar) {
+        setSedang(n)
+        const r = await ekstrakSatu(n, { doc, judul: judulRef.current, clientId, akunKasId, sinyal: ac.signal })
+        setHasil(h => ({ ...h, [n]: r.hasil }))
+        if (r.henti) {
+          setHenti(r.henti)
+          break
+        }
+      }
+    } catch (e) {
+      if (!ac.signal.aborted) setGalat(e instanceof Error ? `Gagal membaca PDF: ${e.message}` : 'Gagal membaca PDF.')
+    } finally {
+      abortRef.current = null
+      setSedang(null)
+    }
+  }
+
+  useEffect(() => {
+    let batal = false
+    void (async () => {
+      try {
+        // pdf.js (unpdf) dimuat malas — hanya saat tombol dipakai.
+        const { bukaPdf } = await import('@/lib/bank-statement/baca-pdf')
+        const doc = await bukaPdf(new Uint8Array(await file.arrayBuffer()))
+        if (batal) {
+          await doc.tutup()
+          return
+        }
+        docRef.current = doc
+        setJumlah(doc.jumlahHalaman)
+        await jalankan(Array.from({ length: doc.jumlahHalaman }, (_, i) => i + 1))
+      } catch {
+        if (!batal) setGalat('PDF tidak bisa dibuka — pastikan berkasnya PDF utuh dan tidak dilindungi kata sandi.')
+      }
+    })()
+    return () => {
+      batal = true
+      abortRef.current?.abort()
+      void docRef.current?.tutup()
+      docRef.current = null
+    }
+    // Satu panel = satu berkas; panel dipasang ulang (key) untuk berkas lain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file])
+
+  const berjalan = sedang !== null
+  const daftarHasil = Object.values(hasil)
+  const belum = jumlah === null ? [] : Array.from({ length: jumlah }, (_, i) => i + 1).filter(n => !hasil[n])
+  const manual = daftarHasil.filter(h => h.status === 'manual').map(h => h.halaman)
+  // Blok yang AKAN masuk grid — dihitung sekali per perubahan hasil, bukan per render.
+  const { tersusun, rencana, rangkuman } = useMemo(() => {
+    const t = halamanTersusun(Object.values(hasil))
+    if (berjalan || jumlah === null || t.length === 0) return { tersusun: t, rencana: null, rangkuman: null }
+    return { tersusun: t, rencana: rencanaPdf(t, periode), rangkuman: rangkumDokumen(t, jumlah) }
+  }, [hasil, berjalan, jumlah, periode])
+  const transaksi = rencana?.jenis === 'blok' ? rencana.hasil.baris.length : 0
+
+  function masukkan() {
+    if (rencana?.jenis !== 'blok') return
+    const catatan = [
+      ...(manual.length > 0 ? [`Isi manual halaman ${manual.join(', ')} — AI tidak bisa menyusunnya dengan yakin.`] : []),
+      ...(rangkuman?.peringatan ?? []),
+    ]
+    onMasukkan(rencana.hasil, catatan)
+  }
+
+  const tombol =
+    'inline-flex items-center gap-1.5 rounded-full font-medium disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent-primary)'
+  const gayaTombol: React.CSSProperties = { padding: '6px 12px', fontSize: 12, minHeight: 34, border: '1px solid #e5e7eb', background: 'white', color: 'var(--color-text-primary)' }
+
+  return (
+    <section
+      aria-label={`Unggah PDF rekening koran ${file.name}`}
+      className="rounded-2xl px-3.5 py-3 text-xs flex flex-col gap-2"
+      style={{ background: 'color-mix(in srgb, var(--color-accent-secondary) 14%, white)', border: '1px solid color-mix(in srgb, var(--color-accent-secondary) 55%, white)' }}
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <FileText className="w-4 h-4" aria-hidden="true" />
+        <strong className="font-semibold">{file.name}</strong>
+        <span role="status" aria-live="polite" style={{ color: 'var(--color-text-muted)' }}>
+          {jumlah === null && !galat
+            ? 'Membuka PDF…'
+            : berjalan
+              ? `Menyusun halaman ${sedang} dari ${jumlah}…`
+              : `${tersusun.length} dari ${jumlah ?? 0} halaman tersusun${rencana?.jenis === 'blok' ? ` · ${transaksi.toLocaleString('id-ID')} transaksi` : ''}`}
+        </span>
+        <span className="flex-1" />
+        {berjalan ? (
+          <button type="button" className={tombol} style={gayaTombol} onClick={() => abortRef.current?.abort()}>
+            <X className="w-3.5 h-3.5" /> Batalkan
+          </button>
+        ) : (
+          <>
+            {belum.length > 0 && jumlah !== null && (
+              <button type="button" className={tombol} style={gayaTombol} onClick={() => void jalankan(belum)}>
+                <RotateCw className="w-3.5 h-3.5" /> Lanjutkan {belum.length} halaman
+              </button>
+            )}
+            <button
+              type="button"
+              className={`${tombol} font-semibold`}
+              style={{ ...gayaTombol, border: 'none', background: 'var(--color-accent-primary)', color: 'var(--color-accent-primary-fg)' }}
+              disabled={rencana?.jenis !== 'blok'}
+              onClick={masukkan}
+            >
+              Masukkan {transaksi.toLocaleString('id-ID')} transaksi ke grid
+            </button>
+            <button type="button" className={tombol} style={gayaTombol} onClick={onTutup}>
+              Tutup
+            </button>
+          </>
+        )}
+      </div>
+
+      {(galat || henti || rencana?.jenis === 'galat') && (
+        <p role="alert" style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+          {galat ?? henti ?? (rencana?.jenis === 'galat' ? rencana.pesan : '')}
+        </p>
+      )}
+
+      {jumlah !== null && (
+        <ol className="flex flex-col gap-0.5" aria-label="Status per halaman">
+          {Array.from({ length: jumlah }, (_, i) => i + 1).map(n => {
+            const h = hasil[n]
+            return (
+              <li key={n} className="flex items-center gap-2 flex-wrap" style={{ minHeight: 24 }}>
+                <span className="font-mono" style={{ width: 52 }}>
+                  Hal. {n}
+                </span>
+                {sedang === n ? (
+                  <span className="inline-flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+                    <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> sedang disusun…
+                  </span>
+                ) : !h ? (
+                  <span style={{ color: 'var(--color-text-muted)' }}>belum diproses</span>
+                ) : h.status === 'ok' ? (
+                  <span>
+                    ✓ {h.data.baris.length.toLocaleString('id-ID')} baris
+                    <span style={{ color: 'var(--color-text-muted)' }}>
+                      {h.model ? ` · ${h.model}` : ''}
+                      {h.diulang ? ' (diulang)' : ''}
+                      {h.dariGambar ? ' · dibaca dari gambar' : ''}
+                    </span>
+                  </span>
+                ) : h.status === 'manual' ? (
+                  <span style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>isi manual — {h.pesan}</span>
+                ) : (
+                  <>
+                    <span style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>{h.pesan}</span>
+                    {h.bisaUlang && !berjalan && (
+                      <button type="button" className={tombol} style={{ ...gayaTombol, minHeight: 32, padding: '4px 10px' }} onClick={() => void jalankan([n])}>
+                        <RotateCw className="w-3 h-3" /> Ulangi halaman {n}
+                      </button>
+                    )}
+                  </>
+                )}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+
+      {rangkuman && rangkuman.peringatan.length > 0 && (
+        <ul className="flex flex-col gap-0.5" style={{ color: 'var(--color-text-muted)' }}>
+          {rangkuman.peringatan.map(p => (
+            <li key={p}>⚠ {p}</li>
+          ))}
+        </ul>
+      )}
+      <p style={{ color: 'var(--color-text-muted)' }}>
+        Hasil AI masuk sebagai DRAF berpenanda lilac. Periksa dulu — arah Debet/Kredit diputuskan dari kesinambungan saldo,
+        bukan dari judul kolom bank. PDF tidak disimpan.
+      </p>
+    </section>
+  )
+}
