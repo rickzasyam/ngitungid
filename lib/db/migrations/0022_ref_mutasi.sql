@@ -1,0 +1,1 @@
+ALTER TABLE "cash_mutations" ADD COLUMN "ref" text;

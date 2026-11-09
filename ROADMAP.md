@@ -408,11 +408,11 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 | **D39** | Menu **`/hutang`** sejajar Jurnal & Buku Besar, **bukan** di Settings; seluruh angkanya turunan | ✅ **disetujui 2026-09-20** |
 | **D40** | **FIFO sebagai bawaan, DAN akunting bisa menimpa pencocokan manual** lewat `cash_mutation_allocations.termin_urutan` (NULL = FIFO, terisi = dipaku ke cicilan ke-N) | ✅ **disetujui 2026-09-20 dengan tambahan penimpaan manual** |
 | **D41** | **F1–F4 dirancang ulang**: rekonsiliasi = sisa per supplier (invoice − alokasi) vs saldo akun hutang di Neraca. `journal_lines.supplier_id` **turun pangkat** jadi penjelas selisih | ✅ **disetujui 2026-09-20** |
-| **D42** | Setelan per klien "posting bisa diedit", **bawaan `FALSE` (posting permanen)**, dinyalakan per klien; setiap perubahan wajib `audit_events` dengan `nilai_sebelum`/`nilai_sesudah`; **kunci periode mengalahkannya**; ketiga mitigasi **wajib menyertai**; **ketiadaan baris setelan = `false`, dikunci test tiga-keadaan** | ✅ **disetujui 2026-09-20 — bawaan FALSE.** Alasan Ricko: angka yang sudah diserahkan ke klien tidak boleh berubah diam-diam |
+| **D42** | Setelan per klien "posting bisa diedit", **bawaan `FALSE` (posting permanen)**, dinyalakan per klien; setiap perubahan wajib `audit_events` dengan `nilai_sebelum`/`nilai_sesudah`; **kunci periode mengalahkannya**; ketiga mitigasi **wajib menyertai**; **ketiadaan baris setelan = `false`, dikunci test tiga-keadaan** | ✅ **disetujui 2026-09-20 — bawaan FALSE.** Alasan Ricko: angka yang sudah diserahkan ke klien tidak boleh berubah diam-diam. **Untuk MUTASI KAS (Ricko, CP-20 2026-10-29): setelan ini tidak membuka mutasi yang jurnalnya terposting & belum dibalik** — jurnal mutasi bisa jurnal ringkasan milik banyak baris (D58); jalannya membalik jurnal lebih dulu |
 | **D43** | `master_supplier`: **DROP `termin_pembayaran`**, ADD `bank_nama`/`bank_rekening`/`bank_atas_nama` — **satu-satunya migrasi non-aditif** | ✅ **disetujui 2026-09-20 dengan syarat rilis: 0015–0019 dalam SATU jendela rilis, atau ditunda bersama** |
 | **D44** | Tab Settings Supplier tetap **data induk saja**; saldo & detail transaksi pindah ke `/hutang` | ✅ **disetujui 2026-09-20** |
 | **D45** | `/pembelian`, `/mutasi-kas`, `/hutang` → **`INTERNAL_ONLY_PREFIXES`** + flag nav baru `internalOnly`; baca `requireInternal`, tulis `requireAkunting`. **Konsekuensi: finance melihat `/hutang` tapi TIDAK `/jurnal` maupun `/buku-besar`** | ✅ **disetujui 2026-09-20** |
-| **D46** | Library grid: `react-data-grid` 7.0.0-beta.63 (MIT) dipin persis, spike 20.000 baris; cadangan TanStack Virtual (MIT); Handsontable, AG Grid Enterprise, MUI X Premium dikeluarkan karena lisensi | ✅ **disetujui Ricko 2026-10-26** — lewat spike S0; library final di CP-19 |
+| **D46** | Library grid: `react-data-grid` 7.0.0-beta.63 (MIT) dipin persis, spike 20.000 baris; cadangan TanStack Virtual (MIT); Handsontable, AG Grid Enterprise, MUI X Premium dikeluarkan karena lisensi | ✅ **disetujui Ricko 2026-10-26** — lewat spike S0 · ✅ **CP-19 dijawab Ricko 2026-10-27: `react-data-grid` 7.0.0-beta.63, versi dipin persis** |
 | **D47** | Wizard CSV **dilebur** jadi pintu masuk berkas ke grid (+ langkah arah); `POST …/import` dihapus; tidak ada lagi simpan sebagian | ✅ **disetujui Ricko 2026-10-26** |
 | **D48** | Satu jalur tulis `POST /api/cash-mutations/batch` + `rencanakanSimpanMutasi`; POST/PATCH/DELETE lama jadi pembungkus tipis | ✅ **disetujui Ricko 2026-10-26** |
 | **D49** | Migrasi **0021**, seluruhnya tambah: `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, tabel `cash_mutation_rules` — `saldo` & `class_cf` sudah ada | ✅ **disetujui Ricko 2026-10-26** |
@@ -429,6 +429,10 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 | **D60** | Baris tanpa tanggal: **(a) wajib diisi** + aksi "Isi tanggal akhir periode" (rekomendasi) vs (b) otomatis akhir periode bertanda; baris di luar periode = galat | ✅ **disetujui Ricko 2026-10-26** |
 | **D61** | Saldo awal: **tidak dimajukan untuk grid** (jangkar = fakta dokumen); saldo awal buku akun kas dimajukan bersama laporan Cash Flow dari mutasi | ✅ **disetujui Ricko 2026-10-26** |
 | **D62** | Class CF: kolom sudah ada; kosakata baku 4 nilai tanpa migrasi; "Operating Balance" = akun kas/bank → aksi "Tandai sebagai akun kas"; `deriveIsKas` tidak diubah | ✅ **Dikonfirmasi Ricko 2026-10-26: Operating Balance = akun kas/bank** (sesuai master data template Rasyuka) |
+| **D63** | Grid mutasi kas: urutan kolom **# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · (Ref) · Catatan · Status** = urutan sheet kas template akuntan; label **"Akun lawan" → "Nama Akun", "Masuk" → "Debet", "Keluar" → "Kredit"** (Debet = uang masuk ke rekening ini, Kredit = uang keluar) di grid, tampilan Daftar, form, pesan validasi, dan ringkasan. **Hanya tampilan**: kunci internal `masuk`/`keluar`/`akunLawan`, kontrak draf, cadangan IndexedDB, dan `kontrak-baris-mentah.ts` tidak berubah. Tempelan TANPA judul mengikuti urutan kolom baru (seperti spreadsheet); judul lama Masuk/Keluar/Akun lawan tetap dikenali di samping Debet/Kredit/Nama Akun. Judul "Debet/Kredit" di berkas tetap TANPA petunjuk arah (aturan 2026-10-26: arah dari rantai saldo, karena rekening koran bank memakai Debet = keluar) | ✅ **ditetapkan Ricko 2026-10-30** (masukan uji grid PR #1). Warna item aktif combobox Nama Akun = **token aplikasi lime `#daf163`** (`--color-accent-primary`), bukan `#c0ff33` dari instruksi masukan — ✅ **disetujui Ricko 2026-10-30** (token aplikasi jadi acuan) |
+| **D64** | Kolom **Ref** dan **Catatan**, keduanya tidak wajib, bisa disembunyikan lewat **"Atur kolom"** (localStorage per klien; kolom inti tidak bisa). Catatan = `cash_mutations.catatan` (0021). **Ref = kolom baru `cash_mutations.ref text NULL`** (migrasi **0022**, seluruhnya tambah), maks 100 karakter (`REF_MAX`), tidak ikut fingerprint, **tidak disalin ke jurnal untuk sekarang**. Tampil di grid (# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · **Ref** · Catatan · Status), tampilan **Daftar** (sesudah Kredit), dan **form satu-satu**. Alias judul tempel/CSV/PDF: **Ref, Reff, No. Ref, No Ref, No Bukti, Referensi** (sebelumnya Ref/Reff → Catatan) | ✅ **ditetapkan Ricko 2026-10-30** — Catatan, lalu Ref = opsi (a) kolom baru (dinamai `ref`, bukan `no_ref`); dikerjakan 2026-10-30, 0022 di dev saja, dirilis bersama 0021 |
+| **D65** | Kolom **Konfirmasi** template akuntan **tidak dipakai**: tidak ada kolom grid-nya, dan impor/tempel MENGABAIKAN judul "Konfirmasi" (sebelumnya dialiaskan ke Catatan) | ✅ **ditetapkan Ricko 2026-10-30** |
+| **D66** | **Aturan tanggal sel grid** (`lib/mutasi-tanggal.ts`): bisa diketik & ditempel, **selalu dinormalisasi ke YYYY-MM-DD** (tanpa `new Date(string)`); bentuk yang diterima: hari saja ("15" = tgl 15 bulan grid), dd/mm/yyyy, d/m/yy, dd-mm-yyyy, yyyy-mm-dd, nama bulan Indonesia & Inggris singkat/panjang ("15 Okt 2026", "15 Oct 2026"), "21/Apr/2026". **Tanggal ambigu diputus bulan grid** ("04/01/2026" di grid April 2026 = 1 April, contoh sheet Rasyuka); tidak ada tafsiran di bulan grid = sel merah, baris tak bisa disimpan; di luar bulan = **"Tanggal di luar Oktober 2026"**. Tampilan sel "15 Okt 2026". Ikon kalender + **Alt+↓** membuka kalender — sejak 2026-11-04 **`components/date-picker.tsx`** (satu tanggal, PR #6), dikunci ke bulan grid, satu klik langsung memilih; sebelumnya `date-range-picker` apa adanya dengan penyiasatan. **Menggantikan keputusan 2026-09-21 "berkas MM/DD ditolak" untuk grid** | ✅ **ditetapkan Ricko 2026-10-30**, termasuk tambahan pelaksana yang ✅ **disetujui Ricko 2026-10-30**: untuk BLOK tempelan/berkas, **bukti urutan dari blok itu sendiri didahulukan** (ada sel "25/04" → seluruh blok hari/bulan), baru bulan grid. Tanpa itu, berkas hari/bulan berisi "04/01/2026" (4 Jan) di grid April diam-diam jadi 1 April. DatePicker PR #6: **satu bulan per panel** dan **lebar minimal pemicu bawaan 200px** — ✅ **diterima Ricko 2026-11-04** |
 | R1–R11 | Revisi dari spesifikasi ekspor 214 task (MP §3.3): R1 saran AI ≤3 pasangan sebagai daftar; R2 `journal_events` → **`audit_events`** generik (jurnal, COA, kunci periode); R3 kas kecil **jurnal-per-transaksi**, tabel `petty_cash_expenses` dihapus; **R4 dijawab Ricko 2026-09-15: finance boleh LIHAT saja** (baca `requireInternal`, tulis tetap `requireAkunting`; tab masuk `FINANCE_VISIBLE_TABS`, read-only); R5 halaman **`/laporan-keuangan`** + endpoint statements; R6–R11 penyelarasan detail | R2 ✅ 2026-09-18 (diambil) · R4 ✅ 2026-09-15 · R1, R3, R5–R11 ⏳ menunggu |
 
 ### 5.13 Skema baru (ringkas — rincian MP §8)
@@ -463,43 +467,59 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 > **Urutan:** S10 kapan saja sesudah D62 · S0 → ⏸ CP-19 → S1–S6 (**K1–K5 Kunci Periode boleh sejajar**, butuh D17/D26) → **K selesai** → S7 → S8 → S9 → ⏸ CP-20 → S11 · lalu X1–X5 (PDF sintetis) → **gerbang X0 (AI berbayar)** → X6 → ⏸ CP-21 → X7 → ⏸ CP-22 → X8.
 
 **Modul A — Grid**
-- ⏳ S0 Spike `react-data-grid@7.0.0-beta.63` (MIT, React 19), dengan cadangan `@tanstack/react-virtual` (MIT). Kriteria: **20.000 baris**, editor `NominalInput` N9, keyboard, tempel **10.000 baris < 2 detik**, NVDA, ukuran bundle — ⏸ **CP-19** (D46)
-- ⏳ S1 Migrasi **0021**, seluruhnya tambah (D49): `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules`. `buildReplacePlan` bertambah dua perujuk
-- ⏳ S2 `lib/mutasi-draf.ts` murni, tanpa RegExp:
+- ✅ S0 Spike `react-data-grid@7.0.0-beta.63` (MIT, React 19), dengan cadangan `@tanstack/react-virtual` (MIT). Kriteria: **20.000 baris**, editor `NominalInput` N9, keyboard, tempel **10.000 baris < 2 detik**, NVDA, ukuran bundle — ⏸ **CP-19** (D46) — **(2026-10-27) spike selesai** di branch `spike/grid-library` `ea6edde` (untuk Preview, **tidak di-merge**). Hasil terukur: gulir wajar 59 fps tanpa frame kosong; editor N9 kursor tidak meloncat; keyboard lulus dengan tambalan Ctrl+Home/Delete; tempel 10.000 baris **41–85 ms** (4× CPU: ≤ 333 ms); pohon AX lulus tapi **NVDA belum diuji**; tambahan **±26 KB gzip**, lazy. Rincian: `docs/plans/hasil-spike-grid-s0-2026-10-27.md`. **CP-19 dijawab Ricko 2026-10-27:** D46 = `react-data-grid` 7.0.0-beta.63 dipin persis; **Enter seperti Excel** (simpan lalu turun satu baris) — dibangun di S9; **NVDA diuji Ricko sendiri di Windows**, tidak menahan pekerjaan.
+- ✅ S1 Migrasi **0021**, seluruhnya tambah (D49): `cash_mutations.urutan` + `catatan`, `client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules`. `buildReplacePlan` bertambah dua perujuk — **(2026-10-28) `0021_grid_mutasi.sql` diterapkan ke dev saja** (dev 22 migrasi; SQL dibaca: hanya objek baru; `db:generate` sesudahnya "No schema changes"). Replace-plan: `akun_pindah_buku_id` diputus seperti akun PPN (`SettingRelink` kini per kolom); `cash_mutation_rules.akun_lawan_id`/`akun_kas_id` disambung by kode, **blokir 409** bila hilang — termasuk `akun_kas_id` yang nullable, karena NULL di sana berarti "semua akun kas". Ikut diperbaiki: setelan yang punya relink kini memaksa jalur ganti-nama — di jalur hapus-langsung FK SET NULL memutus setelan PPN walau kodenya bertahan. **Belum ke main** (proses rilis Ricko)
+- ✅ S2 `lib/mutasi-draf.ts` murni, tanpa RegExp:
   - judul Debet/Kredit = dua kolom nominal **tanpa arah**
   - akun lawan dari **kode atau nama persis**, plus kolom catatan (Konfirmasi/Reff)
   - kelas baris dilewati
   - tanggal `DD/MM/YYYY` · `DD/Mon/YYYY` · `D-Mon-YYYY`; **periode memutus makna tanggal ambigu**; `tetapkanTahun`; baris tanpa tanggal/di luar periode diatur D60
-- ⏳ S3 `lib/saldo-berantai.ts` murni. Kesinambungan dihitung dalam sen. `tentukanArah` menguji kedua orientasi + DB/CR, atau mengembalikan "wajib dipilih". Saldo putus **menahan Simpan** (D50). Jangkar: baris SALDO AWAL → saldo tersimpan sebelumnya → isian "saldo awal rekening koran" (D61)
-- ⏳ S4 Aturan akun lawan (D57): `lib/aturan-mutasi.ts` murni (`includes`, prioritas, bentrok = tanpa usulan), route `/api/clients/[id]/cash-mutation-rules`, tab Settings **"Aturan Mutasi"** dengan uji pola atas 30 hari mutasi. Usulan baru masuk sel lewat **"Terapkan usulan"**
-- ⏳ S5 Pindah Buku (D59). Akun diatur lewat setelan per klien. Saldo Pindah Buku ≠ 0 di akhir periode memunculkan peringatan. Pencocok pasangan: nominal sama, ≤ 3 hari, akun kas berbeda, hanya pasangan tunggal yang diusulkan
-- ⏳ S6 `lib/mutasi-grid-state.ts` murni: reducer + undo/redo, pilih arah, terapkan usulan, isi tanggal akhir periode, **kosongkan saldo yang terlihat & tercatat (D50)**, `diffKeBatch`
-- ⏳ S7 **Sesudah K1–K5.** Isinya:
+  - **(2026-10-28) selesai:** `bacaBlok` (judul di 20 baris pertama / posisional dari kolom jangkar / pemetaan eksplisit) menaruh nominal di Masuk/Keluar dengan orientasi **sementara** (`pertamaKe`) — keputusan arah di S3. Adaptor `dariHalamanMentah` membaca kontrak Stream B lewat jalur yang sama. Catatan Stream B dipenuhi: **judul kolom yang tercetak ulang dikenali sebagai non-transaksi** (alias, atau ≥ 2 sel sama dengan judul tercetak tiap halaman); **kelas `lanjutan` hanya untuk tempelan/CSV** — baris PDF teks-saja masuk grid sebagai transaksi yang galat. Lanjutan tempel/CSV **digabung** ke uraian sebelumnya dengan satu spasi (aturan yang sama dengan PDF) dan tetap tercatat di daftar dilewati. Baris bertanggal tanpa nominal & tanpa kata "saldo/balance" = transaksi merah, bukan dilewati. `validasiBaris` → galat per sel lalu `validateCashMutation` (kini + `catatan` ≤ 500) sebagai hakim terakhir. 10.000 baris dibaca + divalidasi < 1,5 dtk di test
+- ✅ S3 `lib/saldo-berantai.ts` murni. Kesinambungan dihitung dalam sen. `tentukanArah` menguji kedua orientasi + DB/CR, atau mengembalikan "wajib dipilih". Saldo putus **menahan Simpan** (D50). Jangkar: baris SALDO AWAL → saldo tersimpan sebelumnya → isian "saldo awal rekening koran" (D61) — **(2026-10-28) selesai:** `periksaKesinambungan(baris, jangkar?, titik?)` → putus pertama + semua putus (rantai disinkronkan ulang ke saldo tercetak sesudah tiap putus, jadi satu salah baca tidak menular), titik SALDO AWAL tiap halaman ikut diperiksa, baris bersaldo pertama tanpa jangkar dilaporkan. `tentukanArah` → `normal`/`tukar` relatif orientasi sementara S2, atau `null` (tanpa saldo, saldo tidak cukup, keduanya putus, **keduanya utuh**) dengan `usulan` pengisi awal; DB/CR bertentangan → rantai menang + peringatan. Diuji ujung-ke-ujung S2→S3: fikstur template (Debet = masuk) → `normal`, rekening koran (Debet = keluar) → `tukar`, BCA satu kolom DB/CR → `normal`
+- ✅ S4 Aturan akun lawan (D57): `lib/aturan-mutasi.ts` murni (`includes`, prioritas, bentrok = tanpa usulan), route `/api/clients/[id]/cash-mutation-rules`, tab Settings **"Aturan Mutasi"** dengan uji pola atas 30 hari mutasi. Usulan baru masuk sel lewat **"Terapkan usulan"** — **(2026-10-28) selesai:** route GET/POST, PATCH/DELETE `…/[ruleId]` (aturan diambil DENGAN clientId), `GET …/uji` (30 hari WIB, pencocok yang sama — bukan SQL LIKE); baca `requireInternal`, tulis `requireAkunting`; akun lawan = akun mana pun milik klien, akun kas = akun kas milik klien. Tab "Aturan Mutasi" sesudah Pembukuan: owner/akunting kelola, **finance baca saja**, klien tidak melihat. Pilihan pelaksana: seri di puncak yang menunjuk akun **sama** = usulan (bukan bentrok). 10.000 baris × 200 aturan < 200 ms. Diuji ke dev lewat dev server lokal (akun uji akunting/finance/klien; data `UJI-A-` dibersihkan)**
+- ✅ S5 Pindah Buku (D59). Akun diatur lewat setelan per klien. Saldo Pindah Buku ≠ 0 di akhir periode memunculkan peringatan. Pencocok pasangan: nominal sama, ≤ 3 hari, akun kas berbeda, hanya pasangan tunggal yang diusulkan — **(2026-10-28) selesai:** `lib/pindah-buku.ts` (`saldoPindahBuku`, `cariPasangan` dikelompokkan per nominal); setelan "Akun Pindah Buku" di tab Pembukuan lewat `PATCH accounting-settings` (akun milik klien dan **bukan akun kas** — pilihan pelaksana, server menolak 400); `GET /api/cash-mutations/pindah-buku` → `{ akunPindahBuku, saldo, belumBerpasangan, lintasPeriode, usulan, ganda }`, `requireInternal`, hanya membaca. Usulan hanya dari mutasi tanpa akun lawan & tanpa alokasi. Diuji ke dev (data `UJI-A-` & setelan dikembalikan)
+- ✅ S6 `lib/mutasi-grid-state.ts` murni: reducer + undo/redo, pilih arah, terapkan usulan, isi tanggal akhir periode, **kosongkan saldo yang terlihat & tercatat (D50)**, `diffKeBatch` — **(2026-10-28) selesai:** identitas baris yang tak disentuh dipertahankan (validator di-memo per objek baris, `buatValidator` + kunci periode untuk baris baru/berubah tanggal); dua jenis tempel — `tempelSel` (persegi, semantik spreadsheet) dan `tempelBlok` (blok transaksi dari `bacaBlok`, **disisipkan** sebagai baris baru, arah diputuskan `tentukanArah` di tempat: otomatis/tukar atau wajib dipilih dengan usulan diterapkan lebih dulu); sel/baris terkunci ditolak di ketik, tempel, aksi massal, hapus, dan pilih arah — dilaporkan beralasan; undo/redo 100 langkah; "Batalkan semua" bisa di-undo. `diffKeBatch` membandingkan NILAI (bukan teks), membawa `updatedAt`, `urutan` per Simpan, berkas per blok, dan `saldoDikosongkan`. Pilihan pelaksana: menghapus sel Saldo dokumen dengan Delete juga dicatat sebagai "dikosongkan" (baris ketikan tidak); baris tersimpan yang galat tapi tidak disentuh tidak menahan Simpan
+- ✅ S7 **Sesudah K1–K5.** Isinya:
   - `kunciMutasi`, memakai `nasibJurnalModul` yang sudah ada (2026-10-26) untuk jurnal terposting, dibalik, dan setelan D42
   - **jurnal ringkasan per (akun kas, akun lawan, tanggal)** (D58), sedangkan alokasi hutang tetap per mutasi
   - `rencanakanSimpanMutasi` (kueri massal, 409 `updatedAt`, INSERT dipecah karena batas 65.535 parameter, **satu `db.batch`**) dan `POST /api/cash-mutations/batch` + `dryRun`; route lama jadi pembungkus, `…/import` dihapus
   - uji beban dev **10.000 baris** menetapkan D52
-- ⏳ S8 `GET /api/cash-mutations?urut=buku`
-- ⏳ S9 UI:
+  - **(2026-10-28) selesai.** Satu perencana jurnal (`rencanakanJurnalMutasi`, `lib/api/cash-mutation-journal.ts`) dipakai batch, pembungkus POST/PATCH/DELETE form, dan route alokasi — karena jurnal ringkasan dipakai bersama, membangun ulang jurnal per mutasi di satu route akan merusak ringkasan anggota lain. Mutasi beralokasi keluar dari ringkasan ke jurnal per mutasi dan kembali saat alokasinya dihapus (diuji di dev). Ringkasan **bruto** (masuk & keluar sehari tidak dinetokan), ≤ 4 baris. Jurnal per baris warisan digabung ke ringkasan begitu kuncinya tersentuh.
+  - **Uji beban dev (angka D52 dipertahankan 10.000 / 2.000 / 2.000):** semai 4.000 baru = 6,1 dtk, 6 statement, 248 jurnal ringkasan. Satu Simpan **10.000 baru (separuh berakun lawan) + 2.000 ubah + 2.000 hapus = HTTP 200, 18,3 dtk** di `next dev` (batas atas; `maxDuration` 60), **15 statement**, body 2,88 MB, balasan 458 KB, 248 jurnal ringkasan seimbang, total kas di jurnal = total kas mutasi berakun, 14.000 baris riwayat. **Temuan untuk S9:** batas body fungsi Vercel 4,5 MB — keterangan bank ±100 karakter membuat 10.000 baris ≈ 4 MB, jadi grid wajib mengukur body sebelum kirim dan menolak dengan pesan (tidak memecah diam-diam, D52).
+  - **Perubahan perilaku (diterima Ricko, CP-20 2026-10-29):** (1) setelan D42 "posting bisa diedit" **tidak lagi** membuka mutasi yang jurnalnya terposting & belum dibalik — juga untuk alokasi (sesuai MP); (2) wizard impor CSV lama dan `POST …/import` **dihapus** (D47) — CSV masuk lewat "Buka berkas CSV" di grid; di HP tidak ada impor CSV.
+- ✅ S8 `GET /api/cash-mutations?urut=buku` — **(2026-10-28) selesai.** Mode grid wajib `akunKasId` akun kas klien; `listCashMutations({ urut: 'buku' })` = urutan baku naik `tanggal, created_at, urutan, id` (D49) + `updatedAt`, `catatan`, `urutan`, kode akun lawan. `lib/api/cash-mutation-grid.ts` menambah per baris `jurnalStatus`/`jurnalDibalik` (`muatInfoJurnal`, kueri massal), `jumlahAlokasi`, dan **`kunci` dari `kunciMutasi`** — aturan yang sama dengan Simpan S7, jadi grid tidak menghitung kunci sendiri. `terkunciSampai` = kunci periode terakhir. **`saldoJangkar` (D61)** = saldo tercetak baris bersaldo terakhir sebelum rentang + Σ(masuk − keluar) baris sesudahnya, **seluruhnya di SQL** (`created_at` mikrodetik tidak dipotong lewat JS; `numeric`, tanpa float). **Temuan & perbaikan:** respons 10.004 baris = 8,4 MB JSON → melewati batas respons fungsi Vercel 4,5 MB yang berlaku sebelum kompresi CDN → baris grid dirampingkan (4,93 MB) dan **dikompres gzip di fungsi** (`lib/api/json-gzip.ts`): **393 KB di kabel**, 1,8 dtk panas di `next dev`. Daftar lama (tanpa `urut`) tidak berubah bentuk selain kolom tambahan
+- ✅ S9 UI — **(2026-10-28) dibangun · CP-20 dijawab sebagian oleh Ricko 2026-10-29 · uji klik CP-20 dijalankan agen menggantikan Ricko 2026-11-07 (atas perintah Ricko): butir 1–16 lolos, butir 17 (NVDA) perlu Ricko — tidak menahan rilis (keputusan CP-19)** (hasil per butir di § "Checklist uji klik CP-20"; rincian di `docs/progress/stream-a-grid.md`):
+  - **Bug ditemukan uji klik 2026-11-07 & diperbaiki (`f3f0903`):** daftar akun kas `/mutasi-kas` kini diikat ke `clientId` pemiliknya — sebelumnya ganti klien menampilkan tab akun kas klien LAMA di bawah nama klien baru dan grid meminta `akunKasId` klien lama (400) sampai daftar baru tiba; gangguan jaringan sesaat (`fetch failed` → 500) terbaca "Belum ada akun bertanda kas/bank" tanpa jalan ulang. Sekarang: memuat → "Memuat akun kas/bank…", gagal → pesan galat + **Coba lagi**, baru kosong → pesan lama. Ikut: pemindai sumber `jsx-spasi-entitas`, `tautan-jurnal`, dan helper `mutasi-grid-ui` jalan di checkout Windows (`d60ae4f`).
+  - **Jawaban Ricko CP-20 (2026-10-29):** pilihan pelaksana S2, S4, S5, S6, S9 **diterima**, dengan satu tambahan — sebelum "Muat ulang dari server" mengganti draf: peringatan jelas + draf yang tertimpa disimpan ke IndexedDB dan bisa dipulihkan (**dikerjakan 2026-10-29**: panel `alertdialog`, slot cadangan `tertimpa` terpisah dari autosave, muat ulang dibatalkan bila cadangan gagal ditulis). Perubahan D42 untuk mutasi & penghapusan wizard CSV **diterima**. Diminta juga: tautan baris grid → jurnal ringkasannya (/jurnal boleh diubah) — **dikerjakan 2026-10-29**: `/jurnal?jurnal=<id>` (`hrefJurnal`/`PARAM_TAUTAN_JURNAL` di `lib/journal.ts`) memuat jurnal itu, menolak bila bukan milik klien aktif, pindah ke bulannya, membuka rinciannya, dan menggulir ke barisnya; di grid, kolom Status menautkan "jurnal ↗" / "jurnal ringkasan (n baris) ↗" dan bilah alat punya "Buka jurnal" untuk baris aktif — hanya untuk owner/akunting (finance tidak bisa membuka /jurnal, gerbang `canDoAccounting` yang sama).
+  - **Masukan uji grid Ricko (2026-10-30), D63–D66 — dikerjakan 2026-10-30:** urutan & label kolom (Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Catatan · Status; Daftar/form/pesan/ringkasan ikut); **"Atur kolom"** (Catatan bisa disembunyikan, localStorage per klien); judul berkas lama & baru dikenali, "Konfirmasi" diabaikan; **tanggal** = `lib/mutasi-tanggal.ts` (ketik/tempel, normalisasi YYYY-MM-DD, ambigu diputus bulan grid, "Tanggal di luar <bulan>"), tampilan "15 Okt 2026", ikon kalender + Alt+↓ membuka `date-range-picker` yang ada **tanpa mengubah berkasnya**; **combobox Nama Akun** buatan sendiri (`kombo-akun.tsx`, tanpa paket baru — `cmdk` tidak terpasang) menggantikan `<datalist>` di sel & dialog "Isi Nama Akun kosong"; tab kas dari satu fungsi `muatAkunKas` (`lib/akun-kas-klien.ts`). Checklist uji klik: § "Checklist uji klik CP-20" di bawah.
+  - **Keputusan Ricko atas `0759128` — dikerjakan 2026-10-30:** **kolom Ref** (D64) lewat migrasi **0022** `cash_mutations.ref` (dev saja; rilis bersama 0021) — grid, Atur kolom (Ref & Catatan), Daftar, form satu-satu, alias Ref/Reff/No. Ref/No Ref/No Bukti/Referensi, riwayat `updated` membawa ref, tidak ke jurnal. Form satu-satu kini ikut mengirim `catatan` (sebelumnya PATCH dari form **mengosongkan** catatan yang diisi lewat grid). Rebase ke `main` sesudah PR #3 + #5: komentar `RIWAYAT_ABADI` diperbarui; **KalenderSel jalan dengan `date-range-picker` versi PR #5** — tombol hapus rentang yang kini bisa di-Tab disingkirkan dari sel lewat CSS grid (berkas komponen tidak diubah); penggantian KalenderSel dengan date picker satu tanggal Stream B = langkah terpisah sesudah komponennya masuk `main`.
+  - **Sel Tanggal memakai `DatePicker` (PR #6) — dikerjakan 2026-11-04:** `main` di-merge (bukan rebase) ke `feat/grid-mutasi`. `KalenderSel` kini membungkus `components/date-picker.tsx`: pemicu = ikon (`renderPemicu`), Alt+↓ membuka lewat `open`/`onOpenChange` yang dipegang grid (tanpa mengeklik tombol tersembunyi), `bulanAwal` + `min`/`max` = bulan grid (`batasKalenderGrid`), jangkar & `fokusKembaliKe` = sel grid, satu klik langsung memilih. Penyiasatan lama dibuang: CSS `.gm-kalender` (wadah 480px, `!important`, tombol hapus disembunyikan), `tanggalDariRentang`, nilai awal tanggal 1, `bukaKalenderDi`. Event panel yang tidak diisolasi `isolasiEvent` (klik ganda, salin/tempel, menu konteks, fokus, keyup) dihentikan di wadah sel; tempelan dari panel tidak masuk grid; kalender ditutup saat grid digulir.
   - tab sheet per akun kas; grid sebagai tampilan utama (≥ md)
   - banner arah / pemilih arah wajib; usulan lilac + Terapkan
   - panel Pindah Buku dan isian saldo awal rekening koran
   - sel merah beralasan, sel terkunci beralasan
+  - **Enter seperti Excel: simpan lalu turun satu baris** (Ricko, CP-19 2026-10-27); bawaan library simpan-di-tempat. Tambalan S0 ikut dibawa: `onCellPaste` no-op, Ctrl+Home ke sel data pertama, Delete mengosongkan sel, galat lewat `hidden` + `aria-describedby`
   - form satu-satu tetap utama di HP
   - **draf (D51):** peringatan sebelum meninggalkan halaman, cadangan IndexedDB per (klien, akun kas) yang dihapus otomatis sesudah Simpan berhasil, tawaran "Pulihkan draf"
-  - a11y grid — ⏸ **CP-20**
+  - a11y grid — pohon AX & keyboard lolos uji klik; **NVDA (CP-20 butir 17) perlu Ricko, tidak menahan rilis**
+  - **Yang terbangun (2026-10-28):** `react-data-grid` 7.0.0-beta.63 dipin persis, dimuat malas tanpa SSR. `components/mutasi-kas/grid/`: `grid-mutasi.tsx` (presentasi; tambalan S0 + Enter ala Excel + F2), `lembar-mutasi.tsx` (satu akun kas × satu **bulan kalender** — pemilih bulan, D52), `panel-pindah-buku.tsx`, `cadangan-draf.ts` (IndexedDB, D51), `kirim-simpan.ts` (body Simpan **gzip** — batas 4,5 MB Vercel juga berlaku pada body permintaan; route batch kini membaca lewat `bacaJsonBody` dengan batas terurai 64 MB). Turunan murni di `lib/mutasi-grid-turunan.ts` (rantai per kunci baris, usulan aturan/Pindah Buku dengan memo per objek baris, gerbang Simpan termasuk batas D52, `rencanaTempel` sel vs blok, `rencanaBerkas` CSV, peta galat server). S6 += aksi `pulihkan` + `potretCadangan` (draf dipulihkan dengan snapshot server LAMA → perubahan orang lain tetap 409). S2: `cocokkanAkun` menerima label grid "kode · nama" hanya bila namanya persis. Wizard impor lama **dihapus** (D47) — CSV masuk lewat "Buka berkas CSV" di grid. Daftar + form satu-satu tetap untuk HP (< md) dan tautan `?mutasi=` dari /jurnal. Uji klik dev (Playwright, 24 cek) lulus; build produksi lulus
 - ⏳ S10 Class CF (D62). Kosakata baku Operating Balance/Operating/Investing/Funding tanpa migrasi. `classification-health` berhenti menandai Operating Balance, dan ada aksi **"Tandai akun Operating Balance sebagai akun kas"**
-- ⏳ S11 ROADMAP + graphify
+- ✅ S11 ROADMAP + graphify — **(2026-11-07)** status S9/S11, hasil CP-20 per butir, prasyarat checklist rilis dicocokkan dengan dev (23 migrasi; kueri verifikasi langkah 6 dijalankan baca-saja di dev, hasil persis seperti tertulis) dan main (baca-saja: 21 migrasi, `cash_mutation_rules` belum ada); `graphify update .`; deskripsi PR #1 diperbarui. **Rilis grid menunggu Ricko** (checklist di bawah)
 
 **Modul B — PDF rekening koran**
+
+> **Status 2026-11-04:** X1–X4 dikerjakan sesi Stream B di **PR #2** (`feat/pdf-rekening-koran`, Draft, **belum di `main`**).
+> Sesi itu berhenti permanen 2026-11-04; sisanya dipegang satu sesi (`docs/HANDOFF.md`). Log rinci per langkah:
+> `docs/progress/stream-b-pdf.md` di branch PR #2. Rancangan yang diterapkan dicatat di MP §5.G Modul B (↳ per langkah).
+
 - 🔒 X0 **Gerbang Ricko:** akun AI **berbayar** dengan ketentuan tanpa pelatihan; free tier dilarang; API first-party DeepSeek/Z.ai dikecualikan. Sebelum gerbang ini hanya PDF sintetis yang dipakai
-- ⏳ X1 Lapisan penyedia `lib/ai/` (satu antarmuka, beberapa adaptor; Gemini dipindah, bukan ditulis ulang). Ketiga fitur AI yang ada ikut pindah tanpa perubahan perilaku
-- ⏳ X2 Teks PDF dibaca **di browser** (`pdfjs-dist` Apache-2.0 / `unpdf` MIT), `lib/pdf/susun-baris.ts` murni, cadangan OCR lewat render PNG
-- ⏳ X3 AI **hanya menyusun tabel** sebagaimana tercetak. Arah, tanggal, nominal, dan tahun diputuskan jalur S2/S3 yang sama dengan tempelan
-- ⏳ X4 `POST /api/cash-mutations/ekstrak-halaman` per halaman; sakelar fitur → 503; tidak menulis, tidak mencatat isi
-- ⏳ X5 Tombol "Unggah PDF rekening koran" dengan progres per halaman. Hasilnya masuk grid sebagai blok DRAF berpenanda lilac dengan kolom Hal.
-- 🔒 X6 Uji banding 2–3 penyedia × ≥ 12 rekening koran nyata. Ukuran utama **% dokumen lolos kesinambungan saldo tanpa koreksi**, ditambah biaya per dokumen — ⏸ **CP-21** (D54)
-- 🔒 X7 Aktivasi produksi hanya sesudah X0 dan D54 — ⏸ **CP-22**
+- ✅ X1 Lapisan penyedia `lib/ai/` (satu antarmuka; adaptor Gemini + Claude/OpenAI yang belum pernah dipanggil). Env per fitur `AI_PROVIDER_EKSTRAKSI` / `AI_MODEL_EKSTRAKSI`. Yang dipindah: saran akun jurnal → `lib/ai/saran-akun-jurnal.ts` (perilaku dikunci identik); fitur AI lama lain tetap memanggil Gemini langsung — **PR #2**
+- ✅ X2 Teks PDF dibaca **di browser** (`unpdf` 1.8.1), baris bertata letak bernomor `[nnn]` (`lib/bank-statement/susun-baris.ts`), cadangan gambar — **PR #2**
+- ✅ X3 AI **hanya menyusun tabel** (`lib/bank-statement/susun-tabel.ts`); penjaga salinan persis + cakupan + "sejajar dengan judul"; uraian terlipat digabung; halaman ditolak diulang sekali dengan Flash lalu input manual — **PR #2**. 🟡 **Celah cakupan** (entri pertama/terakhir dibuang, jawaban kosong lolos) — aturan a–c **disetujui Ricko 2026-11-04**, pengerjaan dicatat di log Stream B
+- ✅ X4 `POST /api/cash-mutations/ekstrak-halaman` per halaman; sakelar sendiri `AI_EKSTRAKSI_REKENING_KORAN` (bawaan mati) → 503; 422 penjaga / 429 kuota; tidak menulis, tidak mencatat isi — **PR #2**
+- ⏳ X5 Tombol "Unggah PDF rekening koran" dengan progres per halaman. Hasilnya masuk grid sebagai blok DRAF berpenanda lilac dengan kolom Hal. — **antrean (b)**: dikerjakan sesudah grid (PR #1) ada di `main`; label Debet/Kredit, nomor referensi bank → `ref`, model per halaman dari header `X-Model-Ekstraksi`
+- 🔒 X6 Uji banding 2–3 penyedia × ≥ 12 rekening koran nyata. Ukuran utama **% dokumen lolos kesinambungan saldo tanpa koreksi**, ditambah biaya per dokumen — ⏸ **CP-21** (D54). *Pra-uji SINTETIS 2026-10-31 (16 dok./47 hal.): Flash-Lite + ulang Flash lolos 14/15, identik 15/16, ±0,0067 USD/hal — bukan pengganti X6*
+- 🔒 X7 Aktivasi produksi hanya sesudah X0 dan D54 — ⏸ **CP-22**. Yang menyalakan: `AI_EKSTRAKSI_REKENING_KORAN="true"` + `AI_PROVIDER_EKSTRAKSI`/`AI_MODEL_EKSTRAKSI` + `AI_MODEL_EKSTRAKSI_ULANG` + kunci penyedia (`AI_FEATURES_ENABLED="true"` saja tidak cukup)
 - ⏳ X8 ROADMAP + graphify
 
 ---
@@ -690,6 +710,7 @@ Keputusan Fase 3–4 lama D16 dan D18–D25 tetap **menunggu**; **D17 & D26 dise
 | **2026-09-20** | **E1 & E2 selesai — migrasi 0015 dan mesin tipe akun.** `CREATE TYPE account_type` (lima golongan, tertutup jadi enum) + `master_coa.tipe_akun` **nullable** dan `is_kas` NOT NULL default false, plus index PARSIAL untuk daftar akun kas. `lib/coa/account-type.ts` memakai ulang `classifyBs`/`classifyPnl` yang sudah menopang Dashboard & Analytics, bukan menulis klasifikasi kedua | `tipe_akun` nullable supaya perbedaan antara "dipilih akunting" dan "ditebak sistem" tidak hilang — kalau NOT NULL dengan default, seluruh COA yang sudah ada mengaku punya tipe eksplisit yang tak pernah dipilih siapa pun. Tipe TIDAK diturunkan dari `posisi`, dan akun kontra yang membuktikannya dikunci test: Akumulasi Penyusutan bersaldo kredit tapi tetap `asset`, Prive bersaldo debit tapi tetap `equity`. Kelompok diperiksa sebelum sub kelompok karena kata "tetap" ada di Aktiva Tetap maupun Biaya Tetap |
 | **2026-09-20** | **E3 selesai — kolom Tipe Akun & Kas? di impor/ekspor, route isi-dari-berkas, dan carry-over ganti-massal.** Impor mengenali alias Indonesia maupun Inggris; sel kosong = tidak diisi, nilai terisi yang tak dikenali = galat yang menyebut barisnya. Ekspor menulis keduanya dan round-trip diperluas. Route baru `POST /api/clients/[id]/coa/types` HANYA meng-UPDATE dua kolom by kode — tanpa insert, tanpa delete. `GET /coa` membawa `resolvedType`/`resolvedIsKas` + penyaring `?tipe=`/`?kas=` (R8) | **Ganti-massal kini membawa `tipe_akun`/`is_kas` lama by kode** (keputusan Ricko 2026-09-18). Tanpa itu, impor ulang COA — yang rutin dilakukan — menghapus seluruh tipe akun yang diisi manual, tanpa galat. Dibuktikan dengan menyabotasenya: dua penjaga jatuh, lalu dipulihkan. Header "Tipe" dan "Kas" TELANJANG sengaja bukan alias: di sheet akuntansi keduanya lebih mungkin kolom lain (tipe transaksi, nominal saldo kas). Nilai `false` diekspor sebagai sel KOSONG, bukan "Tidak", supaya impor ulang tidak menimpa penanda kas yang sudah disetel |
 | **2026-09-20** | **E4 selesai — UI tipe akun.** Pemilih berplaceholder "— otomatis: {turunan} —" yang dihitung dari isi form saat itu (bukan baris tersimpan), toggle akun kas/bank, kolom tabel yang membedakan eksplisit (tebal) dari turunan (redup miring), dan tombol "Isi tipe dari berkas" berdialog dampak sebelum→sesudah per kode. `classificationWarnings` bertambah field `tipeAkun` | Placeholder menunjukkan turunannya karena pilihan bawaannya adalah "biarkan sistem menentukan" — pengguna berhak tahu apa yang dipakai kalau ia tidak memilih apa pun. Input berkasnya SENGAJA terpisah dari tombol Ganti Excel: keduanya menerima .xlsx tapi tujuannya berlawanan, dan satu input bergantian bisa mengirim berkas ke jalur ganti-massal. Peringatan tipe diam saat turunannya tak bisa ditentukan — sub kelompok tak dikenali sudah punya peringatannya sendiri, dan dua pesan untuk satu masalah melatih orang mengabaikannya |
+| **2026-11-07** | **Uji klik CP-20 dijalankan agen menggantikan Ricko + S11 selesai (perintah Ricko).** Laptop disamakan dengan GitHub (`main` `ea6677a`; `feat/grid-mutasi` & `feat/pdf-rekening-koran` = origin; `docs/tutup-d55` lokal sudah di `main`). Butir 1–16 lolos (tabel di § "Checklist uji klik CP-20"); butir 17 NVDA perlu Ricko, tidak menahan rilis. **Satu bug diperbaiki** (`f3f0903`): daftar akun kas `/mutasi-kas` diikat ke klien pemiliknya — sebelumnya tab klien lama tampil di bawah nama klien baru (+ GET 400 basi) dan gagal muat terbaca "belum ada akun kas". Test portabilitas Windows (`d60ae4f`). Gerbang: tsc bersih · 2466 test · 0 error / 24 warning · build + keyframes. Checklist rilis grid dicocokkan dengan dev & main (baca-saja). **Tidak ada yang menyentuh produksi.** | Ricko: NVDA (butir 17); rilis grid (checklist); PR #1 keluar dari Draft & merge |
 | **2026-10-27** | **Paket serah terima untuk dua sesi cloud paralel (perintah Ricko).** `docs/HANDOFF.md`: status (Phase 5 Fase 1–2 + Kunci Periode di produksi), yang tersisa, D17/D26/D46–D62, aturan rahasia, aturan data AI, pembagian Stream A (grid, S0–S11) / Stream B (PDF, X1–X5 — X0/X6/X7 bukan pekerjaan sesi cloud) dengan kepemilikan berkas, aturan bersama. **Kontrak** `lib/mutasi-kas/kontrak-baris-mentah.ts` (`HalamanMentah` = jawaban X4, `BarisMentah`, `NominalMentah`): semua sel TEKS; nominal `dua-kolom` (judul tercetak ikut, **tanpa** masuk/keluar — kotak Arah §5.G) atau `satu-kolom` + penanda DB/CR apa adanya; nomor halaman per baris; kolom tercetak lain di `lain`; baris SALDO AWAL/judul berulang TIDAK dibuang — S2 yang mengklasifikasi. 3 test tipe (`expectTypeOf` + `@ts-expect-error`). Log progres kosong `docs/progress/stream-{a-grid,b-pdf}.md`. **Ditandai untuk Ricko di HANDOFF:** (1) sakelar AI — Production `"true"` akan langsung menyalakan fitur ekstraksi rekening koran begitu dirilis, sebelum X0; (2) apakah sesi cloud diberi `DATABASE_URL` dev untuk `db:migrate`. Sync NgodingPakeAI dilewati (langganan tidak aktif). Branch `feat/grid-mutasi` & `feat/pdf-rekening-koran` dibuat dari commit ini | Ricko memutuskan dua hal yang ditandai |
 | **2026-10-27** | **🚀 Kunci Periode DIRILIS ke produksi** (izin eksplisit Ricko untuk seluruh checklist). Backup `backup-main-2026-10-27`, main 20 → **21** migrasi, `period_locks` terverifikasi, jumlah baris 22 tabel lama identik, push `8117275..9716b21` fast-forward, deployment READY di `ngid.vercel.app`, smoke test baca-saja lolos, `docs/tutup-d55` dihapus dari remote. Rincian per langkah di kotak "✅ DIRILIS" checklist rilis Kunci Periode | — |
 | **2026-10-27** | **Akun uji per peran + klien dummy "PT Uji Coba" di DB DEV; CP-13 skenario 3 diklik.** Skrip sekali pakai (dijaga: berhenti bila `DATABASE_URL` bukan `ep-rapid-hat`, bila `DEV_TEST_*` sudah ada, atau bila email sudah terdaftar; dihapus sesudah jalan): `uji.owner@`, `uji.akunting@`, `uji.finance@`, `uji.klien@ngitungid.test` (klien → PT Uji Coba), password acak 24 karakter hanya ditulis ke `.env.local` sebagai `DEV_TEST_{OWNER,AKUNTING,FINANCE,CLIENT}_{EMAIL,PASSWORD}`. PT Uji Coba (`07627d57-…`, "Perdagangan") + 25 akun Master COA contoh (3 akun kas: Kas Kecil, Bank BCA, Bank Mandiri) — khusus uji fitur AI. **Skenario 3 lewat Chrome di dev sebagai akunting uji:** kartu tampil, akunting BISA mengunci (konfirmasi menyebut "Hanya owner yang bisa membukanya kembali"), tombol "Buka kunci terakhir" TIDAK ada, `DELETE /api/period-locks/[id]` → **403**, kunci tetap berlaku. Sekalian bukti perbaikan temuan CP-13: posting & hapus jurnal bertanggal 15 Sep → 409 "Periode sudah dikunci sampai 30 Sep 2026 — tanggal 15 Sep 2026 …" + `lockedUntil`; kunci mundur → 400 "…sampai 30 Sep 2026…". **Dibersihkan:** owner uji membuka kunci lewat UI (alasan tercatat), jurnal draf `UJI-CP13-1` dihapus — sisa di dev hanya riwayat audit kunci/buka & jurnal di PT Uji Coba. Login di `127.0.0.1` gagal (Next 16 memblokir aset dev lintas-origin), jadi uji memakai `localhost:3000`: sesi owner Ricko di Chrome tergantikan, akun uji dikeluarkan di akhir, klien aktif dikembalikan ke Rasyuka | Ricko login ulang di localhost:3000 |
@@ -978,6 +999,186 @@ Keputusan Ricko 2026-09-16: **fitur tidak diubah sekarang**, tapi jangan dipakai
 klien nyata sampai kuncinya naik ke paid tier. Kalau kelak perlu dibatasi lebih jauh, opsi yang
 sudah terlihat: kirim hanya akun yang relevan alih-alih seluruh COA, atau cache saran per
 (klien, keterangan-ternormalisasi).
+
+## Checklist uji klik CP-20 — grid Mutasi Kas (Preview PR #1, diperbarui 2026-10-30)
+
+> Untuk Ricko, di Preview `feat/grid-mutasi` (DB dev). Klien **PT Uji Coba**, akun **Kas Kecil**, bulan **April 2026**
+> (kosong — aman dipakai). Uraian data uji diawali `UJI-A-`; pembersihannya menunggu hasil uji ini (S11). Uji otomatis
+> agen atas butir A–D: 30/30 lulus di dev 2026-10-30; sesudah kolom Ref + rebase PR #5: 29/29 lulus (Ref, Atur kolom,
+> B7–B8 dengan picker PR #5, Daftar, form); sesudah DatePicker PR #6 (2026-11-04): 19/19 lulus (B7–B8, kebocoran event,
+> Alt+↓ saat menyunting, klik di luar, gulir, Simpan) — yang belum pernah diuji adalah mata, tangan, dan NVDA.
+
+**Hasil uji klik 2026-11-07 — dijalankan agen menggantikan Ricko (atas perintah Ricko), dev server lokal + DB dev,
+Playwright Chromium 1600×1000, login akun uji akunting, PT Uji Coba · Kas Kecil · April 2026.** Data uji `UJI-A-`
+dihapus sesudahnya lewat grid (Hapus baris + Simpan) — sisa 0 mutasi, 0 jurnal, 0 impor, 0 aturan.
+
+| # | Hasil | Bukti singkat |
+|---|---|---|
+| 1 | ✅ | judul grid persis 10 kolom berurutan; ringkasan "Debet Rp 1.830.000 · Kredit Rp 525.000"; Daftar berjudul Debet/Kredit; form: tombol Debet/Kredit + field Nama Akun |
+| 2 | ✅ | Atur kolom hanya Ref & Catatan; Ref disembunyikan → hilang, bertahan setelah muat ulang (localStorage per klien); Rasyuka tetap menampilkan Ref; dicentang lagi → kembali; Catatan juga bisa |
+| 3 | ✅ | `BKK-001` bertahan setelah muat ulang; 101 karakter → "Ref maksimal 100 karakter." + Simpan tertahan; Daftar: Ref sesudah Kredit; form: Ref terisi, ubah Keterangan saja → Ref & Catatan tetap (dicek di DB); jurnal ringkasan tidak memuat Ref |
+| 4 | ✅ | `15` / `04/01/2026` / `21/Apr/2026` / `3 april 26` / `2026-04-07` → 15 Apr / 1 Apr / 21 Apr / 3 Apr / 7 Apr 2026 |
+| 5 | ✅ | pesan persis sesuai checklist; dengan nominal terisi, hanya dua sel tanggal yang merah dan Simpan tertahan; diperbaiki → Simpan aktif |
+| 6 | ✅ | tempel `4/1/2026 · 4/2/2026 · 4/13/2026 · 4/28/2026` → 1/2/13/28 Apr, "Tempel: 4 baris.", tanpa penolakan blok |
+| 7 | ✅ | ikon muncul saat hover/terpilih; kalender satu bulan April, tombol bulan mati, hari 1–30; satu klik → sel berganti, tertutup, fokus kembali ke sel; tanpa Terapkan/✕; sel kosong membuka April |
+| 8 | ✅ | Alt+↓ fokus di tanggal sel; panah berhenti di 1 dan 30, grid diam; Enter memilih, fokus di sel yang SAMA; Esc tanpa perubahan, panah grid jalan lagi; ketik `12` lalu Alt+↓ → tersimpan & kalender di 12; Tab → Nama Akun; klik ganda / Ctrl+V / Delete / Backspace di kalender tidak mengubah grid |
+| 9 | ✅ | `gaji` → grup Liabilitas (2-1003 Utang Gaji) & Beban (6-1001 Beban Gaji), kode Geist Mono, item aktif `#daf163` |
+| 10 | ✅ | ↑↓ memindah sorotan (`aria-activedescendant`); Enter memasang lalu turun; `admin` + Tab → 6-2003 terpasang, fokus ke Uraian; Esc batal; Alt+↓ daftar penuh (24 akun) |
+| 11 | ✅ | ▾ hanya muncul saat hover; satu klik membuka; klik akun → terpasang |
+| 12 | ✅ | tempel 4 kode akun → keempatnya terisi, tanpa baris tambahan |
+| 13 | ✅ | "Isi Nama Akun kosong" memakai `kombo-akun` yang sama (grup Ekuitas); 3 baris kosong terisi |
+| 14 | ✅ | CSV judul lama & baru terbaca (Konfirmasi diabaikan, Catatan masuk); CSV "No. Bukti" + tempelan berjudul Ref/Reff/No. Ref/No Ref/Referensi → kolom Ref, Catatan kosong; tanpa Saldo → pemilih arah wajib |
+| 15 | ✅ | PATCH "orang lain" → Simpan 409 "1 mutasi sudah diubah orang lain…" → panel peringatan → "Cadangkan draf lalu muat ulang" → versi server tampil → "Pulihkan draf tertimpa" mengembalikan draf. Catatan: draf yang dipulihkan tetap 409 bila disimpan — sesuai desain S6 (snapshot server LAMA), dicatat untuk Ricko |
+| 16 | ✅ | "jurnal ↗" baris 7 Apr → `/jurnal?jurnal=400f0e59…` = jurnal ringkasan "Kas Kecil 7 Apr 2026 — Beban Gaji", rinciannya terbuka |
+| 17 | ⏸ | **perlu Ricko, tidak menahan rilis** (keputusan CP-19) |
+
+**Bug yang ditemukan di luar butir checklist (diperbaiki `f3f0903`):** pindah klien menampilkan tab akun kas klien lama
+di bawah nama klien baru dan grid meminta `akunKasId` klien lama (400); gangguan jaringan sesaat ke Neon (`fetch failed`,
+11 dtk → 500) terbaca "Belum ada akun bertanda kas/bank" permanen. Diverifikasi ulang: pindah klien → "Memuat akun
+kas/bank…", nol 400; 500 dipaksa → pesan galat + Coba lagi → pulih. **Diamati, bukan bug:** kalender berbahasa Inggris
+(Mo/Tu…, "Tuesday, 21 April 2026") — warisan `date-range-picker` yang dipindah apa adanya; tampilan Daftar memakai
+rentang sendiri (bulan berjalan), bukan bulan grid.
+
+**A. Kolom & label (D63, D64, D65)**
+1. Judul grid berurutan **# · Tanggal · Nama Akun · Uraian · Debet · Kredit · Saldo · Ref · Catatan · Status**; ringkasan di
+   atas grid "Debet Rp… · Kredit Rp…"; tampilan **Daftar** berjudul Debet/Kredit; form satu-satu: tombol arah
+   **Debet / Kredit**, field **Nama Akun**.
+2. **Atur kolom** → pilihannya hanya **Ref** dan **Catatan**; hilangkan centang salah satunya → kolom hilang; muat ulang
+   halaman → tetap hilang; pindah ke klien lain → pilihan klien itu sendiri; centang lagi → kolom kembali. Kolom inti
+   tidak punya pilihan.
+3. **Ref (D64):** ketik `BKK-001` di sel Ref → Simpan → muat ulang → masih ada. Ref lebih dari 100 karakter → sel merah
+   "Ref maksimal 100 karakter.". Tampilan **Daftar**: kolom Ref sesudah Kredit. Form satu-satu (ikon pensil): field
+   **Ref** terisi; ubah Keterangan saja lalu simpan → Ref **dan** Catatan baris itu tetap. Jurnal mutasinya tidak memuat
+   Ref.
+
+**B. Tanggal (D66)** — di grid April 2026
+4. Ketik `15`, `04/01/2026`, `21/Apr/2026`, `3 april 26`, `2026-04-07` → tampil 15 Apr / **1 Apr** / 21 Apr / 3 Apr /
+   7 Apr 2026.
+5. Ketik `15 Okt 2026` → merah "Tanggal di luar April 2026 (terbaca 15 Okt 2026)"; ketik `31` → merah "Tanggal 31 tidak
+   ada di April 2026"; Simpan tertahan.
+6. Salin satu kolom tanggal dari sheet Rasyuka (bulan/hari) lalu tempel di kolom Tanggal → semua jatuh di April, tidak
+   ada penolakan blok.
+7. Hover baris / pilih sel → ikon kalender muncul; klik → kalender **satu bulan** (bulan grid; tombol bulan
+   sebelum/sesudah mati) → **satu klik** tanggal → sel langsung berganti, kalender tertutup, fokus kembali ke sel. Tanpa
+   Terapkan, tanpa tombol ✕ (kosongkan sel dengan Delete). Sel kosong pun membuka bulan grid, bukan bulan lain.
+8. Keyboard: sel Tanggal aktif → **Alt+↓** → kalender terbuka dengan fokus di tanggal sel; **panah** memindah tanggal
+   (grid tidak ikut bergerak; berhenti di tanggal 1 / akhir bulan grid), **Enter** memilih → sel berganti dan fokus
+   kembali ke sel yang SAMA (tidak turun baris). **Esc** → kalender tertutup tanpa mengubah sel, fokus kembali ke sel,
+   panah grid jalan lagi. Sedang mengetik di sel lalu **Alt+↓** → ketikan disimpan dulu, kalender terbuka di tanggal itu.
+   **Tab** dari sel Tanggal pindah ke sel Nama Akun. Klik ganda / Ctrl+V / Delete di dalam kalender tidak mengubah grid.
+
+**C. Nama Akun (combobox)**
+9. Sel Nama Akun aktif → ketik `gaji` → daftar tersaring (kode + nama), dikelompokkan per jenis akun (Liabilitas,
+   Beban, …), kode huruf mono, item aktif lime.
+10. **Hanya keyboard:** ↑↓ memindah sorotan, **Enter** memasang lalu turun satu baris; ketik `admin` lalu **Tab** memasang
+    yang disorot dan pindah ke Uraian; **Esc** batal tanpa mengubah sel; **Alt+↓** membuka daftar penuh.
+11. Mouse: hover baris → **▾** muncul; satu klik membuka daftar (tanpa klik ganda); klik akun → terpasang.
+12. Tempel kolom kode akun banyak baris dari Excel → tetap terisi semua.
+13. "Isi Nama Akun kosong" memakai combobox yang sama.
+
+**D. Berkas CSV**
+14. Buka CSV berjudul lama (`Tanggal;Akun lawan;Keterangan;Masuk;Keluar;Saldo`) dan berjudul baru
+    (`Tanggal;Nama Akun;Uraian;Debet;Kredit;Saldo;Catatan;Konfirmasi`) → keduanya terbaca; kolom Konfirmasi diabaikan.
+    Berkas/tempelan berjudul **Ref, Reff, No. Ref, No Ref, No Bukti,** atau **Referensi** → masuk kolom Ref (bukan
+    Catatan).
+
+**E. Yang tersisa dari CP-20 sebelumnya**
+15. "Muat ulang dari server" saat konflik 409 → peringatan + cadangan "draf tertimpa" yang bisa dipulihkan.
+16. Tautan baris → jurnal (ringkasan) membuka `/jurnal` di jurnal yang tepat.
+17. **NVDA:** sel tanggal dibacakan sekali ("15 Apr 2026", bukan dua kali); combobox mengumumkan opsi yang disorot;
+    kalender dibacakan sebagai dialog; bantuan grid menyebut Alt+panah bawah.
+
+## Checklist rilis Grid Mutasi Kas (§5.14 Modul A, S1–S9) ke produksi (hanya Ricko)
+
+> **BELUM DIJALANKAN.** Ditulis 2026-10-29 (sesudah jawaban sebagian CP-20), diperbarui 2026-10-30 (D64: + 0022). Rilis
+> dijalankan **Ricko dari laptop lewat `.env.main`**, bukan dari sesi agen. **Dua migrasi dirilis BERSAMA** — **0021**
+> (grid) + **0022** (kolom Ref), keduanya seluruhnya TAMBAH; main naik **21 → 23** — lalu kode branch `feat/grid-mutasi`
+> (PR #1) di-merge ke `main`. 0022 hanya pernah diterapkan ke dev (`ep-rapid-hat`).
+
+**Prasyarat (sebelum langkah 1):**
+- ✅ PR #4 `chore/fix-ci` di-merge Ricko (`4469498`), dan `feat/grid-mutasi` di-rebase ke atasnya 2026-10-29 tanpa konflik
+  (gerbang lokal sesudah rebase: install `--frozen-lockfile`, tsc, lint 0 error / 24 warning, 2259 test, build — lulus).
+  Yang tetap diperiksa sebelum langkah 1: **CI PR #1 hijau pada head terakhir**. ✅ 2026-10-30: di-rebase ke `main`
+  sesudah PR #3 (`chore/audit-supplier`) dan PR #5 (date-range-picker) — konflik `RIWAYAT_ABADI` diselesaikan dengan
+  assertion versi Stream B.
+- ✅ **Backup terjadwal hidup lagi:** Ricko memperbarui secret GitHub `DATABASE_URL_MAIN` (gagal sejak 23 Okt: kata sandi
+  lama, lihat PR #4) lalu menjalankan "Backup DB (branch main)" manual 2026-10-29 → run #110 **hijau**, artifact
+  `db-backup-main-20261029-042916Z` **944.490 byte** (backup sukses terakhir 22 Okt: 938.597 byte; yang gagal: 188 byte).
+  Ini bukan pengganti langkah 3 (branch backup Neon tepat sebelum migrasi) — langkah itu tetap wajib.
+- ✅ **CP-20** — uji klik dijalankan agen menggantikan Ricko 2026-11-07: butir 1–16 lolos, satu bug di luar checklist
+  diperbaiki (`f3f0903`); **butir 17 (NVDA) perlu Ricko, tidak menahan rilis** (keputusan CP-19). ✅ **S11** 2026-11-07.
+- ✅ **Dicocokkan dengan keadaan 2026-11-07:** dev (`ep-rapid-hat`) 23 migrasi, dua terakhir 1793358152950 (0022) ·
+  1793153169380 (0021); kueri verifikasi langkah 6 dijalankan baca-saja di dev → hasilnya persis seperti tertulis di
+  bawah (kolom, 6 constraint aturan, `cash_mutations_urutan_check`, indeks, FK Pindah Buku SET NULL). Main (baca-saja):
+  21 migrasi, terakhir 1792991626845 (0020), `cash_mutation_rules` belum ada, 0 kolom baru — cocok dengan langkah 4.
+- ✅ **D64 (kolom Ref) diputuskan Ricko 2026-10-30:** kolom baru `cash_mutations.ref` lewat migrasi **0022** (tambah
+  saja), diterapkan SESUDAH 0021 oleh perintah yang sama (`db:migrate:main` menerapkan keduanya berurutan).
+- Tim akunting diberi tahu **perubahan perilaku**: impor CSV kini lewat grid ("Buka berkas CSV"), wizard lama hilang;
+  mutasi berjurnal terposting **tidak** bisa disunting walau "posting bisa diedit" menyala (balik jurnal dulu).
+
+**Kenapa migrasi DULU, kode SESUDAHNYA (jangan dibalik):** kode baru membaca `cash_mutations.urutan`/`catatan`/`ref`,
+`client_accounting_settings.akun_pindah_buku_id`, dan tabel `cash_mutation_rules` — kode yang naik lebih dulu membuat
+`/mutasi-kas`, Settings, dan setiap Simpan mutasi gagal 500. Sebaliknya aman: 0021 dan 0022 hanya menambah (kolom
+nullable, tabel baru), kode lama tidak mengenalnya.
+
+1. **Ricko mengisi `.env.main`** — `DATABASE_URL` branch main, **host tanpa `-pooler`** (berkasnya di `.gitignore`).
+2. **`pnpm env:cek .env.main`** → harus `endpoint ep-small-mode-ao8ouvtp (main ✓)`; selain itu keluar kode 1.
+   ⚠️ Pemeriksa membuang `-pooler` sebelum membandingkan — pastikan host unpooled sendiri di langkah 1.
+3. **Backup branch Neon dari main** — `backup-main-<tanggal rilis>`.
+4. **Baca-saja: main harus di 21 migrasi** (SQL Editor Neon pada branch main):
+   ```sql
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 21, last = 1792991626845 (0020)
+   select to_regclass('public.cash_mutation_rules');                                         -- NULL
+   select column_name from information_schema.columns
+    where table_name = 'cash_mutations' and column_name in ('urutan', 'catatan', 'ref');    -- 0 baris
+   select (select count(*) from clients) c, (select count(*) from master_coa) coa,
+          (select count(*) from cash_mutations) cm, (select count(*) from cash_mutation_allocations) ca,
+          (select count(*) from journal_entries) je, (select count(*) from journal_lines) jl,
+          (select count(*) from client_accounting_settings) cas, (select count(*) from audit_events) ae;
+   ```
+   Bukan 21 → **berhenti** (lebih = 0021/0022 sudah diterapkan seseorang; kurang = main tertinggal).
+5. **`pnpm db:migrate:main`** → `env:cek .env.main` lalu `drizzle-kit migrate` dengan `.env.main`. Menerapkan 0021 lalu
+   0022 dalam satu jalan. Hasil: **23 migrasi**.
+   Isi 0021 (dibaca, gotcha #8): `CREATE TABLE cash_mutation_rules`; `ALTER TABLE cash_mutations ADD COLUMN urutan integer,
+   catatan text` + `CHECK (urutan IS NULL OR urutan >= 1)`; `ALTER TABLE client_accounting_settings ADD COLUMN
+   akun_pindah_buku_id uuid` (FK master_coa **SET NULL**); FK aturan → clients CASCADE, akun lawan/akun kas/pembuat RESTRICT;
+   indeks `cash_mutation_rules_client_aktif_idx`. Isi 0022 (`0022_ref_mutasi.sql`, satu baris): `ALTER TABLE cash_mutations
+   ADD COLUMN ref text`. Tidak ada DROP, tidak ada perubahan enum, tidak ada isi ulang data.
+6. **Verifikasi baca-saja:**
+   ```sql
+   select count(*)::int as n, max(created_at) as last from drizzle.__drizzle_migrations;  -- n = 23, last = 1793358152950 (0022)
+   select created_at from drizzle.__drizzle_migrations order by created_at desc limit 2;  -- 1793358152950 (0022) · 1793153169380 (0021)
+   select column_name, data_type, is_nullable from information_schema.columns
+    where table_name = 'cash_mutations' and column_name in ('urutan', 'catatan', 'ref')
+    order by column_name;                                       -- catatan text YES · ref text YES · urutan integer YES
+   select count(*) from cash_mutations where ref is not null;                            -- 0
+   select data_type from information_schema.columns
+    where table_name = 'client_accounting_settings' and column_name = 'akun_pindah_buku_id';  -- uuid
+   select conname from pg_constraint
+    where conrelid = 'cash_mutation_rules'::regclass and contype in ('p', 'f', 'c') order by 1;
+     -- akun_kas_id…_fk, akun_lawan_id…_fk, arah_check, client_id…_fk, created_by…_fk, pkey
+   select conname from pg_constraint where conname = 'cash_mutations_urutan_check';      -- 1 baris
+   select indexname from pg_indexes where tablename = 'cash_mutation_rules';             -- + cash_mutation_rules_client_aktif_idx
+   select count(*) from cash_mutation_rules;                                             -- 0
+   ```
+   Ulangi kueri jumlah baris langkah 4 → **harus sama persis**.
+7. **Merge PR #1 ke `main`** (Ricko, di GitHub; PR harus hijau dan sudah keluar dari Draft). Pantau deployment Vercel
+   `ngitungid` sampai **READY** dan ter-alias ke `ngid.vercel.app`.
+8. **Smoke test produksi, baca-saja** (owner/akunting — **jangan menekan Simpan, Terapkan usulan, atau Kosongkan saldo**):
+   - `/mutasi-kas` ≥ md: tab akun kas tampil, pemilih bulan, grid memuat tanpa 500 dengan kolom **Ref**; pindah tab &
+     bulan; "Daftar" tetap jalan (kolom Ref, isinya "—").
+   - Kolom Status menautkan jurnal → `/jurnal?jurnal=<id>` membuka jurnal itu (owner/akunting).
+   - Settings › **Aturan Mutasi** dan Settings › Pembukuan (**Akun Pindah Buku**) terbuka tanpa galat.
+   - HP (< md): daftar + "Mutasi Baru" tampil, grid tidak.
+   - Nol runtime error Vercel 30 menit sesudah deploy.
+9. **Sesudah rilis:** hapus `.env.main` dari disk. Per klien (opsional, oleh tim): atur Akun Pindah Buku dan aturan akun lawan.
+
+**Data yang sudah ada di produksi:** jurnal mutasi per baris yang masih **draf** digabung ke jurnal ringkasan (D58) **saat
+kuncinya tersentuh** oleh Simpan berikutnya — bukan sekaligus saat rilis. Jurnal terposting tidak pernah diubah.
+
+**Jalan mundur:** gagal di langkah 5 → branch backup langkah 3 (bila 0021 sudah masuk tapi 0022 gagal, main ada di 22 —
+jangan diperbaiki tangan; pulihkan dari backup). Deploy bermasalah di langkah 7 → promosikan deployment Vercel sebelumnya
+(0021 dan 0022 hanya menambah; kode lama tidak terganggu). Jangan menjalankan `db:push` ke main.
 
 ## Checklist rilis Kunci Periode (§5.9) ke produksi (hanya Ricko)
 

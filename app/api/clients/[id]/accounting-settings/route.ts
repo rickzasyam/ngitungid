@@ -5,6 +5,7 @@ import { requireAkunting, requireInternal } from '@/lib/api/guards'
 import { canAccessClientData } from '@/lib/roles'
 import { loadAccountingSettings } from '@/lib/api/accounting-settings'
 import { assertInvoiceAccountsBelongToClient } from '@/lib/api/purchase-queries'
+import { assertAccountBelongsToClient, loadCashAccount } from '@/lib/api/cash-mutation-queries'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const row = await loadAccountingSettings(id)
   return NextResponse.json({
     akunPpnMasukanId: row?.akunPpnMasukanId ?? null,
+    akunPindahBukuId: row?.akunPindahBukuId ?? null,
     postingBisaDiedit: row?.postingBisaDiedit === true,
     /** false = belum pernah disetel. Dipakai UI untuk menjelaskan bawaannya. */
     tersimpan: row !== null,
@@ -70,6 +72,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const body = (await req.json().catch(() => null)) as {
     akunPpnMasukanId?: string | null
+    akunPindahBukuId?: string | null
     postingBisaDiedit?: boolean
   } | null
   if (!body || typeof body !== 'object') {
@@ -78,7 +81,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const ubahPpn = 'akunPpnMasukanId' in body
   const ubahPosting = 'postingBisaDiedit' in body
-  if (!ubahPpn && !ubahPosting) {
+  const ubahPindahBuku = 'akunPindahBukuId' in body
+  if (!ubahPpn && !ubahPosting && !ubahPindahBuku) {
     return NextResponse.json({ error: 'Tidak ada setelan yang dikirim.' }, { status: 400 })
   }
 
@@ -97,6 +101,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (salah) return salah
   }
 
+  // Akun Pindah Buku (D59): akun milik klien, dan BUKAN akun kas/bank — ia
+  // perantara transfer, bukan rekening. Akun kas di sini membuat transfer A→B
+  // tercatat sebagai mutasi A berakun-lawan rekening C, dan saldo perantaranya
+  // tidak lagi bisa diperiksa nol.
+  let akunPindahBukuId = lama?.akunPindahBukuId ?? null
+  if (ubahPindahBuku) {
+    const v = body.akunPindahBukuId
+    if (v !== null && typeof v !== 'string') {
+      return NextResponse.json({ error: 'Akun Pindah Buku tidak valid.' }, { status: 400 })
+    }
+    akunPindahBukuId = v === null || v === '' ? null : v
+    if (akunPindahBukuId !== null) {
+      if (!UUID_RE.test(akunPindahBukuId)) {
+        return NextResponse.json({ error: 'Akun Pindah Buku tidak valid.' }, { status: 400 })
+      }
+      const salah = await assertAccountBelongsToClient(akunPindahBukuId, id)
+      if (salah) return salah
+      if (await loadCashAccount(id, akunPindahBukuId)) {
+        return NextResponse.json(
+          { error: 'Akun Pindah Buku tidak boleh akun kas/bank — pilih akun perantara transfer.' },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
   let postingBisaDiedit = lama?.postingBisaDiedit === true
   if (ubahPosting) {
     if (typeof body.postingBisaDiedit !== 'boolean') {
@@ -110,11 +140,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   await db
     .insert(clientAccountingSettings)
-    .values({ clientId: id, akunPpnMasukanId, postingBisaDiedit })
+    .values({ clientId: id, akunPpnMasukanId, akunPindahBukuId, postingBisaDiedit })
     .onConflictDoUpdate({
       target: clientAccountingSettings.clientId,
-      set: { akunPpnMasukanId, postingBisaDiedit, updatedAt: new Date() },
+      set: { akunPpnMasukanId, akunPindahBukuId, postingBisaDiedit, updatedAt: new Date() },
     })
 
-  return NextResponse.json({ akunPpnMasukanId, postingBisaDiedit, tersimpan: true })
+  return NextResponse.json({ akunPpnMasukanId, akunPindahBukuId, postingBisaDiedit, tersimpan: true })
 }

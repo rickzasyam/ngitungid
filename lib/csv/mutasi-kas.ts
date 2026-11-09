@@ -425,8 +425,10 @@ function hariDalamBulan(tahun: number, bulan: number): number {
  * `DD/MM/YYYY` untuk tanggal 1–12, jadi mendukungnya berarti menebak — dan
  * separuh tebakannya salah tanpa ada yang tahu.
  */
-/** Pecah teks jadi potongan angka/huruf, per karakter. Tanpa regex (D22). */
-function potonganTanggal(raw: unknown): string[] {
+/** Pecah teks jadi potongan angka/huruf, per karakter. Tanpa regex (D22).
+ *  Diekspor untuk pembaca draf grid (lib/mutasi-draf.ts) — satu pemotong
+ *  tanggal untuk CSV dan grid. */
+export function potonganTanggal(raw: unknown): string[] {
   const teks = (typeof raw === 'string' ? raw : String(raw ?? '')).trim()
   if (teks === '') return []
   const out: string[] = []

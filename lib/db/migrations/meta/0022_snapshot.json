@@ -1,0 +1,3365 @@
+{
+  "id": "d0a6c258-3f4c-4d10-bccf-5fa6741f32e4",
+  "prevId": "da1936c4-8ed7-4a6a-a547-ddde817d9614",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.audit_events": {
+      "name": "audit_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "audit_entity_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event": {
+          "name": "event",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "catatan": {
+          "name": "catatan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nilai_sebelum": {
+          "name": "nilai_sebelum",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nilai_sesudah": {
+          "name": "nilai_sesudah",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "at": {
+          "name": "at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "audit_events_entity_idx": {
+          "name": "audit_events_entity_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "audit_events_client_at_idx": {
+          "name": "audit_events_client_at_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "audit_events_client_id_clients_id_fk": {
+          "name": "audit_events_client_id_clients_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "audit_events_user_id_users_id_fk": {
+          "name": "audit_events_user_id_users_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "audit_events_entity_id_check": {
+          "name": "audit_events_entity_id_check",
+          "value": "\"audit_events\".\"entity_type\" <> 'journal' OR \"audit_events\".\"entity_id\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.cash_mutation_allocations": {
+      "name": "cash_mutation_allocations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "mutation_id": {
+          "name": "mutation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nominal": {
+          "name": "nominal",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "termin_urutan": {
+          "name": "termin_urutan",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cash_mutation_allocations_invoice_idx": {
+          "name": "cash_mutation_allocations_invoice_idx",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cash_mutation_allocations_mutation_idx": {
+          "name": "cash_mutation_allocations_mutation_idx",
+          "columns": [
+            {
+              "expression": "mutation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cash_mutation_allocations_mutation_id_cash_mutations_id_fk": {
+          "name": "cash_mutation_allocations_mutation_id_cash_mutations_id_fk",
+          "tableFrom": "cash_mutation_allocations",
+          "tableTo": "cash_mutations",
+          "columnsFrom": [
+            "mutation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_allocations_invoice_id_purchase_invoices_id_fk": {
+          "name": "cash_mutation_allocations_invoice_id_purchase_invoices_id_fk",
+          "tableFrom": "cash_mutation_allocations",
+          "tableTo": "purchase_invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_allocations_created_by_users_id_fk": {
+          "name": "cash_mutation_allocations_created_by_users_id_fk",
+          "tableFrom": "cash_mutation_allocations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "cash_mutation_allocations_mutation_invoice_unique": {
+          "name": "cash_mutation_allocations_mutation_invoice_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "mutation_id",
+            "invoice_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "cash_mutation_allocations_nominal_check": {
+          "name": "cash_mutation_allocations_nominal_check",
+          "value": "\"cash_mutation_allocations\".\"nominal\" > 0"
+        },
+        "cash_mutation_allocations_termin_check": {
+          "name": "cash_mutation_allocations_termin_check",
+          "value": "\"cash_mutation_allocations\".\"termin_urutan\" IS NULL OR \"cash_mutation_allocations\".\"termin_urutan\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.cash_mutation_imports": {
+      "name": "cash_mutation_imports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "akun_kas_id": {
+          "name": "akun_kas_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nama_berkas": {
+          "name": "nama_berkas",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "jumlah_baris": {
+          "name": "jumlah_baris",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "diimpor_oleh": {
+          "name": "diimpor_oleh",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cash_mutation_imports_client_idx": {
+          "name": "cash_mutation_imports_client_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cash_mutation_imports_client_id_clients_id_fk": {
+          "name": "cash_mutation_imports_client_id_clients_id_fk",
+          "tableFrom": "cash_mutation_imports",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_imports_akun_kas_id_master_coa_id_fk": {
+          "name": "cash_mutation_imports_akun_kas_id_master_coa_id_fk",
+          "tableFrom": "cash_mutation_imports",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_kas_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_imports_diimpor_oleh_users_id_fk": {
+          "name": "cash_mutation_imports_diimpor_oleh_users_id_fk",
+          "tableFrom": "cash_mutation_imports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "diimpor_oleh"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.cash_mutation_rules": {
+      "name": "cash_mutation_rules",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pola": {
+          "name": "pola",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "arah": {
+          "name": "arah",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'keduanya'"
+        },
+        "akun_lawan_id": {
+          "name": "akun_lawan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "akun_kas_id": {
+          "name": "akun_kas_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prioritas": {
+          "name": "prioritas",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "aktif": {
+          "name": "aktif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cash_mutation_rules_client_aktif_idx": {
+          "name": "cash_mutation_rules_client_aktif_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "aktif",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cash_mutation_rules_client_id_clients_id_fk": {
+          "name": "cash_mutation_rules_client_id_clients_id_fk",
+          "tableFrom": "cash_mutation_rules",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_rules_akun_lawan_id_master_coa_id_fk": {
+          "name": "cash_mutation_rules_akun_lawan_id_master_coa_id_fk",
+          "tableFrom": "cash_mutation_rules",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_lawan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_rules_akun_kas_id_master_coa_id_fk": {
+          "name": "cash_mutation_rules_akun_kas_id_master_coa_id_fk",
+          "tableFrom": "cash_mutation_rules",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_kas_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cash_mutation_rules_created_by_users_id_fk": {
+          "name": "cash_mutation_rules_created_by_users_id_fk",
+          "tableFrom": "cash_mutation_rules",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cash_mutation_rules_arah_check": {
+          "name": "cash_mutation_rules_arah_check",
+          "value": "\"cash_mutation_rules\".\"arah\" IN ('masuk', 'keluar', 'keduanya')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.cash_mutations": {
+      "name": "cash_mutations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "akun_kas_id": {
+          "name": "akun_kas_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tanggal": {
+          "name": "tanggal",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "keterangan": {
+          "name": "keterangan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debit": {
+          "name": "debit",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "kredit": {
+          "name": "kredit",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "saldo": {
+          "name": "saldo",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "import_id": {
+          "name": "import_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "akun_lawan_id": {
+          "name": "akun_lawan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "urutan": {
+          "name": "urutan",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "catatan": {
+          "name": "catatan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ref": {
+          "name": "ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "cash_mutations_client_tanggal_idx": {
+          "name": "cash_mutations_client_tanggal_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tanggal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cash_mutations_akun_tanggal_idx": {
+          "name": "cash_mutations_akun_tanggal_idx",
+          "columns": [
+            {
+              "expression": "akun_kas_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tanggal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cash_mutations_fingerprint_idx": {
+          "name": "cash_mutations_fingerprint_idx",
+          "columns": [
+            {
+              "expression": "fingerprint",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cash_mutations_journal_idx": {
+          "name": "cash_mutations_journal_idx",
+          "columns": [
+            {
+              "expression": "journal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cash_mutations_client_id_clients_id_fk": {
+          "name": "cash_mutations_client_id_clients_id_fk",
+          "tableFrom": "cash_mutations",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cash_mutations_akun_kas_id_master_coa_id_fk": {
+          "name": "cash_mutations_akun_kas_id_master_coa_id_fk",
+          "tableFrom": "cash_mutations",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_kas_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "cash_mutations_import_id_cash_mutation_imports_id_fk": {
+          "name": "cash_mutations_import_id_cash_mutation_imports_id_fk",
+          "tableFrom": "cash_mutations",
+          "tableTo": "cash_mutation_imports",
+          "columnsFrom": [
+            "import_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "cash_mutations_akun_lawan_id_master_coa_id_fk": {
+          "name": "cash_mutations_akun_lawan_id_master_coa_id_fk",
+          "tableFrom": "cash_mutations",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_lawan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "cash_mutations_journal_id_journal_entries_id_fk": {
+          "name": "cash_mutations_journal_id_journal_entries_id_fk",
+          "tableFrom": "cash_mutations",
+          "tableTo": "journal_entries",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "cash_mutations_created_by_users_id_fk": {
+          "name": "cash_mutations_created_by_users_id_fk",
+          "tableFrom": "cash_mutations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cash_mutations_debit_kredit_check": {
+          "name": "cash_mutations_debit_kredit_check",
+          "value": "\"cash_mutations\".\"debit\" >= 0 AND \"cash_mutations\".\"kredit\" >= 0 AND ((\"cash_mutations\".\"debit\" = 0) <> (\"cash_mutations\".\"kredit\" = 0))"
+        },
+        "cash_mutations_urutan_check": {
+          "name": "cash_mutations_urutan_check",
+          "value": "\"cash_mutations\".\"urutan\" IS NULL OR \"cash_mutations\".\"urutan\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.client_accounting_settings": {
+      "name": "client_accounting_settings",
+      "schema": "",
+      "columns": {
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "akun_ppn_masukan_id": {
+          "name": "akun_ppn_masukan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "akun_pindah_buku_id": {
+          "name": "akun_pindah_buku_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "posting_bisa_diedit": {
+          "name": "posting_bisa_diedit",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "client_accounting_settings_client_id_clients_id_fk": {
+          "name": "client_accounting_settings_client_id_clients_id_fk",
+          "tableFrom": "client_accounting_settings",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "client_accounting_settings_akun_ppn_masukan_id_master_coa_id_fk": {
+          "name": "client_accounting_settings_akun_ppn_masukan_id_master_coa_id_fk",
+          "tableFrom": "client_accounting_settings",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_ppn_masukan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "client_accounting_settings_akun_pindah_buku_id_master_coa_id_fk": {
+          "name": "client_accounting_settings_akun_pindah_buku_id_master_coa_id_fk",
+          "tableFrom": "client_accounting_settings",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_pindah_buku_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.client_assignments": {
+      "name": "client_assignments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assigned_at": {
+          "name": "assigned_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "client_assignments_client_id_idx": {
+          "name": "client_assignments_client_id_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "client_assignments_user_id_idx": {
+          "name": "client_assignments_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "client_assignments_client_id_clients_id_fk": {
+          "name": "client_assignments_client_id_clients_id_fk",
+          "tableFrom": "client_assignments",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "client_assignments_user_id_users_id_fk": {
+          "name": "client_assignments_user_id_users_id_fk",
+          "tableFrom": "client_assignments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "client_assignments_client_user_unique": {
+          "name": "client_assignments_client_user_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "user_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.client_metric_visibility": {
+      "name": "client_metric_visibility",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metric_id": {
+          "name": "metric_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_visible": {
+          "name": "is_visible",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "client_metric_visibility_client_id_clients_id_fk": {
+          "name": "client_metric_visibility_client_id_clients_id_fk",
+          "tableFrom": "client_metric_visibility",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "client_metric_visibility_client_metric_unique": {
+          "name": "client_metric_visibility_client_metric_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "metric_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.clients": {
+      "name": "clients",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "logo": {
+          "name": "logo",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_mime": {
+          "name": "logo_mime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.coa_mapping_history": {
+      "name": "coa_mapping_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_name": {
+          "name": "raw_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "master_coa_id": {
+          "name": "master_coa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confirmed_count": {
+          "name": "confirmed_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "last_confirmed_at": {
+          "name": "last_confirmed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "coa_mapping_history_client_id_clients_id_fk": {
+          "name": "coa_mapping_history_client_id_clients_id_fk",
+          "tableFrom": "coa_mapping_history",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "coa_mapping_history_master_coa_id_master_coa_id_fk": {
+          "name": "coa_mapping_history_master_coa_id_master_coa_id_fk",
+          "tableFrom": "coa_mapping_history",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "master_coa_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "coa_mapping_history_client_raw_name_unique": {
+          "name": "coa_mapping_history_client_raw_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "raw_name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contract_layanan": {
+      "name": "contract_layanan",
+      "schema": "",
+      "columns": {
+        "contract_id": {
+          "name": "contract_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "layanan_id": {
+          "name": "layanan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "contract_layanan_layanan_id_idx": {
+          "name": "contract_layanan_layanan_id_idx",
+          "columns": [
+            {
+              "expression": "layanan_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "contract_layanan_contract_id_contracts_id_fk": {
+          "name": "contract_layanan_contract_id_contracts_id_fk",
+          "tableFrom": "contract_layanan",
+          "tableTo": "contracts",
+          "columnsFrom": [
+            "contract_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "contract_layanan_layanan_id_layanan_id_fk": {
+          "name": "contract_layanan_layanan_id_layanan_id_fk",
+          "tableFrom": "contract_layanan",
+          "tableTo": "layanan",
+          "columnsFrom": [
+            "layanan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "contract_layanan_contract_id_layanan_id_pk": {
+          "name": "contract_layanan_contract_id_layanan_id_pk",
+          "columns": [
+            "contract_id",
+            "layanan_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contracts": {
+      "name": "contracts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "no_kontrak": {
+          "name": "no_kontrak",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "jenis": {
+          "name": "jenis",
+          "type": "jenis_kontrak",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tanggal_mulai": {
+          "name": "tanggal_mulai",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tanggal_akhir": {
+          "name": "tanggal_akhir",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tanggal_penagihan": {
+          "name": "tanggal_penagihan",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nominal": {
+          "name": "nominal",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dokumen": {
+          "name": "dokumen",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nama_dokumen": {
+          "name": "nama_dokumen",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ukuran_dokumen": {
+          "name": "ukuran_dokumen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "contracts_client_id_idx": {
+          "name": "contracts_client_id_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "contracts_client_id_clients_id_fk": {
+          "name": "contracts_client_id_clients_id_fk",
+          "tableFrom": "contracts",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "contracts_client_no_kontrak_unique": {
+          "name": "contracts_client_no_kontrak_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "no_kontrak"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.financial_reports": {
+      "name": "financial_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "report_type": {
+          "name": "report_type",
+          "type": "report_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_start": {
+          "name": "period_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period_end": {
+          "name": "period_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_file_name": {
+          "name": "source_file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_pdf": {
+          "name": "source_pdf",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "report_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'uploaded'"
+        },
+        "extracted_at": {
+          "name": "extracted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "financial_reports_client_type_period_idx": {
+          "name": "financial_reports_client_type_period_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "report_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "period_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "financial_reports_client_id_clients_id_fk": {
+          "name": "financial_reports_client_id_clients_id_fk",
+          "tableFrom": "financial_reports",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "financial_reports_client_type_period_unique": {
+          "name": "financial_reports_client_type_period_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "report_type",
+            "period_start",
+            "period_end"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.journal_entries": {
+      "name": "journal_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tanggal": {
+          "name": "tanggal",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "no_bukti": {
+          "name": "no_bukti",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "keterangan": {
+          "name": "keterangan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sumber": {
+          "name": "sumber",
+          "type": "journal_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "status": {
+          "name": "status",
+          "type": "journal_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "posted_at": {
+          "name": "posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "posted_by": {
+          "name": "posted_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reversal_of_id": {
+          "name": "reversal_of_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "journal_entries_client_tanggal_idx": {
+          "name": "journal_entries_client_tanggal_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tanggal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_entries_client_status_idx": {
+          "name": "journal_entries_client_status_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_entries_reversal_of_idx": {
+          "name": "journal_entries_reversal_of_idx",
+          "columns": [
+            {
+              "expression": "reversal_of_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "journal_entries_client_id_clients_id_fk": {
+          "name": "journal_entries_client_id_clients_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "journal_entries_created_by_users_id_fk": {
+          "name": "journal_entries_created_by_users_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "journal_entries_posted_by_users_id_fk": {
+          "name": "journal_entries_posted_by_users_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "users",
+          "columnsFrom": [
+            "posted_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "journal_entries_reversal_of_id_fk": {
+          "name": "journal_entries_reversal_of_id_fk",
+          "tableFrom": "journal_entries",
+          "tableTo": "journal_entries",
+          "columnsFrom": [
+            "reversal_of_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "journal_entries_client_no_bukti_unique": {
+          "name": "journal_entries_client_no_bukti_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "no_bukti"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.journal_lines": {
+      "name": "journal_lines",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "master_coa_id": {
+          "name": "master_coa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debit": {
+          "name": "debit",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "kredit": {
+          "name": "kredit",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "keterangan": {
+          "name": "keterangan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "line_order": {
+          "name": "line_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "journal_lines_journal_id_idx": {
+          "name": "journal_lines_journal_id_idx",
+          "columns": [
+            {
+              "expression": "journal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_lines_master_coa_id_idx": {
+          "name": "journal_lines_master_coa_id_idx",
+          "columns": [
+            {
+              "expression": "master_coa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "journal_lines_supplier_id_idx": {
+          "name": "journal_lines_supplier_id_idx",
+          "columns": [
+            {
+              "expression": "supplier_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "journal_lines_journal_id_journal_entries_id_fk": {
+          "name": "journal_lines_journal_id_journal_entries_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "journal_entries",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "journal_lines_master_coa_id_master_coa_id_fk": {
+          "name": "journal_lines_master_coa_id_master_coa_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "master_coa_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "journal_lines_supplier_id_master_supplier_id_fk": {
+          "name": "journal_lines_supplier_id_master_supplier_id_fk",
+          "tableFrom": "journal_lines",
+          "tableTo": "master_supplier",
+          "columnsFrom": [
+            "supplier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "journal_lines_satu_sisi_check": {
+          "name": "journal_lines_satu_sisi_check",
+          "value": "\"journal_lines\".\"debit\" >= 0 AND \"journal_lines\".\"kredit\" >= 0 AND ((\"journal_lines\".\"debit\" = 0) <> (\"journal_lines\".\"kredit\" = 0))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.layanan": {
+      "name": "layanan",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "nama": {
+          "name": "nama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deskripsi": {
+          "name": "deskripsi",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aktif": {
+          "name": "aktif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "layanan_nama_unique": {
+          "name": "layanan_nama_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "nama"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.login_attempts": {
+      "name": "login_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "failed_count": {
+          "name": "failed_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "locked_until": {
+          "name": "locked_until",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_ip": {
+          "name": "last_ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "login_attempts_locked_until_idx": {
+          "name": "login_attempts_locked_until_idx",
+          "columns": [
+            {
+              "expression": "locked_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "login_attempts_email_unique": {
+          "name": "login_attempts_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.master_coa": {
+      "name": "master_coa",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kode": {
+          "name": "kode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nama": {
+          "name": "nama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "posisi": {
+          "name": "posisi",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kelompok": {
+          "name": "kelompok",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sub_kelompok": {
+          "name": "sub_kelompok",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "class_cf": {
+          "name": "class_cf",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tipe_akun": {
+          "name": "tipe_akun",
+          "type": "account_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_kas": {
+          "name": "is_kas",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "master_coa_client_id_idx": {
+          "name": "master_coa_client_id_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "master_coa_client_is_kas_idx": {
+          "name": "master_coa_client_is_kas_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"master_coa\".\"is_kas\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "master_coa_client_id_clients_id_fk": {
+          "name": "master_coa_client_id_clients_id_fk",
+          "tableFrom": "master_coa",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "master_coa_client_kode_unique": {
+          "name": "master_coa_client_kode_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "kode"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.master_supplier": {
+      "name": "master_supplier",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nama": {
+          "name": "nama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kontak": {
+          "name": "kontak",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "npwp": {
+          "name": "npwp",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bank_nama": {
+          "name": "bank_nama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bank_rekening": {
+          "name": "bank_rekening",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bank_atas_nama": {
+          "name": "bank_atas_nama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "akun_hutang_default_id": {
+          "name": "akun_hutang_default_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "master_supplier_client_nama_lower_unique": {
+          "name": "master_supplier_client_nama_lower_unique",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"nama\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "master_supplier_client_id_idx": {
+          "name": "master_supplier_client_id_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "master_supplier_akun_hutang_idx": {
+          "name": "master_supplier_akun_hutang_idx",
+          "columns": [
+            {
+              "expression": "akun_hutang_default_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "master_supplier_client_id_clients_id_fk": {
+          "name": "master_supplier_client_id_clients_id_fk",
+          "tableFrom": "master_supplier",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "master_supplier_akun_hutang_default_id_master_coa_id_fk": {
+          "name": "master_supplier_akun_hutang_default_id_master_coa_id_fk",
+          "tableFrom": "master_supplier",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_hutang_default_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.period_locks": {
+      "name": "period_locks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terkunci_sampai": {
+          "name": "terkunci_sampai",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dikunci_oleh": {
+          "name": "dikunci_oleh",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "period_locks_client_tanggal_idx": {
+          "name": "period_locks_client_tanggal_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "terkunci_sampai",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "period_locks_client_id_clients_id_fk": {
+          "name": "period_locks_client_id_clients_id_fk",
+          "tableFrom": "period_locks",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "period_locks_dikunci_oleh_users_id_fk": {
+          "name": "period_locks_dikunci_oleh_users_id_fk",
+          "tableFrom": "period_locks",
+          "tableTo": "users",
+          "columnsFrom": [
+            "dikunci_oleh"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.purchase_invoice_lines": {
+      "name": "purchase_invoice_lines",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nama_barang": {
+          "name": "nama_barang",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qty": {
+          "name": "qty",
+          "type": "numeric(18, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "satuan": {
+          "name": "satuan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "harga_satuan": {
+          "name": "harga_satuan",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subtotal": {
+          "name": "subtotal",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "line_order": {
+          "name": "line_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "purchase_invoice_lines_invoice_idx": {
+          "name": "purchase_invoice_lines_invoice_idx",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "purchase_invoice_lines_invoice_id_purchase_invoices_id_fk": {
+          "name": "purchase_invoice_lines_invoice_id_purchase_invoices_id_fk",
+          "tableFrom": "purchase_invoice_lines",
+          "tableTo": "purchase_invoices",
+          "columnsFrom": [
+            "invoice_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "purchase_invoice_lines_nominal_check": {
+          "name": "purchase_invoice_lines_nominal_check",
+          "value": "\"purchase_invoice_lines\".\"qty\" > 0 AND \"purchase_invoice_lines\".\"harga_satuan\" >= 0 AND \"purchase_invoice_lines\".\"subtotal\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.purchase_invoices": {
+      "name": "purchase_invoices",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tanggal": {
+          "name": "tanggal",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "no_invoice": {
+          "name": "no_invoice",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cara_bayar": {
+          "name": "cara_bayar",
+          "type": "purchase_payment_method",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "akun_tujuan_id": {
+          "name": "akun_tujuan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "akun_kas_id": {
+          "name": "akun_kas_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "akun_hutang_id": {
+          "name": "akun_hutang_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "akun_ppn_masukan_id": {
+          "name": "akun_ppn_masukan_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ppn": {
+          "name": "ppn",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "jumlah_termin": {
+          "name": "jumlah_termin",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "jatuh_tempo_akhir": {
+          "name": "jatuh_tempo_akhir",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "keterangan": {
+          "name": "keterangan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "journal_id": {
+          "name": "journal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "purchase_invoices_client_tanggal_idx": {
+          "name": "purchase_invoices_client_tanggal_idx",
+          "columns": [
+            {
+              "expression": "client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tanggal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "purchase_invoices_supplier_idx": {
+          "name": "purchase_invoices_supplier_idx",
+          "columns": [
+            {
+              "expression": "supplier_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "purchase_invoices_journal_idx": {
+          "name": "purchase_invoices_journal_idx",
+          "columns": [
+            {
+              "expression": "journal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "purchase_invoices_client_id_clients_id_fk": {
+          "name": "purchase_invoices_client_id_clients_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_supplier_id_master_supplier_id_fk": {
+          "name": "purchase_invoices_supplier_id_master_supplier_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "master_supplier",
+          "columnsFrom": [
+            "supplier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_akun_tujuan_id_master_coa_id_fk": {
+          "name": "purchase_invoices_akun_tujuan_id_master_coa_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_tujuan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_akun_kas_id_master_coa_id_fk": {
+          "name": "purchase_invoices_akun_kas_id_master_coa_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_kas_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_akun_hutang_id_master_coa_id_fk": {
+          "name": "purchase_invoices_akun_hutang_id_master_coa_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_hutang_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_akun_ppn_masukan_id_master_coa_id_fk": {
+          "name": "purchase_invoices_akun_ppn_masukan_id_master_coa_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "akun_ppn_masukan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_journal_id_journal_entries_id_fk": {
+          "name": "purchase_invoices_journal_id_journal_entries_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "journal_entries",
+          "columnsFrom": [
+            "journal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "purchase_invoices_created_by_users_id_fk": {
+          "name": "purchase_invoices_created_by_users_id_fk",
+          "tableFrom": "purchase_invoices",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "purchase_invoices_supplier_no_invoice_unique": {
+          "name": "purchase_invoices_supplier_no_invoice_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "client_id",
+            "supplier_id",
+            "no_invoice"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "purchase_invoices_cara_bayar_check": {
+          "name": "purchase_invoices_cara_bayar_check",
+          "value": "(\"purchase_invoices\".\"cara_bayar\" <> 'kredit' OR (\"purchase_invoices\".\"akun_hutang_id\" IS NOT NULL AND \"purchase_invoices\".\"jatuh_tempo_akhir\" IS NOT NULL))\n        AND (\"purchase_invoices\".\"cara_bayar\" <> 'tunai' OR \"purchase_invoices\".\"akun_kas_id\" IS NOT NULL)"
+        },
+        "purchase_invoices_ppn_check": {
+          "name": "purchase_invoices_ppn_check",
+          "value": "\"purchase_invoices\".\"ppn\" >= 0 AND (\"purchase_invoices\".\"ppn\" = 0 OR \"purchase_invoices\".\"akun_ppn_masukan_id\" IS NOT NULL)"
+        },
+        "purchase_invoices_termin_check": {
+          "name": "purchase_invoices_termin_check",
+          "value": "\"purchase_invoices\".\"jumlah_termin\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.report_line_items": {
+      "name": "report_line_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "report_id": {
+          "name": "report_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_name": {
+          "name": "raw_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggested_coa_id": {
+          "name": "suggested_coa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "master_coa_id": {
+          "name": "master_coa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_subtotal": {
+          "name": "is_subtotal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "line_item_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unmatched'"
+        },
+        "edited_name": {
+          "name": "edited_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "line_order": {
+          "name": "line_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "report_line_items_report_id_idx": {
+          "name": "report_line_items_report_id_idx",
+          "columns": [
+            {
+              "expression": "report_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "report_line_items_master_coa_id_idx": {
+          "name": "report_line_items_master_coa_id_idx",
+          "columns": [
+            {
+              "expression": "master_coa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "report_line_items_report_id_financial_reports_id_fk": {
+          "name": "report_line_items_report_id_financial_reports_id_fk",
+          "tableFrom": "report_line_items",
+          "tableTo": "financial_reports",
+          "columnsFrom": [
+            "report_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "report_line_items_suggested_coa_id_master_coa_id_fk": {
+          "name": "report_line_items_suggested_coa_id_master_coa_id_fk",
+          "tableFrom": "report_line_items",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "suggested_coa_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "report_line_items_master_coa_id_master_coa_id_fk": {
+          "name": "report_line_items_master_coa_id_master_coa_id_fk",
+          "tableFrom": "report_line_items",
+          "tableTo": "master_coa",
+          "columnsFrom": [
+            "master_coa_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "user_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'user'"
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "language": {
+          "name": "language",
+          "type": "user_language",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'id'"
+        },
+        "currency_format": {
+          "name": "currency_format",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idr'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "users_client_id_clients_id_fk": {
+          "name": "users_client_id_clients_id_fk",
+          "tableFrom": "users",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.account_type": {
+      "name": "account_type",
+      "schema": "public",
+      "values": [
+        "asset",
+        "liability",
+        "equity",
+        "revenue",
+        "expense"
+      ]
+    },
+    "public.audit_entity_type": {
+      "name": "audit_entity_type",
+      "schema": "public",
+      "values": [
+        "journal",
+        "master_coa",
+        "period_lock",
+        "supplier",
+        "purchase_invoice",
+        "cash_mutation"
+      ]
+    },
+    "public.jenis_kontrak": {
+      "name": "jenis_kontrak",
+      "schema": "public",
+      "values": [
+        "reguler",
+        "project"
+      ]
+    },
+    "public.journal_source": {
+      "name": "journal_source",
+      "schema": "public",
+      "values": [
+        "manual",
+        "pembelian",
+        "mutasi_kas"
+      ]
+    },
+    "public.journal_status": {
+      "name": "journal_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "posted"
+      ]
+    },
+    "public.line_item_status": {
+      "name": "line_item_status",
+      "schema": "public",
+      "values": [
+        "matched",
+        "unmatched",
+        "edited",
+        "rejected"
+      ]
+    },
+    "public.purchase_payment_method": {
+      "name": "purchase_payment_method",
+      "schema": "public",
+      "values": [
+        "kredit",
+        "tunai"
+      ]
+    },
+    "public.report_status": {
+      "name": "report_status",
+      "schema": "public",
+      "values": [
+        "uploaded",
+        "extracting",
+        "review",
+        "mapped",
+        "confirmed"
+      ]
+    },
+    "public.report_type": {
+      "name": "report_type",
+      "schema": "public",
+      "values": [
+        "laba_rugi",
+        "neraca",
+        "arus_kas"
+      ]
+    },
+    "public.user_language": {
+      "name": "user_language",
+      "schema": "public",
+      "values": [
+        "id",
+        "en"
+      ]
+    },
+    "public.user_role": {
+      "name": "user_role",
+      "schema": "public",
+      "values": [
+        "akunting",
+        "user",
+        "owner",
+        "finance"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

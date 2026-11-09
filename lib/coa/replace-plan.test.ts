@@ -672,6 +672,8 @@ describe('regresi: perujuk baru tidak mengubah perilaku lama', () => {
     expect(plan.settingUnlinkedCount).toBe(0)
     expect(plan.mutationRelinkedCount).toBe(0)
     expect(plan.mutationBlocked).toEqual([])
+    expect(plan.ruleRelinkedCount).toBe(0)
+    expect(plan.ruleBlocked).toEqual([])
   })
 
   it('bentuk kembaliannya PERSIS ini — tambahan baru wajib lewat sini', () => {
@@ -685,6 +687,7 @@ describe('regresi: perujuk baru tidak mengubah perilaku lama', () => {
       'mutationRelinks',
       'plan',
       'relinks',
+      'ruleRelinks',
       'settingRelinks',
       'supplierRelinks',
     ])
@@ -819,7 +822,7 @@ describe('setelan pembukuan: BOLEH diputus, beda dari invoice', () => {
       accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: 'old-1' }],
     })
     expect(plan.settingUnlinkedCount).toBe(0)
-    expect(settingRelinks).toEqual([{ clientId: 'c1', newAkunPpnMasukanId: 'new-1' }])
+    expect(settingRelinks).toEqual([{ clientId: 'c1', kolom: 'ppn', newMasterCoaId: 'new-1' }])
   })
 
   it('kode hilang → DIPUTUS jadi null, bukan memblokir', () => {
@@ -832,7 +835,7 @@ describe('setelan pembukuan: BOLEH diputus, beda dari invoice', () => {
     })
     expect(plan.settingUnlinkedCount).toBe(1)
     expect(plan.invoiceBlocked).toEqual([])
-    expect(settingRelinks).toEqual([{ clientId: 'c1', newAkunPpnMasukanId: null }])
+    expect(settingRelinks).toEqual([{ clientId: 'c1', kolom: 'ppn', newMasterCoaId: null }])
   })
 
   it('setelan tanpa akun PPN dilewati sama sekali', () => {
@@ -842,6 +845,147 @@ describe('setelan pembukuan: BOLEH diputus, beda dari invoice', () => {
     })
     expect(plan.settingUnlinkedCount).toBe(0)
     expect(settingRelinks).toEqual([])
+  })
+
+  // ══ AKUN PINDAH BUKU (D59, 0021) — diperlakukan seperti akun PPN ═══════
+  // Regresi per kolom: kolom setelan yang ketinggalan harus membuat test
+  // merah, bukan diam-diam diputus FK saat ganti-massal.
+  it('akun Pindah Buku: kode masih ada → disambung ke id baru', () => {
+    const { plan, settingRelinks } = buildReplacePlan({
+      ...dasar,
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: null, akunPindahBukuId: 'old-1' }],
+    })
+    expect(plan.settingUnlinkedCount).toBe(0)
+    expect(settingRelinks).toEqual([{ clientId: 'c1', kolom: 'pindah-buku', newMasterCoaId: 'new-1' }])
+  })
+
+  it('akun Pindah Buku: kode hilang → DIPUTUS jadi null, bukan memblokir', () => {
+    const { plan, settingRelinks } = buildReplacePlan({
+      ...dasar,
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: null, akunPindahBukuId: 'old-2' }],
+    })
+    expect(plan.settingUnlinkedCount).toBe(1)
+    expect(plan.ruleBlocked).toEqual([])
+    expect(settingRelinks).toEqual([{ clientId: 'c1', kolom: 'pindah-buku', newMasterCoaId: null }])
+  })
+
+  it('kedua kolom setelan diputuskan TERPISAH — satu tersambung, satu putus', () => {
+    const { plan, settingRelinks } = buildReplacePlan({
+      ...dasar,
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: 'old-1', akunPindahBukuId: 'old-2' }],
+    })
+    expect(plan.settingUnlinkedCount).toBe(1)
+    expect(settingRelinks).toEqual([
+      { clientId: 'c1', kolom: 'ppn', newMasterCoaId: 'new-1' },
+      { clientId: 'c1', kolom: 'pindah-buku', newMasterCoaId: null },
+    ])
+  })
+
+  it('akun Pindah Buku yang id-nya tidak berpindah tidak menghasilkan instruksi', () => {
+    const { settingRelinks } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map([['1-1000', 'old-1']]),
+      accountingSettings: [{ clientId: 'c1', akunPpnMasukanId: null, akunPindahBukuId: 'old-1' }],
+    })
+    expect(settingRelinks).toEqual([])
+  })
+})
+
+// ══ ATURAN MUTASI (S1, D57): DUA KOLOM, KEDUANYA MEMBLOKIR ═══════════════
+// Test regresi per KOLOM, pola yang sama dengan mutasi kas (N5): tiap kolom
+// punya pasangan tersambung/memblokir sendiri.
+describe('aturan mutasi: disambung by kode, DIBLOKIR bila hilang', () => {
+  const dasar = {
+    oldAccounts: [
+      { id: 'old-kas', kode: '1-1100' },
+      { id: 'old-lawan', kode: '6-2000' },
+    ],
+    newKodeToId: new Map([
+      ['1-1100', 'new-kas'],
+      ['6-2000', 'new-lawan'],
+    ]),
+    ambiguousKode: [],
+    lines: [],
+    history: [],
+    reports: [],
+  }
+
+  const KOLOM = [
+    { kolom: 'lawan' as const, akun: 'old-lawan', baru: 'new-lawan', kode: '6-2000' },
+    { kolom: 'kas' as const, akun: 'old-kas', baru: 'new-kas', kode: '1-1100' },
+  ]
+
+  for (const { kolom, akun, baru, kode } of KOLOM) {
+    it(`kolom "${kolom}": tersambung ke id baru saat kodenya masih ada`, () => {
+      const { plan, ruleRelinks } = buildReplacePlan({
+        ...dasar,
+        ruleAccounts: [{ ruleId: 'r-1', pola: 'BIAYA ADM', kolom, masterCoaId: akun }],
+      })
+      expect(plan.ruleBlocked).toEqual([])
+      expect(plan.ruleRelinkedCount).toBe(1)
+      expect(ruleRelinks).toEqual([{ ruleId: 'r-1', kolom, newMasterCoaId: baru }])
+    })
+
+    it(`kolom "${kolom}": MEMBLOKIR saat kodenya hilang di berkas baru`, () => {
+      const { plan, ruleRelinks } = buildReplacePlan({
+        ...dasar,
+        newKodeToId: new Map(),
+        ruleAccounts: [{ ruleId: 'r-1', pola: 'BIAYA ADM', kolom, masterCoaId: akun }],
+      })
+      expect(plan.ruleRelinkedCount).toBe(0)
+      expect(ruleRelinks).toEqual([])
+      expect(plan.ruleBlocked).toEqual([{ ruleId: 'r-1', pola: 'BIAYA ADM', kolom, kode }])
+    })
+  }
+
+  it('akun_kas_id yang NULLABLE tetap memblokir — NULL berarti "semua akun kas"', () => {
+    // Memutusnya jadi null bukan kehilangan bawaan: aturan untuk satu rekening
+    // diam-diam berlaku ke seluruh rekening klien.
+    const { plan, ruleRelinks } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map([['6-2000', 'new-lawan']]),
+      ruleAccounts: [{ ruleId: 'r-1', pola: 'x', kolom: 'kas', masterCoaId: 'old-kas' }],
+    })
+    expect(plan.ruleBlocked).toHaveLength(1)
+    expect(ruleRelinks.every(r => r.newMasterCoaId !== null)).toBe(true)
+  })
+
+  it('kode AMBIGU diperlakukan sama dengan hilang', () => {
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      ambiguousKode: ['6-2000'],
+      ruleAccounts: [{ ruleId: 'r-1', pola: 'x', kolom: 'lawan', masterCoaId: 'old-lawan' }],
+    })
+    expect(plan.ruleBlocked).toHaveLength(1)
+  })
+
+  it('baris identik berulang TIDAK menggandakan pesannya; daftar terurut pola', () => {
+    const satu = { ruleId: 'r-2', pola: 'TRANSFER', kolom: 'lawan' as const, masterCoaId: 'old-lawan' }
+    const dua = { ruleId: 'r-1', pola: 'ADM', kolom: 'lawan' as const, masterCoaId: 'old-lawan' }
+    const { plan } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map(),
+      ruleAccounts: [satu, satu, dua],
+    })
+    expect(plan.ruleBlocked.map(b => b.ruleId)).toEqual(['r-1', 'r-2'])
+  })
+
+  it('akun yang TIDAK berpindah id tidak menghasilkan relink', () => {
+    const { plan, ruleRelinks } = buildReplacePlan({
+      ...dasar,
+      newKodeToId: new Map([['6-2000', 'old-lawan']]),
+      ruleAccounts: [{ ruleId: 'r-1', pola: 'x', kolom: 'lawan', masterCoaId: 'old-lawan' }],
+    })
+    expect(plan.ruleRelinkedCount).toBe(1)
+    expect(ruleRelinks).toEqual([])
+  })
+
+  it('tanpa ruleAccounts, perilakunya PERSIS seperti sebelum 0021', () => {
+    const a = buildReplacePlan(dasar)
+    const b = buildReplacePlan({ ...dasar, ruleAccounts: [] })
+    expect(b.plan).toEqual(a.plan)
+    expect(b.ruleRelinks).toEqual([])
+    expect(a.plan.ruleBlocked).toEqual([])
   })
 })
 
