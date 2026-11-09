@@ -41,6 +41,10 @@ describe('Unggah PDF rekening koran (X5)', () => {
     expect(PANEL_PDF).toContain('if (r.henti) {')
     expect(PANEL_PDF).toContain('abortRef.current?.abort()')
   })
+  it('halaman gambar tanpa baris tampil sebagai peringatan + Ulangi, dan ikut ke catatan saat dimasukkan', () => {
+    expect(PANEL_PDF).toContain("h.status === 'ok' && peringatanHalaman(h) ? (")
+    expect(PANEL_PDF).toContain('...daftarHasil.flatMap(h => peringatanHalaman(h) ?? []),')
+  })
   it('isi manual (422 inputManual) tidak menawarkan tombol ulangi', () => {
     const manual = PANEL_PDF.slice(PANEL_PDF.indexOf("h.status === 'manual' ? ("), PANEL_PDF.indexOf(') : (', PANEL_PDF.indexOf("h.status === 'manual' ? (")))
     expect(manual).toContain('isi manual')
@@ -52,6 +56,15 @@ describe('Unggah PDF rekening koran (X5)', () => {
     expect(LEMBAR).toContain("dispatch({ jenis: 'tempelBlok', indeks: s.baris.length, hasil, sumber: 'pdf', namaBerkas: pdf.name })")
     expect(LEMBAR).toContain("const dariAi = diff.baru.filter(b => b.asal === 'pdf').length")
     expect(LEMBAR).toContain('baris berasal dari AI')
+  })
+  // Uji klik langkah 6 (2026-11-09): sesudah satu "Hapus baris", baris berikutnya
+  // naik ke posisi aktif tanpa event dari grid → klik sel yang sama tidak mengaktifkannya.
+  it('baris di posisi aktif hilang → posisi aktif disinkronkan ke baris yang kini di indeks itu', () => {
+    expect(GRID).toContain('indeksAktif.current = rowIdx')
+    const efek = GRID.slice(GRID.indexOf('useEffect(() => {\n    const k = aktif.current.kunci'), GRID.indexOf('}, [baris, onAktif])'))
+    expect(efek).toContain('if (k === null || baris.some(b => b.kunci === k)) return')
+    expect(efek).toContain('baris[indeksAktif.current]?.kunci ?? null')
+    expect(efek).toContain('onAktif(aktif.current)')
   })
   it('kolom Hal. baca-saja & penanda lilac berteks (bukan warna saja)', () => {
     expect(GRID).toContain("name: 'Hal.',")

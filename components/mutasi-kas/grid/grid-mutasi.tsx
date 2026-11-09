@@ -26,7 +26,7 @@
 import 'react-data-grid/lib/styles.css'
 import './grid-mutasi.css'
 
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   Cell,
   DataGrid,
@@ -308,6 +308,19 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
   // Kunci baris yang kalendernya terbuka (Alt+↓ atau ikon), null = tertutup.
   const [kalender, setKalender] = useState<string | null>(null)
   const adaHalaman = baris.some(b => b.halaman !== null)
+  const indeksAktif = useRef(-1)
+
+  // Baris di posisi aktif HILANG (Hapus baris, urungkan) dan baris berikutnya
+  // naik ke posisi itu: grid tidak mengirim onActivePositionChange karena
+  // posisinya sama, jadi klik di sel yang sama tidak mengaktifkan baris baru itu
+  // (uji klik 2026-11-09: "Hapus baris" mati sesudah satu hapus). Sinkronkan ke
+  // baris yang kini ada di indeks itu; di luar jangkauan → tidak ada yang aktif.
+  useEffect(() => {
+    const k = aktif.current.kunci
+    if (k === null || baris.some(b => b.kunci === k)) return
+    aktif.current = { kunci: baris[indeksAktif.current]?.kunci ?? null, kolom: aktif.current.kolom }
+    onAktif(aktif.current)
+  }, [baris, onAktif])
 
   const kolom = useMemo((): readonly Column<BarisGrid>[] => {
     const kt = konteks
@@ -493,9 +506,10 @@ export default function GridMutasi({ baris, konteks, labelGrid, idBantuan, sembu
           e.clipboardData.setData('text/plain', row.sel[column.key as KolomGrid])
           e.preventDefault()
         }}
-        onActivePositionChange={({ row, column }) => {
+        onActivePositionChange={({ row, rowIdx, column }) => {
           const k = column && (KOLOM_GRID as readonly string[]).includes(column.key) ? (column.key as KolomGrid) : null
           aktif.current = { kunci: row?.kunci ?? null, kolom: k }
+          indeksAktif.current = rowIdx
           onAktif(aktif.current)
         }}
         onCellKeyDown={(args, e) => {

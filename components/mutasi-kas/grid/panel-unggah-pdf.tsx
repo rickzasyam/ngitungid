@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Loader2, RotateCw, X } from 'lucide-react'
 import { kolomSebelumnyaBerposisi, rangkumDokumen, type JudulTercetak } from '@/lib/bank-statement/dokumen'
-import { halamanTersusun, tafsirJawaban, type HasilHalaman, type TafsiranJawaban } from '@/lib/bank-statement/hasil-halaman'
+import { halamanTersusun, peringatanHalaman, tafsirJawaban, type HasilHalaman, type TafsiranJawaban } from '@/lib/bank-statement/hasil-halaman'
 import type { DokumenPdf } from '@/lib/bank-statement/baca-pdf'
 import { rencanaPdf } from '@/lib/mutasi-grid-turunan'
 import type { HasilBacaBlok, Periode } from '@/lib/mutasi-draf'
@@ -155,6 +155,7 @@ export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan,
     if (rencana?.jenis !== 'blok') return
     const catatan = [
       ...(manual.length > 0 ? [`Isi manual halaman ${manual.join(', ')} — AI tidak bisa menyusunnya dengan yakin.`] : []),
+      ...daftarHasil.flatMap(h => peringatanHalaman(h) ?? []),
       ...(rangkuman?.peringatan ?? []),
     ]
     onMasukkan(rencana.hasil, catatan)
@@ -229,6 +230,18 @@ export function PanelUnggahPdf({ file, clientId, akunKasId, periode, onMasukkan,
                   </span>
                 ) : !h ? (
                   <span style={{ color: 'var(--color-text-muted)' }}>belum diproses</span>
+                ) : h.status === 'ok' && peringatanHalaman(h) ? (
+                  <>
+                    <span style={{ color: 'var(--color-accent-critical-fg, #be185d)' }}>
+                      ⚠ {peringatanHalaman(h)}
+                      {h.model ? ` (${h.model})` : ''}
+                    </span>
+                    {!berjalan && (
+                      <button type="button" className={tombol} style={{ ...gayaTombol, minHeight: 32, padding: '4px 10px' }} onClick={() => void jalankan([n])}>
+                        <RotateCw className="w-3 h-3" /> Ulangi halaman {n}
+                      </button>
+                    )}
+                  </>
                 ) : h.status === 'ok' ? (
                   <span>
                     ✓ {h.data.baris.length.toLocaleString('id-ID')} baris

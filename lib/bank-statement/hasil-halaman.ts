@@ -62,6 +62,18 @@ export function tafsirJawaban(
   return gagal(pesanDari(body, `Halaman ${halaman} gagal diproses (HTTP ${http}) — ulangi halaman ini.`), true)
 }
 
+/**
+ * Halaman dari GAMBAR yang tidak menghasilkan satu baris pun. Penjaga cakupan X3
+ * hanya bisa memeriksa halaman berteks, jadi jawaban kosong di sini tidak
+ * terperiksa — dan transaksi yang hilang di akhir dokumen tidak memutus rantai
+ * saldo. Ditandai, bukan ✓ diam-diam (uji klik langkah 6, 2026-11-09).
+ */
+export function peringatanHalaman(h: HasilHalaman): string | null {
+  return h.status === 'ok' && h.dariGambar && h.data.baris.length === 0
+    ? `Halaman ${h.halaman} dibaca dari gambar tanpa satu baris pun — periksa halaman ini; ulangi, atau isi manual bila ada transaksi.`
+    : null
+}
+
 /** Halaman yang sudah tersusun, urut nomor halaman — masukan `rencanaPdf`. */
 export function halamanTersusun(hasil: readonly HasilHalaman[]): HalamanMentah[] {
   return hasil

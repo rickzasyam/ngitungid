@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { halamanTersusun, tafsirJawaban, type HasilHalaman } from './hasil-halaman'
+import { halamanTersusun, peringatanHalaman, tafsirJawaban, type HasilHalaman } from './hasil-halaman'
 import type { HalamanMentah } from '@/lib/mutasi-kas/kontrak-baris-mentah'
 
 // X5 — status per halaman di panel "Unggah PDF rekening koran", dari jawaban
@@ -51,6 +51,19 @@ describe('tafsirJawaban', () => {
     expect(tafsirJawaban(1, 400, null, tanpaHeader, false)).toMatchObject({ hasil: { bisaUlang: false }, henti: null })
     expect(tafsirJawaban(1, 504, { error: 'lama' }, tanpaHeader, false)).toMatchObject({ hasil: { bisaUlang: true, pesan: 'lama' }, henti: null })
     expect(tafsirJawaban(1, 502, null, tanpaHeader, false)).toMatchObject({ hasil: { bisaUlang: true }, henti: null })
+  })
+})
+
+describe('peringatanHalaman — halaman gambar tanpa baris tidak boleh ✓ diam-diam', () => {
+  const ok = (dariGambar: boolean, baris: HalamanMentah['baris']): HasilHalaman => ({
+    halaman: 2, status: 'ok', data: { ...halaman(2), baris }, model: null, diulang: false, dariGambar,
+  })
+  it('gambar + 0 baris → peringatan; gambar berisi baris atau teks kosong → tidak', () => {
+    expect(peringatanHalaman(ok(true, []))).toMatch(/Halaman 2 dibaca dari gambar tanpa satu baris pun/)
+    expect(peringatanHalaman(ok(true, halaman(2).baris))).toBeNull()
+    // Halaman BERTEKS yang kosong sudah lolos penjaga cakupan X3 (jawaban kosong di halaman bertransaksi ditolak).
+    expect(peringatanHalaman(ok(false, []))).toBeNull()
+    expect(peringatanHalaman({ halaman: 2, status: 'manual', pesan: 'x' })).toBeNull()
   })
 })
 

@@ -86,7 +86,7 @@ lanjut.
    sesudah rilis (keputusan Ricko 2026-11-09), satu PR kecil dari `main`: kalender diindonesiakan, Daftar mengikuti
    bulan grid, galat muat + "Coba lagi" di Settings › Pembukuan › Akun Pindah Buku~~ (PR #8). Backlog: "terapkan ulang di atas
    versi server" untuk draf tertimpa (ROADMAP §5.14).
-2. **PR #2 langkah 6 / X5 — "Unggah PDF" ke grid** — **dibangun 2026-11-09, menunggu uji klik Ricko** (checklist di log Stream B; PR #2 tetap Draft). Catatan yang sudah diputuskan (log
+2. **PR #2 langkah 6 / X5 — "Unggah PDF" ke grid** — **dibangun & diuji klik 2026-11-09** (agen; hasil di log Stream B) → merge PR #2 menunggu "ya" Ricko. Catatan yang sudah diputuskan (log
    Stream B § "Catatan untuk langkah 6"): label Debet/Kredit/Nama Akun di pratinjau (Debet = uang MASUK; "DB" bank =
    keluar, jadi arah tetap dari kesinambungan saldo, bukan dari judul/penanda); nomor referensi bank → kolom `ref`;
    model per halaman dari header `X-Model-Ekstraksi` (+ `X-Ekstraksi-Diulang`); 422 `inputManual: true` tampil sebagai
